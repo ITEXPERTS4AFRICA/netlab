@@ -41,3 +41,30 @@ export interface User {
     updated_at: string;
     [key: string]: unknown; // This allows for additional properties...
 }
+
+export interface LabAnnotation {
+    rotation: number;
+    type: 'text' | 'rectangle' | 'ellipse' | 'line';
+    border_color?: string;
+    border_style?: string;
+    color?: string;
+    thickness?: number;
+    x1: number;
+    y1: number;
+    z_index?: number;
+    // Text annotation properties
+    text_bold?: boolean;
+    text_content?: string;
+    text_font?: string;
+    text_italic?: boolean;
+    text_size?: number;
+    text_unit?: string;
+    // Shape annotation properties
+    x2?: number;
+    y2?: number;
+    border_radius?: number;
+    // Line annotation properties
+    line_start?: string;
+    line_end?: string;
+    id: string;
+}

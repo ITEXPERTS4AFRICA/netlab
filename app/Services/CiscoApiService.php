@@ -176,6 +176,30 @@ class CiscoApiService {
         return $response->successful() ? $response->body() : ['error' => 'Unable to download lab', 'status' => $response->status(), 'body' => $response->body()];
     }
 
+    public function getLabAnnotations($token, $id)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$id}/annotations");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab annotations', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    public function createLabAnnotation($token, $id, $data)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->post("{$this->baseUrl}/v0/labs/{$id}/annotations", $data);
+        return $response->successful() ? $response->json() : ['error' => 'Unable to create lab annotation', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    public function updateLabAnnotation($token, $id, $annotationId, $data)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->patch("{$this->baseUrl}/v0/labs/{$id}/annotations/{$annotationId}", $data);
+        return $response->successful() ? $response->json() : ['error' => 'Unable to update lab annotation', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    public function deleteLabAnnotation($token, $id, $annotationId)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->delete("{$this->baseUrl}/v0/labs/{$id}/annotations/{$annotationId}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to delete lab annotation', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
     public function getLabEvents($token, $id)
     {
         $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$id}/events");
@@ -272,7 +296,7 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to fetch node interfaces', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-    
+
 
     public function addNode($token, $lab_id, $data)
     {

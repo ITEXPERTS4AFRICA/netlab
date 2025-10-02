@@ -29,8 +29,9 @@ class LabsController extends Controller
         $currentLabIds = array_slice($labs_ids, ($page - 1) * $perPage, $perPage);
 
         $labs = collect($currentLabIds)->map(function ($id) use ($cisco) {
-            return $cisco->getlab(session('cml_token'), $id);
-        })->toArray();
+            $response = $cisco->getlab(session('cml_token'), $id);
+            return !isset($response['error']) ? $response : null;
+        })->filter()->toArray();
 
         foreach($labs as $key => $lab) {
             $Lab = Lab::where('cml_id', $lab['id'])->first();
@@ -62,6 +63,39 @@ class LabsController extends Controller
         ]);
     }
 
+    public function workspace(Lab $lab, CiscoApiService $cisco)
+    {
+        // Ensure the lab exists in our database, create if not
+        if (!$lab->exists) {
+            $response = $cisco->getlab(session('cml_token'), $lab->cml_id);
+            if (isset($response['error'])) {
+                abort(404, 'Lab not found');
+            }
+            $lab = Lab::create([
+                'cml_id' => $response['id'],
+                'created' => $response['created'],
+                'modified' => $response['modified'],
+                'lab_description' => $response['lab_description'],
+                'node_count' => $response['node_count'],
+                'state' => $response['state'],
+                'lab_title' => $response['lab_title'],
+                'owner' => $response['owner'],
+                'link_count' => $response['link_count'],
+                'effective_permissions' => $response['effective_permissions']
+            ]);
+        }
+
+        // Get current lab state from CML
+        $labState = $cisco->getLabState(session('cml_token'), $lab->cml_id);
+        if (!isset($labState['error'])) {
+            $lab->state = $labState['state'] ?? $lab->state;
+            $lab->save();
+        }
+
+        return Inertia::render('labs/Workspace', [
+            'lab' => $lab,
+        ]);
+    }
 
     public function domain(Request $request, $token,)
     {

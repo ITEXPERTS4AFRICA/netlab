@@ -10,7 +10,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard,labs } from '@/routes';
+import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 import { BookOpen, Folder, LayoutGrid, SendToBackIcon } from 'lucide-react';
@@ -24,7 +24,7 @@ const mainNavItems: NavItem[] = [
     },
     {
         title:'Labs',
-        href: labs(),
+        href: '/labs',
         icon: SendToBackIcon,
     }
 ];

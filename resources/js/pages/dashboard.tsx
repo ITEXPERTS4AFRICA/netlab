@@ -5,6 +5,7 @@ import { Head, usePage } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
     Activity,
     Users,
@@ -17,6 +18,8 @@ import {
     ClockIcon,
     Calendar
 } from 'lucide-react';
+import { motion, Variants } from 'framer-motion';
+import { useEffect, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -61,27 +64,34 @@ type DashboardProps = {
 };
 
 export default function Dashboard() {
-    const { stats, activeReservations, userReservations, cmlLabs,  } = usePage<DashboardProps>().props;
+    const { stats, activeReservations, userReservations, cmlLabs } = usePage<DashboardProps>().props;
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        // Simulate initial load
+        const timer = setTimeout(() => setIsLoading(false), 1000);
+        return () => clearTimeout(timer);
+    }, []);
 
     const getStatusIcon = (status: string) => {
         switch (status) {
             case 'active':
-                return <CheckCircle className="h-4 w-4 text-green-500" />;
+                return <CheckCircle className="h-4 w-4 text-[hsl(var(--chart-3))]" />;
             case 'pending':
-                return <ClockIcon className="h-4 w-4 text-yellow-500" />;
+                return <ClockIcon className="h-4 w-4 text-[hsl(var(--chart-2))]" />;
             case 'cancelled':
-                return <X className="h-4 w-4 text-red-500" />;
+                return <X className="h-4 w-4 text-destructive" />;
             default:
-                return <AlertCircle className="h-4 w-4 text-gray-500" />;
+                return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
         }
     };
 
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'active':
-                return <Badge variant="default" className="bg-green-500 hover:bg-green-600">Active</Badge>;
+                return <Badge className="bg-[hsl(var(--chart-3))] hover:bg-[hsl(var(--chart-3))/80] text-white">Active</Badge>;
             case 'pending':
-                return <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-600 text-black">Pending</Badge>;
+                return <Badge variant="secondary" className="bg-[hsl(var(--chart-2))] hover:bg-[hsl(var(--chart-2))/80] text-white">Pending</Badge>;
             case 'expired':
                 return <Badge variant="destructive">Expired</Badge>;
             default:
@@ -89,69 +99,148 @@ export default function Dashboard() {
         }
     };
 
+    const containerVariants = {
+        hidden: { opacity: 0 },
+        visible: {
+            opacity: 1,
+            transition: {
+                staggerChildren: 0.1
+            }
+        }
+    };
+
+    const itemVariants: Variants = {
+        hidden: { opacity: 0, y: 20 },
+        visible: {
+            opacity: 1,
+            y: 0,
+            transition: {
+                duration: 0.5,
+                type: "spring",
+                stiffness: 100,
+                damping: 15
+            }
+        }
+    };
+
+    const statsData = [
+        {
+            title: "Total Labs",
+            value: stats.totalLabs,
+            description: "All registered labs",
+            icon: Crown,
+            color: "text-[hsl(var(--chart-1))] bg-[hsl(var(--chart-1)/10)]",
+            borderColor: "border-[hsl(var(--chart-1)/20)]"
+        },
+        {
+            title: "Available Labs",
+            value: stats.availableLabs,
+            description: "Ready for reservation",
+            icon: CheckCircle,
+            color: "text-[hsl(var(--chart-3))] bg-[hsl(var(--chart-3)/10)]",
+            borderColor: "border-[hsl(var(--chart-3)/20)]"
+        },
+        {
+            title: "Occupied Labs",
+            value: stats.occupiedLabs,
+            description: "Currently in use",
+            icon: Users,
+            color: "text-[hsl(var(--chart-2))] bg-[hsl(var(--chart-2)/10)]",
+            borderColor: "border-[hsl(var(--chart-2)/20)]"
+        },
+        {
+            title: "Your Reservations",
+            value: stats.userReservations,
+            description: "Active bookings",
+            icon: Calendar,
+            color: "text-[hsl(var(--chart-4))] bg-[hsl(var(--chart-4)/10)]",
+            borderColor: "border-[hsl(var(--chart-4)/20)]"
+        }
+    ];
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Dashboard" />
-            <div className="flex h-full flex-1 flex-col gap-6 overflow-y-auto p-6">
+            <motion.div
+                className="flex h-full flex-1 flex-col gap-8 overflow-y-auto p-6"
+                initial="hidden"
+                animate="visible"
+                variants={containerVariants}
+            >
                 {/* Welcome Section */}
-                <div className="flex flex-col gap-2">
-                    <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-                    <p className="text-muted-foreground">
+                <motion.div variants={itemVariants} className="flex flex-col gap-2">
+                    <motion.h1
+                        className="text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.6, delay: 0.2 }}
+                    >
+                        Dashboard
+                    </motion.h1>
+                    <motion.p
+                        className="text-muted-foreground text-lg"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.6, delay: 0.4 }}
+                    >
                         Overview of your lab reservations and system status
-                    </p>
-                </div>
+                    </motion.p>
+                </motion.div>
 
                 {/* Statistics Cards */}
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Labs</CardTitle>
-                            <Crown className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.totalLabs}</div>
-                            <p className="text-xs text-muted-foreground">
-                                All registered labs
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Available Labs</CardTitle>
-                            <CheckCircle className="h-4 w-4 text-green-500" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-600">{stats.availableLabs}</div>
-                            <p className="text-xs text-muted-foreground">
-                                Ready for reservation
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Occupied Labs</CardTitle>
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-orange-600">{stats.occupiedLabs}</div>
-                            <p className="text-xs text-muted-foreground">
-                                Currently in use
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Your Reservations</CardTitle>
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-blue-600">{stats.userReservations}</div>
-                            <p className="text-xs text-muted-foreground">
-                                Active bookings
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
+                {isLoading ? (
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                        {[...Array(4)].map((_, i) => (
+                            <Card key={i} className="overflow-hidden">
+                                <CardHeader className="pb-3">
+                                    <Skeleton className="h-4 w-24" />
+                                    <Skeleton className="h-8 w-16" />
+                                </CardHeader>
+                                <CardContent>
+                                    <Skeleton className="h-6 w-20 mb-2" />
+                                    <Skeleton className="h-4 w-32" />
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+                ) : (
+                    <motion.div
+                        className="grid gap-6 md:grid-cols-2 lg:grid-cols-4"
+                        variants={containerVariants}
+                    >
+                        {statsData.map((stat, index) => (
+                            <motion.div key={stat.title} variants={itemVariants}>
+                                <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-lg transition-all duration-300 hover:scale-[1.02]">
+                                    <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br ${stat.color.split(' ')[0].replace('text-', 'from-').replace('/10', '/5')} to-transparent`} />
+                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 relative z-10">
+                                        <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
+                                        <div className={`p-2 rounded-lg ${stat.color} border ${stat.borderColor} transition-transform duration-300 group-hover:scale-110`}>
+                                            <stat.icon className="h-4 w-4" />
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="relative z-10">
+                                        <motion.div
+                                            className="text-3xl font-bold mb-2"
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{
+                                                type: "spring",
+                                                stiffness: 260,
+                                                damping: 20,
+                                                delay: index * 0.1
+                                            }}
+                                        >
+                                            {stat.value}
+                                        </motion.div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {stat.description}
+                                        </p>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        ))}
+                    </motion.div>
+                )}
 
                 {/* Main Content Grid */}
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -296,7 +385,7 @@ export default function Dashboard() {
                         </CardContent>
                     </Card>
                 )}
-            </div>
+            </motion.div>
         </AppLayout>
     );
 }

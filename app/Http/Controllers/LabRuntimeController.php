@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Lab;
@@ -62,15 +62,7 @@ class LabRuntimeController extends Controller
         return response()->json(['stopped' => true, 'usage_record' => $usage]);
     }
 
-    public function wipe(Request $request, Lab $lab, CiscoApiService $cisco)
-    {
-        $token = session('cml_token');
-        $resp = $cisco->wipeLab($token, $lab->cml_id);
-        if (is_array($resp) && isset($resp['error'])) {
-            return response()->json(['error' => 'Failed to wipe lab', 'detail' => $resp], 500);
-        }
-        return response()->json(['wiped' => true]);
-    }
+  
 }
 
 
