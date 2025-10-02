@@ -1,0 +1,103 @@
+<?php
+
+namespace App\Http\Controllers\Auth;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\LoginRequest;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
+use Inertia\Response;
+use App\Services\CiscoApiService;
+use App\Models\User;
+
+class AuthenticatedSessionController extends Controller
+{
+    /**
+     * Show the login page.
+     */
+    public function create(Request $request): Response
+    {
+        return Inertia::render('auth/login', [
+            'status' => $request->session()->get('status'),
+        ]);
+    }
+
+    /**
+     * Handle an incoming authentication request.
+     */
+    public function store(LoginRequest $request, CiscoApiService $cisco ): RedirectResponse
+    {
+        $request->session()->regenerate();
+
+        $request->validate([
+            'username' => 'required|string',
+            'password' => 'required'
+        ]);
+
+        $username = $request->username;
+        $password = $request->password;
+
+        // Try a limited number of attempts to authenticate against CML
+        $attempts = 0;
+        $maxAttempts = 3;
+        $result = null;
+        while ($attempts < $maxAttempts) {
+            $attempts++;
+            $result = $cisco->auth_extended($username, $password);
+            if (is_array($result) && !isset($result['error'])) {
+                break;
+            }
+            sleep(1);
+        }
+
+        if (!is_array($result) || isset($result['error'])) {
+            $errorMessage = is_array($result) && isset($result['error']) ? $result['error'] : 'Authentification incorrecte';
+            $request->session()->put('status', $errorMessage);
+            return back()->withErrors(['message' => $errorMessage]);
+        }
+
+        $token = $result['token'];
+
+        // persist token in session via the service and set it for future calls
+        $cisco->setToken($token);
+
+        // Ensure a local Laravel user exists to satisfy Laravel's auth middleware
+        $user = User::where('name', $username)->first();
+        if (! $user) {
+            $user = User::create([
+                'name' => $username,
+                'email' => $username . '@local.netlab',
+                'password' => bcrypt(\Illuminate\Support\Str::random(40)),
+            ]);
+        }
+
+        Auth::login($user);
+
+        return redirect()->intended(route('dashboard', absolute: false));
+    }
+
+    /**
+     * Destroy an authenticated session.
+     */
+    public function destroy(Request $request): RedirectResponse
+    {
+
+
+        // Try to revoke CML token via service if available
+        try {
+            app(\App\Services\CiscoApiService::class)->logout(session('cml_token'));
+            app(\App\Services\CiscoApiService::class)->revokeToken();
+        } catch (\Exception $e) {
+            // ignore revoke errors
+        }
+
+        Auth::guard('web')->logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect('/');
+    }
+}
