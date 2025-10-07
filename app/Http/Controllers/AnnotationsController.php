@@ -4,37 +4,43 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Services\CiscoApiService;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Log;
 
-
+/**
+ * Controller for handling lab annotations
+ *
+ * This controller manages CRUD operations for CML lab annotations
+ * including creating, reading, updating, and deleting annotations.
+ */
 class AnnotationsController extends Controller
 {
-    protected $ciscoApiService;
+    protected CiscoApiService $annotationService;
 
-    public function __construct(CiscoApiService $ciscoApiService)
+
+    public function __construct(CiscoApiService $annotationService)
     {
-        $this->ciscoApiService = $ciscoApiService;
+        $this->annotationService = $annotationService;
     }
 
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request, $lab_id)
+    public function index( $lab_id)
     {
-        // Validate lab_id matches CML UUID pattern
-        $request->merge(['lab_id' => $lab_id]);
-        $request->validate([
-            'lab_id' => 'required|regex:/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}(?!\n)$/',
-        ]);
-
         $token = session('cml_token');
         if (!$token) {
             return response()->json(['error' => 'No CML token'], 401);
         }
 
-        $annotations = $this->ciscoApiService->getLabAnnotations($token, $lab_id);
+        $annotations = $this->annotationService->getLabsAnnotation($token, $lab_id);
+
+        dd($annotations);
 
         if (isset($annotations['error'])) {
+            Log::warning('Failed to fetch annotations via API', [
+                'lab_id' => $lab_id,
+                'error' => $annotations['error']
+            ]);
             return response()->json($annotations, 500);
         }
 
@@ -76,9 +82,13 @@ class AnnotationsController extends Controller
             'border_radius'
         ]);
 
-        $result = $this->ciscoApiService->createLabAnnotation($token, $lab_id, $data);
+        $result = $this->annotationService->createLabAnnotation($token, $lab_id, $data);
 
         if (isset($result['error'])) {
+            Log::warning('Failed to create annotation via API', [
+                'lab_id' => $lab_id,
+                'error' => $result['error']
+            ]);
             return response()->json($result, 500);
         }
 
@@ -126,9 +136,14 @@ class AnnotationsController extends Controller
             'border_radius'
         ]);
 
-        $result = $this->ciscoApiService->updateLabAnnotation($token, $lab_id, $annotation_id, $data);
+        $result = $this->annotationService->updateLabAnnotation($token, $lab_id, $annotation_id, $data);
 
         if (isset($result['error'])) {
+            Log::warning('Failed to update annotation via API', [
+                'lab_id' => $lab_id,
+                'annotation_id' => $annotation_id,
+                'error' => $result['error']
+            ]);
             return response()->json($result, 500);
         }
 
@@ -152,10 +167,15 @@ class AnnotationsController extends Controller
             return response()->json(['error' => 'No CML token'], 401);
         }
 
-        $result = $this->ciscoApiService->deleteLabAnnotation($token, $lab_id, $annotation_id);
+        $result = $this->annotationService->deleteLabAnnotation($token, $lab_id, $annotation_id);
 
         if (isset($result['error'])) {
-            return response()->json($result, 500); 
+            Log::warning('Failed to delete annotation via API', [
+                'lab_id' => $lab_id,
+                'annotation_id' => $annotation_id,
+                'error' => $result['error']
+            ]);
+            return response()->json($result, 500);
         }
 
         return response()->json(['message' => 'Annotation deleted successfully'], 200);

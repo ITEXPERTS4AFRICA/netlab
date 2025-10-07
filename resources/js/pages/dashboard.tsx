@@ -4,8 +4,10 @@ import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+
 import {
     Activity,
     Users,
@@ -16,10 +18,15 @@ import {
     Play,
     X,
     ClockIcon,
-    Calendar
+    Calendar,
+    Zap,
+    ArrowRight,
+    Timer,
+    ExternalLink
 } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { useEffect, useState } from 'react';
+import { router } from '@inertiajs/react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -59,12 +66,34 @@ type DashboardProps = {
         status: string;
         created_at: string;
     }>;
+    userActiveReservations: Array<{
+        id: string;
+        lab_id: string;
+        lab_title: string;
+        lab_description: string;
+        start_at: string;
+        end_at: string;
+        duration_hours: number | null;
+        time_remaining: number | null;
+    }>;
     cmlLabs: CmlLab[];
     cmlSystemHealth: Record<string, unknown> | null;
+    systemStats: Record<string, unknown> | null;
+    advancedMetrics: {
+        totalReservations: number;
+        activeReservationsCount: number;
+        completedReservations: number;
+        cancelledReservations: number;
+        todayReservations: number;
+        weekReservations: number;
+        monthReservations: number;
+        avgSessionDuration: number;
+        utilizationRate: number;
+    };
 };
 
 export default function Dashboard() {
-    const { stats, activeReservations, userReservations, cmlLabs } = usePage<DashboardProps>().props;
+    const { stats, activeReservations, userReservations, userActiveReservations, cmlLabs } = usePage<DashboardProps>().props;
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -242,6 +271,124 @@ export default function Dashboard() {
                     </motion.div>
                 )}
 
+                {/* Your Active Labs Section */}
+                {userActiveReservations.length > 0 && (
+                    <motion.div variants={itemVariants}>
+                        <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+                            <CardHeader>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="flex items-center gap-2 text-primary">
+                                            <Zap className="h-5 w-5" />
+                                            Your Active Labs
+                                        </CardTitle>
+                                        <CardDescription>
+                                            Access your reserved labs that are currently available
+                                        </CardDescription>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => router.visit('/labs/my-reserved')}
+                                        className="shrink-0"
+                                    >
+                                        View All Reserved
+                                    </Button>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                    {userActiveReservations.map((reservation) => (
+                                        <motion.div
+                                            key={reservation.id}
+                                            variants={itemVariants}
+                                            className="group relative"
+                                        >
+                                            <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-lg transition-all duration-300 hover:scale-[1.02]">
+                                                {/* Animated background gradient */}
+                                                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-primary/5 to-primary/10" />
+
+                                                <CardHeader className="pb-3 relative z-10">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex-1 min-w-0">
+                                                            <CardTitle className="text-lg font-semibold truncate group-hover:text-primary transition-colors">
+                                                                {reservation.lab_title}
+                                                            </CardTitle>
+                                                            {reservation.lab_description && (
+                                                                <CardDescription className="mt-1 line-clamp-2">
+                                                                    {reservation.lab_description}
+                                                                </CardDescription>
+                                                            )}
+                                                        </div>
+                                                        <div className={`p-2 rounded-full transition-all duration-300 group-hover:scale-110 ${reservation.time_remaining && reservation.time_remaining < 60 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-green-100 text-green-600'}`}>
+                                                            <Timer className="h-4 w-4" />
+                                                        </div>
+                                                    </div>
+                                                </CardHeader>
+
+                                                <CardContent className="relative z-10">
+                                                    <div className="space-y-3">
+                                                        {/* Time Information */}
+                                                        <div className="flex items-center justify-between text-sm">
+                                                            <span className="text-muted-foreground">Session ends:</span>
+                                                            <Badge variant="outline" className="font-mono">
+                                                                {new Date(reservation.end_at).toLocaleTimeString('fr-FR', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit',
+                                                                    hour12: false
+                                                                })}
+                                                            </Badge>
+                                                        </div>
+
+                                                        {reservation.time_remaining && (
+                                                            <div className="flex items-center justify-between text-sm">
+                                                                <span className="text-muted-foreground">Time left:</span>
+                                                                <Badge
+                                                                    variant={reservation.time_remaining < 60 ? "destructive" : "secondary"}
+                                                                    className="font-mono"
+                                                                >
+                                                                    {Math.floor(reservation.time_remaining / 60)}h {reservation.time_remaining % 60}m
+                                                                </Badge>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Access Button */}
+                                                        <motion.div
+                                                            whileHover={{ scale: 1.02 }}
+                                                            whileTap={{ scale: 0.98 }}
+                                                        >
+                                                            <button
+                                                                onClick={() => router.visit(`/labs/${reservation.lab_id}/workspace`, {
+                                                                    method: 'get',
+                                                                    preserveScroll: true,
+                                                                    onSuccess: () => {
+                                                                        console.log('Successfully navigated to lab workspace');
+                                                                    },
+                                                                    onError: (errors) => {
+                                                                        console.error('Navigation error:', errors);
+                                                                    }
+                                                                })}
+                                                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-all duration-200 shadow-md hover:shadow-lg group/btn"
+                                                            >
+                                                                <ExternalLink className="h-4 w-4 transition-transform group-hover/btn:scale-110" />
+                                                                Access Lab
+                                                                <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
+                                                            </button>
+                                                        </motion.div>
+                                                    </div>
+                                                </CardContent>
+
+                                                {/* Decorative corner accent */}
+                                                <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-primary/10 to-transparent rounded-bl-full" />
+                                            </Card>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                )}
+
                 {/* Main Content Grid */}
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {/* Active Reservations */}
@@ -284,11 +431,11 @@ export default function Dashboard() {
                                                             Reserved by {reservation.user_name}
                                                         </p>
                                                         <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                                            <span>From: {reservation.start_at}</span>
-                                                            <span>To: {reservation.end_at}</span>
+                                                            <span>From: {new Date(reservation.start_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                                                            <span>To: {new Date(reservation.end_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
                                                             {reservation.duration_hours && (
-                                                                <Badge variant="secondary" className="text-xs">
-                                                                    {reservation.duration_hours}h
+                                                                <Badge variant="secondary" className="text-xs font-mono">
+                                                                    {reservation.duration_hours.toFixed(1)}h
                                                                 </Badge>
                                                             )}
                                                         </div>
@@ -338,8 +485,8 @@ export default function Dashboard() {
                                                     <div className="flex items-center gap-2 mb-1">
                                                         {getStatusBadge(reservation.status)}
                                                     </div>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {reservation.start_at} - {reservation.end_at}
+                                                    <p className="text-xs text-muted-foreground font-mono">
+                                                        {new Date(reservation.start_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false })} - {new Date(reservation.end_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false })}
                                                     </p>
                                                     <p className="text-xs text-muted-foreground mt-1">
                                                         Reserved {reservation.created_at}

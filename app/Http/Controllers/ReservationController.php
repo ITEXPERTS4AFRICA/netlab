@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Inertia\Inertia;
 use App\Services\CiscoApiService;
-use App\Services\Annotation\LabAnnotationService;
+
 
 class ReservationController extends Controller
 {
@@ -73,6 +73,21 @@ class ReservationController extends Controller
         return response()->json($reservation->load('lab','rate','usageRecord'));
     }
 
+    public function active($labId)
+    {
+        $user = Auth::user();
+        $lab = Lab::findOrFail($labId);
+
+        $reservation = Reservation::where('user_id', $user->id)
+            ->where('lab_id', $lab->id)
+            ->where('start_at', '<=', now())
+            ->where('end_at', '>', now())
+            ->where('status', '!=', 'cancelled')
+            ->first();
+
+        return response()->json($reservation);
+    }
+
     public function destroy(Reservation $reservation)
     {
         $this->authorize('delete', $reservation);
@@ -80,7 +95,7 @@ class ReservationController extends Controller
         return response()->json(null,204);
     }
 
-    public function createReservation(Request $request)
+    public function createReservation(Request $request , CiscoApiService $annotationService)
     {
         $request->validate([
             'lab_id' => 'required|exists:labs,cml_id',
@@ -149,7 +164,7 @@ class ReservationController extends Controller
         }
 
         // 📝 Exploiter LabAnnotationService pour enrichir l'expérience
-        $annotationService = new LabAnnotationService();
+
         $annotations = $annotationService->getLabsAnnotation($token, $lab->cml_id);
 
         // Créer la réservation
@@ -162,6 +177,12 @@ class ReservationController extends Controller
             'auto_started' => $needsAutoStart,
             'annotations_count' => is_array($annotations) ? count($annotations) : 0,
         ]);
+        
+
+        if ($needsAutoStart) {
+            $reservation->update(['status' => 'active']);
+        }
+
 
         $message = $needsAutoStart
             ? 'Reservation created and lab started automatically!'

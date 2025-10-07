@@ -5,5 +5,5 @@ use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\Api\LabController;
 
 Route::middleware('auth')->group(function(){
- 
+    Route::get('/reservations/active/{lab_id}', [ReservationController::class, 'active']);
 });

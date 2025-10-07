@@ -49,6 +49,12 @@ class CiscoApiService {
         }
     }
 
+
+    public function getLabsAnnotation($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/annotations");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab annotations', 'status' => $response->status()];
+    }
+
     public function getUsers($token)
     {
         $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/users");
@@ -91,15 +97,10 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to wipe lab', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-
-
     public function logout($token){
         $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->delete("{$this->baseUrl}/v0/logout");
         return $response->successful() ? $response : $response->json();
     }
-
-
-
 
     public function setToken($token){
         $this->token = $token;

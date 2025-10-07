@@ -18,7 +18,7 @@ return new class extends Migration {
             $table->string('lab_title')->nullable();
             $table->string('owner')->nullable();
             $table->integer('link_count')->nullable(); //link_count
-            $table->array('effective_permissions')->nullable(); //link_count
+            $table->json('effective_permissions')->nullable(); //link_count
             $table->timestamps();
         });
     }

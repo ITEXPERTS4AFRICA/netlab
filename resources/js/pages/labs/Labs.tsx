@@ -10,20 +10,22 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AnnotationLab from '@/components/app-annotation';
+import { Input } from '@/components/ui/input';
 import {
-        AlertCircle,
-        CheckCircle,
-        Calendar,
-        Eye,
-        Network,
-        Clock,
-        Info,
-        AlertTriangle,
-        Search
-    } from 'lucide-react';
+    AlertCircle,
+    CheckCircle,
+    Calendar,
+    Eye,
+    Network,
+    Clock,
+    Info,
+    AlertTriangle,
+    Search,
+    Activity,
+    X
+} from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { useState, useMemo, useEffect } from 'react';
-import { Input } from '@/components/ui/input';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -52,33 +54,102 @@ type Pagination = {
 type Props = {
     labs: Lab[];
     pagination: Pagination;
+    error?: string;
 };
 
 export default function Labs() {
-    const { labs, pagination } = usePage<Props>().props;
+    const { labs, pagination, error } = usePage<Props>().props;
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [debugInfo, setDebugInfo] = useState<{
+        labsType: string;
+        labsIsArray: boolean;
+        labsLength: number | string;
+        pagination: Pagination | null;
+        error: string | undefined;
+        timestamp: string;
+    }>({
+        labsType: 'unknown',
+        labsIsArray: false,
+        labsLength: 0,
+        pagination: null,
+        error: undefined,
+        timestamp: new Date().toISOString()
+    });
+
+    // Ensure labs is always an array - handle both array and object cases
+    const safeLabs = useMemo(() => {
+        let labsArray: Lab[] = [];
+
+        if (Array.isArray(labs)) {
+            labsArray = labs;
+        } else if (labs && typeof labs === 'object') {
+            // Handle case where labs is an object with numeric keys
+            labsArray = Object.values(labs).filter((lab): lab is Lab => {
+                return lab !== null && typeof lab === 'object' && 'id' in lab && 'lab_title' in lab;
+            });
+        } else {
+            labsArray = [];
+        }
+
+        console.log('Labs data processed:', {
+            rawType: typeof labs,
+            rawIsArray: Array.isArray(labs),
+            rawKeys: labs && typeof labs === 'object' ? Object.keys(labs) : 'N/A',
+            processedLength: labsArray.length,
+            firstItem: labsArray[0],
+            pagination,
+            error
+        });
+
+        return labsArray;
+    }, [labs, pagination, error]);
 
     useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 800);
+        // Debug information
+        setDebugInfo({
+            labsType: typeof labs,
+            labsIsArray: Array.isArray(labs),
+            labsLength: Array.isArray(labs) ? labs.length : 'N/A',
+            pagination,
+            error,
+            timestamp: new Date().toISOString()
+        });
+
+        // Simulate loading for better UX, but shorter duration
+        const timer = setTimeout(() => setIsLoading(false), 300);
         return () => clearTimeout(timer);
-    }, []);
+    }, [labs, pagination, error]);
 
     const filteredLabs = useMemo(() => {
-        if (!searchQuery.trim()) return labs;
-        return labs.filter(lab =>
-            lab.lab_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            lab.lab_description.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-    }, [labs, searchQuery]);
+        let filtered = safeLabs;
+
+        // Apply search filter
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            filtered = safeLabs.filter(lab =>
+                lab.lab_title?.toLowerCase().includes(query) ||
+                lab.lab_description?.toLowerCase().includes(query)
+            );
+        }
+
+        // Apply status filter for quick filters
+        if (searchQuery === 'running') {
+            filtered = filtered.filter(lab => lab.state === 'DEFINED_ON_CORE');
+        } else if (searchQuery === 'stopped') {
+            filtered = filtered.filter(lab => lab.state === 'STOPPED');
+        }
+
+        return filtered;
+    }, [safeLabs, searchQuery]);
 
     const getStatusBadge = (state: string) => {
         switch (state) {
-            case 'RUNNING':
+            case 'DEFINED_ON_CORE':
                 return (
                     <Badge className="bg-[hsl(var(--chart-3))] hover:bg-[hsl(var(--chart-3))/80] text-white border-0">
                         <CheckCircle className="h-3 w-3 mr-1" />
-                        Running
+                        RUNNING
                     </Badge>
                 );
             case 'STOPPED':
@@ -88,7 +159,6 @@ export default function Labs() {
                         Stopped
                     </Badge>
                 );
-            case 'STARTING':
             case 'STOPPING':
                 return (
                     <Badge variant="secondary" className="bg-[hsl(var(--chart-2))] hover:bg-[hsl(var(--chart-2))/80] text-white border-0">
@@ -148,43 +218,164 @@ export default function Labs() {
                 {/* Header Section */}
                 <motion.div
                     variants={cardVariants}
-                    className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6"
+                    className="relative"
                 >
-                    <div className="space-y-2">
-                        <motion.h1
-                            className="text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent"
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.6, delay: 0.2 }}
-                        >
-                            Labs
-                        </motion.h1>
-                        <motion.p
-                            className="text-muted-foreground text-lg max-w-md"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ duration: 0.6, delay: 0.4 }}
-                        >
-                            Discover and reserve Cisco Modeling Labs for your network experiments
-                        </motion.p>
-                    </div>
+                    {/* Background decoration */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl blur-3xl" />
 
-                    {/* Search Bar */}
+                    <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 p-8 rounded-2xl bg-card/80 backdrop-blur-sm border border-border/50 shadow-lg">
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/20">
+                                    <Network className="h-6 w-6 text-primary" />
+                                </div>
+                                <div>
+                                    <motion.h1
+                                        className="text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent"
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ duration: 0.6, delay: 0.2 }}
+                                    >
+                                        Network Labs
+                                    </motion.h1>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                        <span className="text-sm text-muted-foreground">Live CML Integration</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <motion.p
+                                className="text-muted-foreground text-lg max-w-2xl leading-relaxed"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ duration: 0.6, delay: 0.4 }}
+                            >
+                                Discover and reserve Cisco Modeling Labs for your network experiments.
+                                Access real-time topologies, interactive annotations, and hands-on learning environments.
+                            </motion.p>
+
+                            {/* Quick stats in header */}
+                            <motion.div
+                                className="flex items-center gap-6 pt-2"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.5, delay: 0.6 }}
+                            >
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
+                                    <Activity className="h-4 w-4 text-primary" />
+                                    <span className="text-sm font-medium text-primary">{safeLabs.length} Active Labs</span>
+                                </div>
+                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                    <span className="text-sm font-medium text-green-600">
+                                        {safeLabs.filter(l => l.state === 'DEFINED_ON_CORE').length} Running
+                                    </span>
+                                </div>
+                            </motion.div>
+                        </div>
+
+                        {/* Enhanced Search Bar */}
+                        <motion.div
+                            className="flex flex-col gap-4"
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.5, delay: 0.3 }}
+                        >
+                            <div className="relative">
+                                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5" />
+                                <Input
+                                    type="search"
+                                    placeholder="Search labs by title, description..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-12 pr-4 h-12 w-80 text-base border-2 border-input bg-background/80 backdrop-blur-sm focus:bg-background focus:border-primary/50 transition-all duration-200 rounded-xl shadow-sm"
+                                />
+                                {searchQuery && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="absolute right-2 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 hover:bg-muted/80"
+                                        onClick={() => setSearchQuery('')}
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                )}
+                            </div>
+
+                            {/* Quick filters */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm text-muted-foreground">Filter:</span>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant={searchQuery === '' ? 'default' : 'outline'}
+                                        size="sm"
+                                        className="h-8 px-3 text-xs"
+                                        onClick={() => setSearchQuery('')}
+                                    >
+                                        All Labs
+                                    </Button>
+                                    <Button
+                                        variant={searchQuery === 'running' ? 'default' : 'outline'}
+                                        size="sm"
+                                        className="h-8 px-3 text-xs"
+                                        onClick={() => setSearchQuery('running')}
+                                    >
+                                        Running
+                                    </Button>
+                                    <Button
+                                        variant={searchQuery === 'stopped' ? 'default' : 'outline'}
+                                        size="sm"
+                                        className="h-8 px-3 text-xs"
+                                        onClick={() => setSearchQuery('stopped')}
+                                    >
+                                        Stopped
+                                    </Button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                </motion.div>
+
+                {/* Error Display */}
+                {error && (
                     <motion.div
-                        className="relative max-w-sm w-full"
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.5, delay: 0.3 }}
+                        variants={cardVariants}
+                        className="p-6 rounded-xl bg-destructive/10 border border-destructive/20"
                     >
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                        <Input
-                            type="search"
-                            placeholder="Search labs..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-10 h-11 border-input bg-background/50 backdrop-blur-sm focus:bg-background transition-colors"
-                        />
+                        <div className="flex items-center gap-3">
+                            <AlertCircle className="h-6 w-6 text-destructive" />
+                            <div>
+                                <h3 className="font-semibold text-destructive">Connection Error</h3>
+                                <p className="text-sm text-muted-foreground mt-1">{error}</p>
+                            </div>
+                        </div>
                     </motion.div>
+                )}
+
+                {/* Debug Information Panel */}
+                <motion.div
+                    variants={cardVariants}
+                    className="p-4 rounded-xl bg-muted/30 border border-border/50"
+                >
+                    <details className="group">
+                        <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                            <Info className="h-4 w-4" />
+                            Debug Information (Click to expand)
+                        </summary>
+                        <div className="mt-4 space-y-2 text-xs font-mono">
+                            <div><strong>Labs Type:</strong> {debugInfo.labsType}</div>
+                            <div><strong>Is Array:</strong> {debugInfo.labsIsArray ? 'Yes' : 'No'}</div>
+                            <div><strong>Labs Length:</strong> {String(debugInfo.labsLength)}</div>
+                            <div><strong>Pagination:</strong> {debugInfo.pagination ? JSON.stringify(debugInfo.pagination, null, 2) : 'null'}</div>
+                            <div><strong>Error:</strong> {debugInfo.error || 'None'}</div>
+                            <div><strong>Timestamp:</strong> {debugInfo.timestamp}</div>
+                            <div><strong>Sample Lab Data:</strong></div>
+                            <pre className="bg-muted p-2 rounded text-xs overflow-auto max-h-32">
+                                {safeLabs.length > 0 ? JSON.stringify(safeLabs[0], null, 2) : 'No lab data available'}
+                            </pre>
+                        </div>
+                    </details>
                 </motion.div>
 
                 {/* Stats Overview */}
@@ -194,7 +385,7 @@ export default function Labs() {
                         whileHover={{ scale: 1.02 }}
                         transition={{ duration: 0.2 }}
                     >
-                        <div className="text-3xl font-bold text-[hsl(var(--chart-1))]">{labs.length}</div>
+                        <div className="text-3xl font-bold text-[hsl(var(--chart-1))]">{safeLabs.length}</div>
                         <div className="text-sm text-muted-foreground mt-1">Total Labs</div>
                     </motion.div>
                     <motion.div
@@ -202,8 +393,8 @@ export default function Labs() {
                         whileHover={{ scale: 1.02 }}
                         transition={{ duration: 0.2 }}
                     >
-                        <div className="text-3xl font-bold text-[hsl(var(--chart-3))]">{labs.filter(l => l.state === 'RUNNING').length}</div>
-                        <div className="text-sm text-muted-foreground mt-1">Running</div>
+                        <div className="text-3xl font-bold text-[hsl(var(--chart-3))]">{safeLabs.filter(l => l.state ==='DEFINED_ON_CORE').length}</div>
+                        <div className="text-sm text-muted-foreground mt-1">DEFINED_ON_CORE</div>
                     </motion.div>
                     <motion.div
                         className="flex-1 p-6 rounded-xl bg-gradient-to-br from-[hsl(var(--chart-2)/5)] to-[hsl(var(--chart-2)/10)] border border-[hsl(var(--chart-2)/20)]"
@@ -275,7 +466,7 @@ export default function Labs() {
                                     {/* Status gradient stripe */}
                                     <motion.div
                                         className={`absolute top-0 left-0 right-0 h-1 ${
-                                            lab.state === 'RUNNING'
+                                            lab.state === 'DEFINED_ON_CORE'
                                                 ? 'bg-gradient-to-r from-[hsl(var(--chart-3))] to-[hsl(var(--chart-3))/70]'
                                                 : lab.state === 'STOPPED'
                                                 ? 'bg-gradient-to-r from-destructive to-destructive/70'
@@ -301,7 +492,7 @@ export default function Labs() {
                                             {/* Status indicator */}
                                             <motion.div
                                                 className={`p-3 rounded-xl ${
-                                                    lab.state === 'RUNNING'
+                                                    lab.state === 'DEFINED_ON_CORE'
                                                         ? 'bg-[hsl(var(--chart-3)/10)] border border-[hsl(var(--chart-3)/20)]'
                                                         : lab.state === 'STOPPED'
                                                         ? 'bg-destructive/10 border border-destructive/20'
@@ -310,7 +501,7 @@ export default function Labs() {
                                                 whileHover={{ scale: 1.05 }}
                                                 transition={{ duration: 0.2 }}
                                             >
-                                                {lab.state === 'RUNNING' ? (
+                                                {lab.state === 'DEFINED_ON_CORE' ? (
                                                     <CheckCircle className="h-6 w-6 text-[hsl(var(--chart-3))]" />
                                                 ) : lab.state === 'STOPPED' ? (
                                                     <AlertCircle className="h-6 w-6 text-destructive" />
@@ -373,13 +564,13 @@ export default function Labs() {
                                                     <Button
                                                         size="sm"
                                                         className={`h-10 px-6 shadow-lg ${
-                                                            lab.state === 'RUNNING'
+                                                            lab.state === 'DEFINED_ON_CORE'
                                                                 ? 'bg-gradient-to-r from-[hsl(var(--chart-3))] to-[hsl(var(--chart-3))/90] hover:from-[hsl(var(--chart-3))/90] hover:to-[hsl(var(--chart-3))] shadow-[hsl(var(--chart-3))/25]'
                                                                 : 'bg-muted hover:bg-muted/80'
                                                         } text-white transition-all duration-300`}
                                                     >
                                                         <Calendar className="h-4 w-4 mr-2" />
-                                                        {lab.state === 'RUNNING' ? 'Book Now' : 'Book Lab'}
+                                                        {lab.state === 'DEFINED_ON_CORE' ? 'Book Now' : 'Book Lab'}
                                                     </Button>
                                                 </motion.div>
                                             </LabReservationDialog>

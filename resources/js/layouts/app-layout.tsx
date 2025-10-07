@@ -15,3 +15,4 @@ export default ({ children, breadcrumbs, ...props }: AppLayoutProps) => (
         <Toaster  position='bottom-left'/>
     </AppLayoutTemplate>
 );
+

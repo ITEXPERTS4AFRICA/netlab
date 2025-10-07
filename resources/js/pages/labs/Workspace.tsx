@@ -18,10 +18,12 @@ import {
     Edit,
     Eye,
     Share2,
-    ExternalLink
+    ExternalLink,
+    Timer
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { router } from '@inertiajs/react';
+import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -48,13 +50,53 @@ type Lab = {
     effective_permissions: string[];
 };
 
+type Reservation = {
+    id: number;
+    start_at: string;
+    end_at: string;
+    status: string;
+};
+
 type Props = {
     lab: Lab;
+    reservation: Reservation | null;
 };
 
 export default function Workspace() {
-    const { lab } = usePage<Props>().props;
+    const { lab, reservation } = usePage<Props>().props;
     const [editMode, setEditMode] = useState(false);
+    const [timeLeft, setTimeLeft] = useState<number>(0);
+
+    useEffect(() => {
+        if (!reservation) return;
+
+        const interval = setInterval(() => {
+            const now = new Date().getTime();
+            const end = new Date(reservation.end_at).getTime();
+            const remaining = end - now;
+
+            if (remaining <= 0) {
+                clearInterval(interval);
+                toast.error('Session ended. Redirecting to dashboard...', {
+                    duration: 3000,
+                });
+                setTimeout(() => {
+                    router.visit('/dashboard');
+                }, 3000);
+            } else {
+                setTimeLeft(Math.floor(remaining / 1000));
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [reservation]);
+
+    const formatTime = (seconds: number) => {
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
 
     const handleStartLab = () => {
         if (confirm('Are you sure you want to start this lab?')) {
@@ -193,7 +235,7 @@ export default function Workspace() {
                 {/* Lab Info Card */}
                 <Card className="border-0 shadow-sm">
                     <CardContent className="p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className={`grid grid-cols-1 ${reservation ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
                                     <Network className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -225,6 +267,22 @@ export default function Workspace() {
                                     <p className="text-xs text-gray-600 dark:text-gray-400">owner</p>
                                 </div>
                             </div>
+
+                            {reservation && (
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center ${timeLeft < 300 ? 'animate-pulse bg-red-100 dark:bg-red-900/20' : ''}`}>
+                                        <Timer className={`w-5 h-5 ${timeLeft < 300 ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`} />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                            {formatTime(timeLeft)}
+                                        </p>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                                            {timeLeft < 3600 ? 'remaining (min:sec)' : 'remaining (hr:min:sec)'}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {lab.lab_description && (
