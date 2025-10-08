@@ -315,7 +315,7 @@ export default function UserReservations() {
                                                                 variant={reservation.time_remaining < 60 ? "destructive" : "secondary"}
                                                                 className={`font-mono ${reservation.time_remaining < 60 ? 'animate-pulse' : ''}`}
                                                             >
-                                                                {Math.floor(reservation.time_remaining / 60)}h {reservation.time_remaining % 60}m
+                                                                {Math.floor(reservation.time_remaining / 60).toString().padStart(2, '0')}h {reservation.time_remaining % 60}m
                                                             </Badge>
                                                         </div>
                                                     )}

@@ -26,7 +26,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/labs/{lab}/annotations', [\App\Http\Controllers\AnnotationsController::class,'store']);
     Route::patch('/labs/{lab}/annotations/{annotation}', [\App\Http\Controllers\AnnotationsController::class,'update']);
     Route::delete('/labs/{lab}/annotations/{annotation}', [\App\Http\Controllers\AnnotationsController::class,'destroy']);
-
+    Route::get('/labs/{lab}/schema', [\App\Http\Controllers\AnnotationsController::class,'schema']);
 
     Route::post('/labs/{lab}/start', [\App\Http\Controllers\LabRuntimeController::class,'start']);
     Route::post('/labs/{lab}/stop', [\App\Http\Controllers\LabRuntimeController::class,'stop']);

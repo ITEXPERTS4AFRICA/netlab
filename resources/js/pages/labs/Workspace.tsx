@@ -31,6 +31,10 @@ const breadcrumbs: BreadcrumbItem[] = [
         href: '/labs',
     },
     {
+        title: 'My Reservations',
+        href: '/labs/my-reserved',
+    },
+    {
         title: 'Workspace',
         href: '#',
     }
@@ -95,7 +99,7 @@ export default function Workspace() {
         const hrs = Math.floor(seconds / 3600);
         const mins = Math.floor((seconds % 3600) / 60);
         const secs = seconds % 60;
-        return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        return `${hrs.toString().padStart(2, '0')}h${mins.toString().padStart(2, '0')}m${secs.toString().padStart(2, '0')}s`;
     };
 
     const handleStartLab = () => {

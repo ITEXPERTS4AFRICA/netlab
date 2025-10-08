@@ -38,9 +38,10 @@ class DashboardController extends Controller
             ->get();
         $availableLabs = $totalLabs - $activeReservations->count();
 
-        // Get recent reservations for the current user
+        // Get recent reservations for the current user (exclude expired ones)
         $userReservations = Reservation::where('user_id', $user->id)
             ->with('lab')
+            ->where('end_at', '>', now()) // Exclude expired reservations
             ->orderBy('created_at', 'desc')
             ->limit(10)
             ->get();

@@ -82,8 +82,8 @@ export function EnhancedReservationDialog({
                 onSuccess: () => {
                     setOpen(false);
                     setSelectedSlot(null);
-                    // Redirect to lab workspace after successful reservation
-                    router.visit(`/labs/${lab.id}/workspace`, {
+                    // Redirect to user's reserved labs page after successful reservation
+                    router.visit('/labs/my-reserved', {
                         method: 'get',
                         preserveScroll: true,
                     });

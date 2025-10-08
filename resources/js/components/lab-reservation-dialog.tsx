@@ -101,8 +101,8 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       onSuccess: () => {
         setOpen(false);
         reset();
-        // Redirect to lab workspace after successful reservation
-        router.visit(`/labs/${lab.id}/workspace`, {
+        // Redirect to user's reserved labs page after successful reservation
+        router.visit('/labs/my-reserved', {
           method: 'get',
           preserveScroll: true,
         });

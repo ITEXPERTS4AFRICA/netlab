@@ -5,13 +5,13 @@ import { Head, usePage } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { BarChart, Bar, XAxis, YAxis, PieChart, Pie } from 'recharts';
 
 import {
     Activity,
     Users,
-    Clock,
     CheckCircle,
     AlertCircle,
     Crown,
@@ -286,7 +286,7 @@ export default function Dashboard() {
                                             Access your reserved labs that are currently available
                                         </CardDescription>
                                     </div>
-                                    <Button
+                                                            <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={() => router.visit('/labs/my-reserved')}
@@ -391,64 +391,119 @@ export default function Dashboard() {
 
                 {/* Main Content Grid */}
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {/* Active Reservations */}
+                    {/* Active Reservations - Charts */}
                     <Card className="col-span-2">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
                                 <Activity className="h-5 w-5" />
-                                Active Reservations
+                                Active Reservations Analytics
                             </CardTitle>
                             <CardDescription>
-                                Currently occupied labs with active reservations
+                                Visual overview of current lab utilization and reservations
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="max-h-[300px] overflow-y-auto">
-                                {activeReservations.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                                        <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
-                                        <h3 className="text-lg font-medium">All Labs Available</h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            No active reservations at the moment
-                                        </p>
+                            {activeReservations.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-8 text-center">
+                                    <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
+                                    <h3 className="text-lg font-medium">All Labs Available</h3>
+                                    <p className="text-sm text-muted-foreground">
+                                        No active reservations at the moment
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {/* Charts Row */}
+                                    <div className="grid gap-6 md:grid-cols-2">
+                                        {/* Bar Chart - Reservations by User */}
+                                        <div className="space-y-4">
+                                            <h4 className="text-sm font-medium">Active Reservations by User</h4>
+                                            <ChartContainer
+                                                config={{
+                                                    count: {
+                                                        label: "Reservations",
+                                                        color: "hsl(var(--chart-1))",
+                                                    },
+                                                }}
+                                                className="h-[200px]"
+                                            >
+                                                <BarChart data={activeReservations.slice(0, 8)}>
+                                                    <XAxis
+                                                        dataKey="user_name"
+                                                        tick={{ fontSize: 12 }}
+                                                        tickLine={false}
+                                                        axisLine={false}
+                                                    />
+                                                    <YAxis
+                                                        tick={{ fontSize: 12 }}
+                                                        tickLine={false}
+                                                        axisLine={false}
+                                                    />
+                                                    <ChartTooltip
+                                                        content={<ChartTooltipContent />}
+                                                    />
+                                                    <Bar
+                                                        dataKey="duration_hours"
+                                                        fill="var(--color-count)"
+                                                        radius={[4, 4, 0, 0]}
+                                                    />
+                                                </BarChart>
+                                            </ChartContainer>
+                                        </div>
+
+                                        {/* Pie Chart - Lab Status Distribution */}
+                                        <div className="space-y-4">
+                                            <h4 className="text-sm font-medium">Lab Utilization</h4>
+                                            <ChartContainer
+                                                config={{
+                                                    available: {
+                                                        label: "Available",
+                                                        color: "hsl(var(--chart-3))",
+                                                    },
+                                                    occupied: {
+                                                        label: "Occupied",
+                                                        color: "hsl(var(--chart-2))",
+                                                    },
+                                                }}
+                                                className="h-[200px]"
+                                            >
+                                                <PieChart>
+                                                    <Pie
+                                                        data={[
+                                                            { name: 'Available', value: stats.availableLabs, fill: 'hsl(var(--chart-3))' },
+                                                            { name: 'Occupied', value: stats.occupiedLabs, fill: 'hsl(var(--chart-2))' },
+                                                        ]}
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        innerRadius={40}
+                                                        outerRadius={80}
+                                                        dataKey="value"
+                                                    />
+                                                    <ChartTooltip
+                                                        content={<ChartTooltipContent />}
+                                                    />
+                                                </PieChart>
+                                            </ChartContainer>
+                                        </div>
                                     </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        {activeReservations.map((reservation) => (
-                                            <div key={reservation.id} className="flex items-center justify-between p-4 border rounded-lg">
-                                                <div className="flex items-center space-x-4">
-                                                    <Avatar className="h-10 w-10">
-                                                        <AvatarFallback>
-                                                            {reservation.user_name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                                                        </AvatarFallback>
-                                                    </Avatar>
-                                                    <div className="space-y-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <p className="font-medium">{reservation.lab_title}</p>
-                                                            <Badge variant="outline" className="text-xs">Active</Badge>
-                                                        </div>
-                                                        <p className="text-sm text-muted-foreground">
-                                                            Reserved by {reservation.user_name}
-                                                        </p>
-                                                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                                            <span>From: {new Date(reservation.start_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
-                                                            <span>To: {new Date(reservation.end_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
-                                                            {reservation.duration_hours && (
-                                                                <Badge variant="secondary" className="text-xs font-mono">
-                                                                    {reservation.duration_hours.toFixed(1)}h
-                                                                </Badge>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="flex flex-col items-end space-y-1">
-                                                    <Clock className="h-4 w-4 text-muted-foreground" />
-                                                </div>
-                                            </div>
-                                        ))}
+
+                                    {/* Summary Stats */}
+                                    <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                                        <div className="text-center">
+                                            <div className="text-2xl font-bold text-[hsl(var(--chart-1))]">{activeReservations.length}</div>
+                                            <div className="text-xs text-muted-foreground">Active Sessions</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-2xl font-bold text-[hsl(var(--chart-3))]">{stats.availableLabs}</div>
+                                            <div className="text-xs text-muted-foreground">Available Labs</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-2xl font-bold text-[hsl(var(--chart-2))]">{stats.occupiedLabs}</div>
+                                            <div className="text-xs text-muted-foreground">Occupied Labs</div>
+                                        </div>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 

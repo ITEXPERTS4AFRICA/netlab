@@ -52,7 +52,12 @@ class CiscoApiService {
 
     public function getLabsAnnotation($token, $lab_id){
         $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/annotations");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab annotations', 'status' => $response->status()];
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab annotations', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    public function getLabSchema($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/topology");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab schema', 'status' => $response->status(), 'body' => $response->body()];
     }
 
     public function getUsers($token)
@@ -176,6 +181,7 @@ class CiscoApiService {
         $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/yaml'])->get("{$this->baseUrl}/v0/labs/{$id}/download");
         return $response->successful() ? $response->body() : ['error' => 'Unable to download lab', 'status' => $response->status(), 'body' => $response->body()];
     }
+
 
     public function getLabAnnotations($token, $id)
     {

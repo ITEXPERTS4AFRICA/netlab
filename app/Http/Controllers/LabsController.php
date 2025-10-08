@@ -117,10 +117,11 @@ class LabsController extends Controller
             ]);
         }
 
-        // Récupérer les réservations de l'utilisateur avec leurs labs
+        // Récupérer les réservations de l'utilisateur avec leurs labs (exclure les terminées)
         $reservations = Reservation::with('lab')
             ->where('user_id', $user->id)
             ->where('status', '!=', 'cancelled')
+            ->where('end_at', '>', now()) // Exclure les réservations terminées
             ->orderBy('start_at', 'desc')
             ->get();
 

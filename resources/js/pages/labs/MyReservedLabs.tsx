@@ -24,6 +24,10 @@ import { formatDuration } from '@/lib/utils';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
+        title: 'Labs',
+        href: '/labs',
+    },
+    {
         title: 'My Reserved Labs',
         href: '/labs/my-reserved',
     }
@@ -116,12 +120,16 @@ export default function MyReservedLabs() {
             const hours = Math.floor(time_info.time_remaining_minutes / 60);
             const minutes = time_info.time_remaining_minutes % 60;
 
+            // Format avec zéros devant
+            const formattedHours = hours.toString().padStart(2, '0');
+            const formattedMinutes = minutes.toString().padStart(2, '0');
+
             if (time_info.time_remaining_minutes < 60) {
                 return (
                     <div className="flex items-center gap-2 text-orange-600">
                         <Timer className="h-4 w-4" />
-                        <span className="font-medium">
-                            {minutes}m remaining
+                        <span className="font-medium font-mono">
+                            {formattedMinutes} min restantes
                         </span>
                     </div>
                 );
@@ -130,8 +138,8 @@ export default function MyReservedLabs() {
             return (
                 <div className="flex items-center gap-2 text-green-600">
                     <Timer className="h-4 w-4" />
-                    <span className="font-medium">
-                        {hours}h {minutes}m remaining
+                    <span className="font-medium font-mono">
+                        {formattedHours}h{formattedMinutes} restantes
                     </span>
                 </div>
             );
@@ -141,11 +149,15 @@ export default function MyReservedLabs() {
             const hours = Math.floor(time_info.time_to_start_minutes / 60);
             const minutes = time_info.time_to_start_minutes % 60;
 
+            // Format avec zéros devant
+            const formattedHours = hours.toString().padStart(2, '0');
+            const formattedMinutes = minutes.toString().padStart(2, '0');
+
             return (
                 <div className="flex items-center gap-2 text-blue-600">
                     <Clock className="h-4 w-4" />
-                    <span className="font-medium">
-                        Starts in {hours}h {minutes}m
+                    <span className="font-medium font-mono">
+                        Dans {formattedHours}h{formattedMinutes}
                     </span>
                 </div>
             );

@@ -43,28 +43,27 @@ export interface User {
 }
 
 export interface LabAnnotation {
-    rotation: number;
+    id: string;
     type: 'text' | 'rectangle' | 'ellipse' | 'line';
-    border_color?: string;
-    border_style?: string;
-    color?: string;
-    thickness?: number;
     x1: number;
     y1: number;
-    z_index?: number;
-    // Text annotation properties
-    text_bold?: boolean;
-    text_content?: string;
-    text_font?: string;
-    text_italic?: boolean;
-    text_size?: number;
-    text_unit?: string;
-    // Shape annotation properties
     x2?: number;
     y2?: number;
+    rotation?: number;
+    z_index?: number;
+    thickness?: number;
+    color?: string;
+    border_color?: string;
+    border_style?: string;
     border_radius?: number;
+    // Text annotation properties
+    text_content?: string;
+    text_size?: number;
+    text_font?: string;
+    text_bold?: boolean;
+    text_italic?: boolean;
+    text_unit?: string;
     // Line annotation properties
-    line_start?: string;
-    line_end?: string;
-    id: string;
+    line_start?: string | null;
+    line_end?: string | null;
 }

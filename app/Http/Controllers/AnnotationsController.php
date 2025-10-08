@@ -7,15 +7,15 @@ use App\Services\CiscoApiService;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Controller for handling lab annotations
+ * Controller for handling lab annotations via API
  *
- * This controller manages CRUD operations for CML lab annotations
+ * This controller provides JSON API endpoints for CML lab annotations
  * including creating, reading, updating, and deleting annotations.
+ * Frontend components should use these endpoints for AJAX requests.
  */
 class AnnotationsController extends Controller
 {
     protected CiscoApiService $annotationService;
-
 
     public function __construct(CiscoApiService $annotationService)
     {
@@ -23,24 +23,34 @@ class AnnotationsController extends Controller
     }
 
     /**
-     * Display a listing of the resource.
+     * Display a listing of annotations for a specific lab.
+     * Returns JSON response for AJAX requests from frontend components.
      */
-    public function index( $lab_id)
+    public function index($lab_id)
     {
         $token = session('cml_token');
         if (!$token) {
-            return response()->json(['error' => 'No CML token'], 401);
+            return response()->json(['error' => 'Authentication required'], 401);
         }
 
         $annotations = $this->annotationService->getLabsAnnotation($token, $lab_id);
 
-        dd($annotations);
-
         if (isset($annotations['error'])) {
             Log::warning('Failed to fetch annotations via API', [
                 'lab_id' => $lab_id,
-                'error' => $annotations['error']
+                'error' => $annotations['error'],
+                'status' => $annotations['status'] ?? 'unknown',
+                'body' => $annotations['body'] ?? null
             ]);
+
+            // If it's a 404, it might mean annotations are not supported
+            if (isset($annotations['status']) && $annotations['status'] === 404) {
+                return response()->json([
+                    'error' => 'Annotations not available for this lab or CML instance',
+                    'details' => $annotations['body'] ?? 'No additional details available'
+                ], 404);
+            }
+
             return response()->json($annotations, 500);
         }
 
@@ -48,15 +58,41 @@ class AnnotationsController extends Controller
     }
 
     /**
-     * Show the form for creating a new resource.
+     * Get a specific annotation by ID.
+     * Returns JSON response for AJAX requests.
      */
-    public function create()
+    public function show($lab_id, $annotation_id)
     {
-        //
+        $token = session('cml_token');
+        if (!$token) {
+            return response()->json(['error' => 'Authentication required'], 401);
+        }
+
+        // For now, we'll fetch all annotations and find the specific one
+        // In a real implementation, you might want a dedicated API endpoint
+        $annotations = $this->annotationService->getLabsAnnotation($token, $lab_id);
+
+        if (isset($annotations['error'])) {
+            Log::warning('Failed to fetch annotations for show via API', [
+                'lab_id' => $lab_id,
+                'annotation_id' => $annotation_id,
+                'error' => $annotations['error']
+            ]);
+            return response()->json($annotations, 500);
+        }
+
+        $annotation = collect($annotations)->firstWhere('id', $annotation_id);
+
+        if (!$annotation) {
+            return response()->json(['error' => 'Annotation not found'], 404);
+        }
+
+        return response()->json($annotation, 200);
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Store a newly created annotation in storage.
+     * Returns JSON response for AJAX requests.
      */
     public function store(Request $request, $lab_id)
     {
@@ -71,7 +107,7 @@ class AnnotationsController extends Controller
 
         $token = session('cml_token');
         if (!$token) {
-            return response()->json(['error' => 'No CML token'], 401);
+            return response()->json(['error' => 'Authentication required'], 401);
         }
 
         $data = $request->only([
@@ -87,32 +123,24 @@ class AnnotationsController extends Controller
         if (isset($result['error'])) {
             Log::warning('Failed to create annotation via API', [
                 'lab_id' => $lab_id,
-                'error' => $result['error']
+                'error' => $result['error'],
+                'status' => $result['status'] ?? 'unknown',
+                'body' => $result['body'] ?? null
             ]);
             return response()->json($result, 500);
         }
 
-        return response()->json($result, 201);
+        return response()->json([
+            'message' => 'Annotation created successfully',
+            'annotation' => $result
+        ], 201);
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
+
 
     /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
+     * Update the specified annotation in storage.
+     * Returns JSON response for AJAX requests.
      */
     public function update(Request $request, $lab_id, $annotation_id)
     {
@@ -125,7 +153,7 @@ class AnnotationsController extends Controller
 
         $token = session('cml_token');
         if (!$token) {
-            return response()->json(['error' => 'No CML token'], 401);
+            return response()->json(['error' => 'Authentication required'], 401);
         }
 
         $data = $request->only([
@@ -142,16 +170,22 @@ class AnnotationsController extends Controller
             Log::warning('Failed to update annotation via API', [
                 'lab_id' => $lab_id,
                 'annotation_id' => $annotation_id,
-                'error' => $result['error']
+                'error' => $result['error'],
+                'status' => $result['status'] ?? 'unknown',
+                'body' => $result['body'] ?? null
             ]);
             return response()->json($result, 500);
         }
 
-        return response()->json($result, 200);
+        return response()->json([
+            'message' => 'Annotation updated successfully',
+            'annotation' => $result
+        ], 200);
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Remove the specified annotation from storage.
+     * Returns JSON response for AJAX requests.
      */
     public function destroy(Request $request, $lab_id, $annotation_id)
     {
@@ -164,7 +198,7 @@ class AnnotationsController extends Controller
 
         $token = session('cml_token');
         if (!$token) {
-            return response()->json(['error' => 'No CML token'], 401);
+            return response()->json(['error' => 'Authentication required'], 401);
         }
 
         $result = $this->annotationService->deleteLabAnnotation($token, $lab_id, $annotation_id);
@@ -173,11 +207,49 @@ class AnnotationsController extends Controller
             Log::warning('Failed to delete annotation via API', [
                 'lab_id' => $lab_id,
                 'annotation_id' => $annotation_id,
-                'error' => $result['error']
+                'error' => $result['error'],
+                'status' => $result['status'] ?? 'unknown',
+                'body' => $result['body'] ?? null
             ]);
             return response()->json($result, 500);
         }
 
-        return response()->json(['message' => 'Annotation deleted successfully'], 200);
+        return response()->json([
+            'message' => 'Annotation deleted successfully'
+        ], 200);
+    }
+
+    /**
+     * Display the lab schema/topology.
+     */
+    public function schema($lab_id)
+    {
+        $token = session('cml_token');
+        if (!$token) {
+            return response()->json(['error' => 'No CML token'], 401);
+        }
+
+        $schema = $this->annotationService->getLabSchema($token, $lab_id);
+
+        if (isset($schema['error'])) {
+            Log::warning('Failed to fetch lab schema via API', [
+                'lab_id' => $lab_id,
+                'error' => $schema['error'],
+                'status' => $schema['status'] ?? 'unknown',
+                'body' => $schema['body'] ?? null
+            ]);
+
+            // If it's a 404, it might mean schema is not available
+            if (isset($schema['status']) && $schema['status'] === 404) {
+                return response()->json([
+                    'error' => 'Lab schema not available for this lab or CML instance',
+                    'details' => $schema['body'] ?? 'No additional details available'
+                ], 404);
+            }
+
+            return response()->json($schema, 500);
+        }
+
+        return response()->json($schema, 200);
     }
 }
