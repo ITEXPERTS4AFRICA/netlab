@@ -56,13 +56,12 @@ class LabRuntimeController extends Controller
 
         $usage->ended_at = now();
         $usage->duration_seconds = $usage->ended_at->diffInSeconds($usage->started_at);
+
         // cost calculation left to billing step
         $usage->save();
 
         return response()->json(['stopped' => true, 'usage_record' => $usage]);
     }
-
-  
 }
 
 

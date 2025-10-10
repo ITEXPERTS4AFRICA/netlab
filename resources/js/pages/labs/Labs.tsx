@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PaginationApp } from '@/components/app-pagination';
 import LabReservationDialog from '@/components/lab-reservation-dialog';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import AnnotationLab from '@/components/app-annotation';
 import { Input } from '@/components/ui/input';
@@ -92,18 +92,8 @@ export default function Labs() {
             labsArray = [];
         }
 
-        console.log('Labs data processed:', {
-            rawType: typeof labs,
-            rawIsArray: Array.isArray(labs),
-            rawKeys: labs && typeof labs === 'object' ? Object.keys(labs) : 'N/A',
-            processedLength: labsArray.length,
-            firstItem: labsArray[0],
-            pagination,
-            error
-        });
-
         return labsArray;
-    }, [labs, pagination, error]);
+    }, [labs]);
 
     useEffect(() => {
         // Debug information
@@ -598,6 +588,9 @@ export default function Labs() {
                                                                             <CardDescription>Lab topology and annotations preview</CardDescription>
                                                                         </div>
                                                                     </div>
+                                                                    <DialogDescription>
+                                                                        View the complete network topology, device connections, and interactive annotations for {lab.lab_title}. This preview shows the real-time lab architecture from CML.
+                                                                    </DialogDescription>
                                                                 </CardHeader>
 
                                                                 <div className="relative bg-card rounded-xl border shadow-lg min-h-[500px] overflow-hidden">

@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Clock, Users, CheckCircle, X, CalendarDays, Sparkles } from "lucide-react";
-import { motion } from "framer-motion";
-import { formatTime, formatTimeDetailed, formatTimeRange } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
+import { formatTime, formatTimeDetailed, formatTimeRange, formatDurationFromTimes } from "@/lib/utils";
 
 export interface TimeSlot {
     id: string;
@@ -39,7 +39,7 @@ export function TimeSlotPicker({
 
     const getSlotStatus = (slot: TimeSlot) => {
         if (!slot.available) return "unavailable";
-        if (slot.currentUsers >= slot.maxUsers) return "full";
+        if (slot.currentUsers >= slot.maxUsers) return "occupied"; // Lab is occupied by another user
         if (userCurrentSlots >= maxSlotsPerUser) return "max_reached";
         return "available";
     };
@@ -64,7 +64,7 @@ export function TimeSlotPicker({
         switch (status) {
             case "available":
                 return <CheckCircle className="h-4 w-4" />;
-            case "full":
+            case "occupied":
                 return <Users className="h-4 w-4" />;
             case "unavailable":
                 return <X className="h-4 w-4" />;
@@ -84,7 +84,7 @@ export function TimeSlotPicker({
         switch (status) {
             case "available":
                 return "text-green-700 bg-green-50 border-green-200 hover:bg-green-100";
-            case "full":
+            case "occupied":
                 return "text-orange-700 bg-orange-50 border-orange-200";
             case "unavailable":
                 return "text-gray-500 bg-gray-50 border-gray-200";
@@ -98,14 +98,26 @@ export function TimeSlotPicker({
     return (
         <div className="space-y-6">
             {/* Header with modern design */}
-            <Card className="border-0 shadow-sm bg-gradient-to-r from-background to-muted/20">
+            <Card className="border-0 shadow-sm bg-gradient-to-br from-background via-background to-primary/5">
                 <CardHeader className="pb-4">
                     <CardTitle className="flex items-center gap-3 text-lg">
-                        <div className="p-2 rounded-lg bg-primary/10">
+                        <motion.div
+                            className="p-2 rounded-lg bg-primary/10"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                        >
                             <CalendarDays className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                            <h3 className="font-semibold">Créneaux disponibles</h3>
+                        </motion.div>
+                        <div className="flex-1">
+                            <h3 className="font-semibold flex items-center gap-2">
+                                Créneaux disponibles
+                                <motion.div
+                                    animate={{ rotate: [0, 5, -5, 0] }}
+                                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+                                >
+                                    <Sparkles className="h-4 w-4 text-primary/60" />
+                                </motion.div>
+                            </h3>
                             <p className="text-sm text-muted-foreground font-normal">
                                 {selectedDate.toLocaleDateString('fr-FR', {
                                     weekday: 'long',
@@ -117,20 +129,35 @@ export function TimeSlotPicker({
                         </div>
                     </CardTitle>
 
-                    {/* Legend */}
+                    {/* Enhanced Legend */}
                     <div className="flex flex-wrap gap-4 pt-2">
-                        <div className="flex items-center gap-2 text-xs">
-                            <div className="w-3 h-3 rounded-full bg-green-100 border border-green-200"></div>
-                            <span className="text-muted-foreground">Disponible</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs">
-                            <div className="w-3 h-3 rounded-full bg-orange-100 border border-orange-200"></div>
-                            <span className="text-muted-foreground">Complet</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs">
-                            <div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-200"></div>
-                            <span className="text-muted-foreground">Indisponible</span>
-                        </div>
+                        <motion.div
+                            className="flex items-center gap-2 text-xs"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.1 }}
+                        >
+                            <div className="w-3 h-3 rounded-full bg-green-100 border border-green-200 shadow-sm"></div>
+                            <span className="text-muted-foreground font-medium">Disponible</span>
+                        </motion.div>
+                        <motion.div
+                            className="flex items-center gap-2 text-xs"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.2 }}
+                        >
+                            <div className="w-3 h-3 rounded-full bg-orange-100 border border-orange-200 shadow-sm"></div>
+                            <span className="text-muted-foreground font-medium">Occupé</span>
+                        </motion.div>
+                        <motion.div
+                            className="flex items-center gap-2 text-xs"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.3 }}
+                        >
+                            <div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-200 shadow-sm"></div>
+                            <span className="text-muted-foreground font-medium">Indisponible</span>
+                        </motion.div>
                     </div>
                 </CardHeader>
             </Card>
@@ -214,50 +241,86 @@ export function TimeSlotPicker({
                     return (
                         <motion.div
                             key={slot.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                            whileHover={{ y: -2 }}
+                            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{
+                                delay: index * 0.05,
+                                type: "spring",
+                                stiffness: 300,
+                                damping: 20
+                            }}
+                            whileHover={{
+                                y: -4,
+                                scale: 1.02,
+                                transition: { duration: 0.2 }
+                            }}
+                            whileTap={{ scale: 0.98 }}
                             className={`
-                                relative group cursor-pointer transition-all duration-200
+                                relative group cursor-pointer
                                 ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}
                             `}
                         >
                             <Card
                                 className={`
-                                    h-full transition-all duration-200 hover:shadow-lg
+                                    h-full transition-all duration-300 hover:shadow-xl
                                     ${getAvailabilityColor(slot)}
-                                    ${canSelectSlot(slot) ? 'hover:scale-[1.02] cursor-pointer' : 'opacity-60'}
-                                    ${isSelected ? 'shadow-lg scale-[1.02]' : ''}
+                                    ${canSelectSlot(slot) ? 'hover:shadow-primary/20 cursor-pointer' : 'opacity-60'}
+                                    ${isSelected ? 'shadow-primary/30 shadow-lg' : ''}
+                                    backdrop-blur-sm
                                 `}
                                 onClick={() => canSelectSlot(slot) && onSlotSelect(slot)}
                             >
                                 <CardContent className="p-4">
                                     {/* Selection indicator */}
-                                    {isSelected && (
-                                        <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center shadow-md">
-                                            <CheckCircle className="h-3 w-3 text-white" />
-                                        </div>
-                                    )}
+                                    <AnimatePresence>
+                                        {isSelected && (
+                                            <motion.div
+                                                initial={{ scale: 0, opacity: 0 }}
+                                                animate={{ scale: 1, opacity: 1 }}
+                                                exit={{ scale: 0, opacity: 0 }}
+                                                className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center shadow-md"
+                                            >
+                                                <CheckCircle className="h-3 w-3 text-white" />
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
 
                                     {/* Header with time and icon */}
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2">
-                                            <div className={`p-1.5 rounded-md ${status === 'available' ? 'bg-green-100 text-green-700' : status === 'full' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>
+                                            <motion.div
+                                                className={`p-1.5 rounded-md ${status === 'available' ? 'bg-green-100 text-green-700' : status === 'occupied' ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}
+                                                whileHover={{ scale: 1.1 }}
+                                            >
                                                 {getSlotIcon(slot)}
-                                            </div>
+                                            </motion.div>
                                             <div>
                                                 <div className="font-semibold text-sm">
                                                     {formatTime(slot.startTime)} - {formatTime(slot.endTime)}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground">4 heures</div>
+                                                <motion.div
+                                                    className="text-xs text-muted-foreground"
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    transition={{ delay: 0.2 }}
+                                                >
+                                                    {formatDurationFromTimes(slot.startTime, slot.endTime)}
+                                                </motion.div>
                                             </div>
                                         </div>
-                                        {status === "available" && (
-                                            <Badge variant="outline" className="text-xs border-green-200 text-green-700">
-                                                Libre
-                                            </Badge>
-                                        )}
+                                        <AnimatePresence>
+                                            {status === "available" && (
+                                                <motion.div
+                                                    initial={{ scale: 0, opacity: 0 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                    exit={{ scale: 0, opacity: 0 }}
+                                                >
+                                                    <Badge variant="outline" className="text-xs border-green-200 text-green-700">
+                                                        Libre
+                                                    </Badge>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
 
                                     {/* Availability info */}
@@ -269,48 +332,63 @@ export function TimeSlotPicker({
                                             </span>
                                         </div>
 
-                                        {slot.currentUsers > 0 && (
-                                            <div className="flex items-center justify-between text-xs">
-                                                <span className="text-muted-foreground">Occupé:</span>
-                                                <span className="font-medium">
-                                                    {slot.currentUsers}/{slot.maxUsers}
-                                                </span>
-                                            </div>
-                                        )}
+                                        <AnimatePresence>
+                                            {slot.currentUsers > 0 && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, height: 0 }}
+                                                    animate={{ opacity: 1, height: "auto" }}
+                                                    exit={{ opacity: 0, height: 0 }}
+                                                    className="flex items-center justify-between text-xs"
+                                                >
+                                                    <span className="text-muted-foreground">Occupé:</span>
+                                                    <span className="font-medium">
+                                                        {slot.currentUsers}/{slot.maxUsers}
+                                                    </span>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
 
                                     {/* Progress bar for occupancy */}
-                                    <div className="mt-3 w-full bg-gray-200 rounded-full h-1.5">
-                                        <div
-                                            className={`h-1.5 rounded-full transition-all duration-300 ${
+                                    <div className="mt-3 w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                        <motion.div
+                                            className={`h-1.5 rounded-full transition-all duration-500 ${
                                                 slot.currentUsers >= slot.maxUsers ? 'bg-orange-400' : 'bg-green-400'
                                             }`}
-                                            style={{ width: `${(slot.currentUsers / slot.maxUsers) * 100}%` }}
-                                        ></div>
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${(slot.currentUsers / slot.maxUsers) * 100}%` }}
+                                        />
                                     </div>
 
                                     {/* Overlay for unavailable slots */}
-                                    {!canSelectSlot(slot) && (
-                                        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/20">
-                                            <div className="text-center p-2">
-                                                {status === "max_reached" && (
-                                                    <Badge variant="outline" className="text-xs border-blue-200 text-blue-700">
-                                                        Limite atteinte
-                                                    </Badge>
-                                                )}
-                                                {status === "full" && (
-                                                    <Badge variant="outline" className="text-xs border-orange-200 text-orange-700">
-                                                        Complet
-                                                    </Badge>
-                                                )}
-                                                {status === "unavailable" && (
-                                                    <Badge variant="outline" className="text-xs">
-                                                        Indisponible
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
+                                    <AnimatePresence>
+                                        {!canSelectSlot(slot) && (
+                                            <motion.div
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
+                                                className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/20"
+                                            >
+                                                <div className="text-center p-2">
+                                                    {status === "max_reached" && (
+                                                        <Badge variant="outline" className="text-xs border-blue-200 text-blue-700">
+                                                            Limite atteinte
+                                                        </Badge>
+                                                    )}
+                                                    {status === "occupied" && (
+                                                        <Badge variant="outline" className="text-xs border-orange-200 text-orange-700">
+                                                            Occupé
+                                                        </Badge>
+                                                    )}
+                                                    {status === "unavailable" && (
+                                                        <Badge variant="outline" className="text-xs">
+                                                            Indisponible
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </CardContent>
                             </Card>
                         </motion.div>
@@ -337,7 +415,9 @@ export function TimeSlotPicker({
                                 </div>
                                 <div className="space-y-1">
                                     <p className="text-muted-foreground">Durée</p>
-                                    <p className="font-medium">4H:00M</p>
+                                    <p className="font-medium">
+                                        {formatDurationFromTimes(selectedSlot.startTime, selectedSlot.endTime)}
+                                    </p>
                                 </div>
                                 <div className="space-y-1">
                                     <p className="text-muted-foreground">Places restantes</p>

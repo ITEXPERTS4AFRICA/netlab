@@ -3,6 +3,7 @@ import { useForm } from '@inertiajs/react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -47,12 +48,13 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
 
     for (let hour = startHour; hour < endHour; hour += slotDuration) {
       const startTime = `${hour.toString().padStart(2, '0')}:00`;
-      const endTime = `${(hour + slotDuration).toString().padStart(2, '0')}:00`;
+      const endHourSlot = Math.min(hour + slotDuration, endHour);
+      const endTime = `${endHourSlot.toString().padStart(2, '0')}:00`;
 
       // Simulate some slots as unavailable or full for demo
       const isAvailable = Math.random() > 0.3; // 70% available
-      const currentUsers = isAvailable ? Math.floor(Math.random() * 3) : 0; // 0-2 users
-      const maxUsers = 3;
+      const currentUsers = isAvailable ? Math.floor(Math.random() * 2) : 0; // 0-1 users (lab is either free or occupied)
+      const maxUsers = 1; // Each lab slot is occupied by one user only
 
       slots.push({
         id: `${labId}-${date.toDateString()}-${startTime}`,
@@ -142,6 +144,9 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
               </div>
             </DialogTitle>
           </div>
+          <DialogDescription>
+            Schedule a reservation for {lab.title || `Lab ${lab.id}`}. Select your preferred date and time slot for lab access.
+          </DialogDescription>
         </DialogHeader>
 
         <Card className="mt-4">

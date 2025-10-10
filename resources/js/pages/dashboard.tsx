@@ -272,7 +272,59 @@ export default function Dashboard() {
                 )}
 
                 {/* Your Active Labs Section */}
+
+                {userActiveReservations.length === 0 && (
+                    <motion.div variants={itemVariants}>
+                        <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+                            <CardHeader>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="flex items-center gap-2 text-primary">
+                                            <Zap className="h-5 w-5" />
+                                            Your Active Labs
+                                        </CardTitle>
+                                        <CardDescription>
+                                            Access your reserved labs that are currently available
+                                        </CardDescription>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => router.visit('/labs/my-reserved')}
+                                        className="shrink-0"
+                                    >
+                                        View All Reserved
+                                    </Button>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                    <motion.div variants={itemVariants}>
+                                        <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+                                            <CardHeader>
+                                                <CardTitle className="flex items-center gap-2 text-primary">
+                                                    <Zap className="h-5 w-5" />
+                                                    No Active Labs
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <p className="text-sm text-muted-foreground">
+                                                    You don&apos;t have any active reservations at the moment.
+                                                </p>
+                                            </CardContent>
+                                        </Card>
+                                    </motion.div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+
+                )}
+
+                
                 {userActiveReservations.length > 0 && (
+
+
                     <motion.div variants={itemVariants}>
                         <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
                             <CardHeader>

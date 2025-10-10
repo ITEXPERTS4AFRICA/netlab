@@ -6,4 +6,9 @@ use App\Http\Controllers\Api\LabController;
 
 Route::middleware('auth')->group(function(){
     Route::get('/reservations/active/{lab_id}', [ReservationController::class, 'active']);
+
+    // Lab reservation endpoints
+    Route::post('/labs/{lab}/reserve', [ReservationController::class, 'store']);
+    Route::post('/labs/{lab}/start', [\App\Http\Controllers\LabRuntimeController::class, 'start']);
+    Route::post('/labs/{lab}/stop', [\App\Http\Controllers\LabRuntimeController::class, 'stop']);
 });

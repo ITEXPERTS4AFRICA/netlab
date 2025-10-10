@@ -48,11 +48,12 @@ class DashboardController extends Controller
 
         // Get user's active reservations (currently active)
         $userActiveReservations = Reservation::where('user_id', $user->id)
+            ->with('lab')
             ->where('start_at', '<=', now())
             ->where('end_at', '>', now())
             ->where('status', '!=', 'cancelled')
-            ->with('lab')
             ->get();
+        
 
         // Get CML data with caching and error handling
         $cmlLabsData = [];
@@ -124,6 +125,9 @@ class DashboardController extends Controller
             ->selectRaw('AVG((julianday(end_at) - julianday(start_at)) * 1440) as avg_duration')
             ->first()
             ->avg_duration ?? 0;
+
+      
+     
 
         return Inertia::render('dashboard', [
             'stats' => [

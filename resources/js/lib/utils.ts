@@ -50,3 +50,38 @@ export function formatDuration(hours: number | null): string {
     if (hours === null || hours === undefined) return '0.0h';
     return `${hours.toFixed(1)}h`;
 }
+
+/**
+ * Calculate duration between two time strings
+ * @param startTime - Start time in HH:MM format
+ * @param endTime - End time in HH:MM format
+ * @returns Duration in hours (decimal)
+ */
+export function calculateDuration(startTime: string, endTime: string): number {
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    const [endHour, endMinute] = endTime.split(':').map(Number);
+
+    const startInMinutes = startHour * 60 + startMinute;
+    const endInMinutes = endHour * 60 + endMinute;
+
+    const durationInMinutes = endInMinutes - startInMinutes;
+    return durationInMinutes / 60; // Convert to hours
+}
+
+/**
+ * Format duration from time strings
+ * @param startTime - Start time in HH:MM format
+ * @param endTime - End time in HH:MM format
+ * @returns Formatted duration string like "4H:00M"
+ */
+export function formatDurationFromTimes(startTime: string, endTime: string): string {
+    const duration = calculateDuration(startTime, endTime);
+    const hours = Math.floor(duration);
+    const minutes = Math.round((duration - hours) * 60);
+
+    if (minutes === 0) {
+        return `${hours}H:00M`;
+    }
+
+    return `${hours}H:${minutes.toString().padStart(2, '0')}M`;
+}

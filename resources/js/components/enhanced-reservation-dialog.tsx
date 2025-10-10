@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, Users, CheckCircle, AlertCircle } from "lucide-react";
@@ -124,6 +124,9 @@ export function EnhancedReservationDialog({
                             </p>
                         </div>
                     </DialogTitle>
+                    <DialogDescription>
+                        Réservez un créneau de 4 heures pour accéder au laboratoire {lab.title}. Sélectionnez une date et un horaire disponible.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-6 overflow-y-auto max-h-[calc(90vh-120px)]">

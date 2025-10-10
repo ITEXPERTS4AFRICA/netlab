@@ -28,6 +28,11 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/labs/{lab}/annotations/{annotation}', [\App\Http\Controllers\AnnotationsController::class,'destroy']);
     Route::get('/labs/{lab}/schema', [\App\Http\Controllers\AnnotationsController::class,'schema']);
 
+    // Smart Annotations
+    Route::get('/labs/{lab}/smart_annotations', [\App\Http\Controllers\SmartAnnotationsController::class,'index']);
+    Route::get('/labs/{lab}/smart_annotations/{smart_annotation}', [\App\Http\Controllers\SmartAnnotationsController::class,'show']);
+    Route::patch('/labs/{lab}/smart_annotations/{smart_annotation}', [\App\Http\Controllers\SmartAnnotationsController::class,'update']);
+
     Route::post('/labs/{lab}/start', [\App\Http\Controllers\LabRuntimeController::class,'start']);
     Route::post('/labs/{lab}/stop', [\App\Http\Controllers\LabRuntimeController::class,'stop']);
 });
