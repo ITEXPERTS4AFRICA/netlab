@@ -163,6 +163,37 @@
   --tracking-widest: calc(var(--tracking-normal) + 0.1em);
 }
 
+.annotation-text {
+  transition: all 0.2s ease;
+}
+
+.annotation-text:hover {
+  transform: scale(1.05);
+  z-index: 10000 !important;
+}
+
+.annotation-rectangle, .annotation-ellipse {
+  transition: all 0.2s ease;
+}
+
+.annotation-rectangle:hover, .annotation-ellipse:hover {
+  transform: scale(1.02);
+  z-index: 10000 !important;
+}
+
+.annotation-line {
+  transition: all 0.2s ease;
+}
+
+.annotation-line:hover {
+  transform: scale(1.1);
+  z-index: 10000 !important;
+}
+
+.annotation-draggable {
+  cursor: move;
+}
+
 body {
   letter-spacing: var(--tracking-normal);
 }

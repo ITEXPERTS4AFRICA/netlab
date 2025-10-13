@@ -9,7 +9,7 @@ import LabReservationDialog from '@/components/lab-reservation-dialog';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import AnnotationLab from '@/components/app-annotation';
+import AnnotationLab from '@/components/AnnotationLab';
 import { Input } from '@/components/ui/input';
 import {
     AlertCircle,
@@ -226,11 +226,11 @@ export default function Labs() {
                                         animate={{ opacity: 1, x: 0 }}
                                         transition={{ duration: 0.6, delay: 0.2 }}
                                     >
-                                        Network Labs
+                                        Laboratoires Réseau
                                     </motion.h1>
                                     <div className="flex items-center gap-2 mt-1">
                                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                        <span className="text-sm text-muted-foreground">Live CML Integration</span>
+                                        <span className="text-sm text-muted-foreground">Intégration CML Live</span>
                                     </div>
                                 </div>
                             </div>
@@ -241,8 +241,8 @@ export default function Labs() {
                                 animate={{ opacity: 1 }}
                                 transition={{ duration: 0.6, delay: 0.4 }}
                             >
-                                Discover and reserve Cisco Modeling Labs for your network experiments.
-                                Access real-time topologies, interactive annotations, and hands-on learning environments.
+                                Découvrez et réservez des Cisco Modeling Labs pour vos expériences réseau.
+                                Accédez aux topologies en temps réel, aux annotations interactives et aux environnements d'apprentissage pratiques.
                             </motion.p>
 
                             {/* Quick stats in header */}
@@ -254,7 +254,7 @@ export default function Labs() {
                             >
                                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
                                     <Activity className="h-4 w-4 text-primary" />
-                                    <span className="text-sm font-medium text-primary">{safeLabs.length} Active Labs</span>
+                                    <span className="text-sm font-medium text-primary">{safeLabs.length} Labs Actifs</span>
                                 </div>
                                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
                                     <CheckCircle className="h-4 w-4 text-green-600" />
@@ -276,7 +276,7 @@ export default function Labs() {
                                 <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5" />
                                 <Input
                                     type="search"
-                                    placeholder="Search labs by title, description..."
+                                    placeholder="Rechercher des labs par titre, description..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="pl-12 pr-4 h-12 w-80 text-base border-2 border-input bg-background/80 backdrop-blur-sm focus:bg-background focus:border-primary/50 transition-all duration-200 rounded-xl shadow-sm"
@@ -295,7 +295,7 @@ export default function Labs() {
 
                             {/* Quick filters */}
                             <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm text-muted-foreground">Filter:</span>
+                                <span className="text-sm text-muted-foreground">Filtrer :</span>
                                 <div className="flex gap-2">
                                     <Button
                                         variant={searchQuery === '' ? 'default' : 'outline'}
@@ -303,15 +303,15 @@ export default function Labs() {
                                         className="h-8 px-3 text-xs"
                                         onClick={() => setSearchQuery('')}
                                     >
-                                        All Labs
+                                        Tous les Labs
                                     </Button>
                                     <Button
                                         variant={searchQuery === 'running' ? 'default' : 'outline'}
                                         size="sm"
                                         className="h-8 px-3 text-xs"
-                                        onClick={() => setSearchQuery('running')}
+                                        onClick={() => setSearchQuery('RUNNING')}
                                     >
-                                        Running
+                                        En cours
                                     </Button>
                                     <Button
                                         variant={searchQuery === 'stopped' ? 'default' : 'outline'}
@@ -319,7 +319,7 @@ export default function Labs() {
                                         className="h-8 px-3 text-xs"
                                         onClick={() => setSearchQuery('stopped')}
                                     >
-                                        Stopped
+                                        Arrêté
                                     </Button>
                                 </div>
                             </div>
@@ -336,7 +336,7 @@ export default function Labs() {
                         <div className="flex items-center gap-3">
                             <AlertCircle className="h-6 w-6 text-destructive" />
                             <div>
-                                <h3 className="font-semibold text-destructive">Connection Error</h3>
+                                <h3 className="font-semibold text-destructive">Erreur de Connexion</h3>
                                 <p className="text-sm text-muted-foreground mt-1">{error}</p>
                             </div>
                         </div>
@@ -351,7 +351,7 @@ export default function Labs() {
                     <details className="group">
                         <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
                             <Info className="h-4 w-4" />
-                            Debug Information (Click to expand)
+                            Informations de Débogage (Cliquer pour développer)
                         </summary>
                         <div className="mt-4 space-y-2 text-xs font-mono">
                             <div><strong>Labs Type:</strong> {debugInfo.labsType}</div>
@@ -376,7 +376,7 @@ export default function Labs() {
                         transition={{ duration: 0.2 }}
                     >
                         <div className="text-3xl font-bold text-[hsl(var(--chart-1))]">{safeLabs.length}</div>
-                        <div className="text-sm text-muted-foreground mt-1">Total Labs</div>
+                        <div className="text-sm text-muted-foreground mt-1">Total des Labs</div>
                     </motion.div>
                     <motion.div
                         className="flex-1 p-6 rounded-xl bg-gradient-to-br from-[hsl(var(--chart-3)/5)] to-[hsl(var(--chart-3)/10)] border border-[hsl(var(--chart-3)/20)]"
@@ -392,7 +392,7 @@ export default function Labs() {
                         transition={{ duration: 0.2 }}
                     >
                         <div className="text-3xl font-bold text-[hsl(var(--chart-2))]">{pagination.total}</div>
-                        <div className="text-sm text-muted-foreground mt-1">Available</div>
+                        <div className="text-sm text-muted-foreground mt-1">Disponible</div>
                     </motion.div>
                 </motion.div>
 
@@ -431,7 +431,7 @@ export default function Labs() {
                         >
                             <Search className="h-12 w-12 text-muted-foreground" />
                         </motion.div>
-                        <h3 className="text-xl font-semibold mb-2">No labs found</h3>
+                        <h3 className="text-xl font-semibold mb-2">Aucun lab trouvé</h3>
                         <p className="text-muted-foreground max-w-md">
                             {searchQuery ? `No labs match "${searchQuery}"` : 'No labs are currently available.'}
                         </p>
@@ -441,7 +441,7 @@ export default function Labs() {
                                 className="mt-4"
                                 onClick={() => setSearchQuery('')}
                             >
-                                Clear search
+                                Effacer la recherche
                             </Button>
                         )}
                     </motion.div>
@@ -519,7 +519,7 @@ export default function Labs() {
                                                 <Network className="h-5 w-5 text-[hsl(var(--chart-4))]" />
                                                 <div>
                                                     <div className="text-lg font-semibold">{lab.node_count}</div>
-                                                    <div className="text-xs text-muted-foreground">devices</div>
+                                                    <div className="text-xs text-muted-foreground">appareils</div>
                                                 </div>
                                             </motion.div>
 
@@ -535,7 +535,7 @@ export default function Labs() {
                                                             day: 'numeric'
                                                         })}
                                                     </div>
-                                                    <div className="text-xs text-muted-foreground">modified</div>
+                                                    <div className="text-xs text-muted-foreground">modifié</div>
                                                 </div>
                                             </motion.div>
                                         </div>
@@ -560,7 +560,7 @@ export default function Labs() {
                                                         } text-white transition-all duration-300`}
                                                     >
                                                         <Calendar className="h-4 w-4 mr-2" />
-                                                        {lab.state === 'DEFINED_ON_CORE' ? 'Book Now' : 'Book Lab'}
+                                                        {lab.state === 'DEFINED_ON_CORE' ? 'Réserver Maintenant' : 'Réserver le Lab'}
                                                     </Button>
                                                 </motion.div>
                                             </LabReservationDialog>
@@ -585,11 +585,11 @@ export default function Labs() {
                                                                         </div>
                                                                         <div>
                                                                             <CardTitle className="text-xl">{lab.lab_title}</CardTitle>
-                                                                            <CardDescription>Lab topology and annotations preview</CardDescription>
+                                                                            <CardDescription>Aperçu de la topologie et des annotations du lab</CardDescription>
                                                                         </div>
                                                                     </div>
                                                                     <DialogDescription>
-                                                                        View the complete network topology, device connections, and interactive annotations for {lab.lab_title}. This preview shows the real-time lab architecture from CML.
+                                                                        Consultez la topologie réseau complète, les connexions d'appareils et les annotations interactives pour {lab.lab_title}. Cet aperçu montre l'architecture du lab en temps réel depuis CML.
                                                                     </DialogDescription>
                                                                 </CardHeader>
 
@@ -598,11 +598,11 @@ export default function Labs() {
                                                                         <div className="flex items-center gap-4 text-sm">
                                                                             <div className="flex items-center gap-2">
                                                                                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                                                                <span>Live Preview</span>
+                                                                                <span>Aperçu Live</span>
                                                                             </div>
                                                                             <div className="flex items-center gap-2 text-muted-foreground">
                                                                                 <Network className="h-4 w-4" />
-                                                                                <span>{lab.node_count} nodes</span>
+                                                                                <span>{lab.node_count} nœuds</span>
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -614,11 +614,11 @@ export default function Labs() {
 
                                                                 <div className="flex items-center justify-between text-sm text-muted-foreground pt-4">
                                                                     <div className="space-y-1">
-                                                                        <p>• Interactive annotations with drag-and-drop repositioning</p>
-                                                                        <p>• Real-time topology visualization from CML</p>
+                                                                        <p>• Annotations interactives avec repositionnement par glisser-déposer</p>
+                                                                        <p>• Visualisation de topologie en temps réel depuis CML</p>
                                                                     </div>
                                                                     <Badge variant="secondary" className="text-xs">
-                                                                        Live Data
+                                                                        Données Live
                                                                     </Badge>
                                                                 </div>
                                                             </DialogContent>
@@ -626,9 +626,9 @@ export default function Labs() {
                                                     </TooltipTrigger>
                                                     <TooltipContent side="top" className="max-w-xs">
                                                         <div className="space-y-2">
-                                                            <p className="font-medium">Lab Architecture Preview</p>
+                                                            <p className="font-medium">Aperçu de l'Architecture du Lab</p>
                                                             <p className="text-xs leading-relaxed">
-                                                                View the complete network topology and annotations for this lab before booking.
+                                                                Consultez la topologie réseau complète et les annotations pour ce lab avant de réserver.
                                                             </p>
                                                         </div>
                                                     </TooltipContent>

@@ -15,6 +15,7 @@ import {
     Settings,
     AlertTriangle,
     Trash2,
+
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -35,7 +36,7 @@ interface ErrorBoundaryState {
     error?: Error;
 }
 
-class AnnotationErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class AnnotationErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { hasError: boolean; error?: Error }> {
     constructor(props: ErrorBoundaryProps) {
         super(props);
         this.state = { hasError: false };

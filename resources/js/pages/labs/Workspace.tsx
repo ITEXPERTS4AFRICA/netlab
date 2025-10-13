@@ -5,7 +5,7 @@ import { Card, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import AnnotationLab from '@/components/app-annotation';
+import AnnotationLab from '@/components/AnnotationLab';
 import {
     ArrowLeft,
     Play,
@@ -104,7 +104,7 @@ export default function Workspace() {
 
     const handleStartLab = () => {
         if (confirm('Are you sure you want to start this lab?')) {
-            router.post(`/labs/${lab.id}/start`, {}, {
+            router.post(`/api/labs/${lab.id}/start`, {}, {
                 preserveScroll: true,
                 onSuccess: () => {
                     // Reload the page to get updated lab state
@@ -116,7 +116,7 @@ export default function Workspace() {
 
     const handleStopLab = () => {
         if (confirm('Are you sure you want to stop this lab? This will disconnect all active sessions.')) {
-            router.post(`/labs/${lab.id}/stop`, {}, {
+            router.post(`/api/labs/${lab.id}/stop`, {}, {
                 preserveScroll: true,
                 onSuccess: () => {
                     // Reload the page to get updated lab state
