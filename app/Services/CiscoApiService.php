@@ -49,6 +49,12 @@ class CiscoApiService {
         }
     }
 
+    public function setCreateUser( $data)
+    {
+        $response = Http::withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->post("{$this->baseUrl}/v0/users", $data);
+        return $response->successful() ? $response->json() : ['error' => 'Unable to create user', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
 
     public function getLabsAnnotation($token, $lab_id){
         $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/annotations");
@@ -62,13 +68,13 @@ class CiscoApiService {
 
     public function getUsers($token)
     {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/users");
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/users?show_all=true");
         return $response->successful() ? $response->json() : ['error' => 'Unable to fetch users', 'status' => $response->status()];
     }
 
     public function getLabs($token)
     {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs");
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs?show_all=true");
         return $response->successful() ? $response->json() : ['error' => 'Unable to fetch labs', 'status' => $response->status(), 'body' => $response->body()];
     }
 
@@ -1077,4 +1083,7 @@ class CiscoApiService {
         $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/diagnostic_event_data");
         return $response->successful() ? $response->json() : ['error' => 'Unable to get diagnostic event data', 'status' => $response->status(), 'body' => $response->body()];
     }
+
+
+
 }

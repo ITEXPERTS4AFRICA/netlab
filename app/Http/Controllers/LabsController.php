@@ -34,6 +34,7 @@ class LabsController extends Controller
         }
 
         try {
+
             $labs_ids = Cache::has('labs_ids') ? Cache::get('labs_ids') : $cisco->getLabs($token);
 
 
@@ -84,6 +85,8 @@ class LabsController extends Controller
                         'effective_permissions' => $lab['effective_permissions']
                     ]);
                 }
+
+
             }
             return Inertia::render('labs/Labs', [
 
@@ -216,6 +219,8 @@ class LabsController extends Controller
 
         // Get current lab state from CML
         $labState = $cisco->getLabState(session('cml_token'), $lab->cml_id);
+
+
         if (!isset($labState['error'])) {
             $lab->state = $labState['state'] ?? $lab->state;
             $lab->save();
