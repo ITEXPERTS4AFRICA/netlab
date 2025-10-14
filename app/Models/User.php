@@ -23,6 +23,13 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'preferences',
+        'notification_enabled',
+        'notification_type',
+        'timezone',
+        'language',
+        'auto_start_labs',
+        'notification_advance_minutes',
     ];
 
     /**
@@ -45,6 +52,10 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'preferences' => 'array',
+            'notification_enabled' => 'boolean',
+            'auto_start_labs' => 'boolean',
+            'notification_advance_minutes' => 'integer',
         ];
     }
 }

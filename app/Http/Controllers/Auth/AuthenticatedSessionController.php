@@ -7,6 +7,7 @@ use App\Http\Requests\Auth\LoginRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Services\CiscoApiService;
@@ -85,22 +86,29 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
-
+        $ciscoService = app(\App\Services\CiscoApiService::class);
 
         // Try to revoke CML token via service if available
         try {
-            app(\App\Services\CiscoApiService::class)->logout(session('cml_token'));
-            app(\App\Services\CiscoApiService::class)->revokeToken();
+            if (session('cml_token')) {
+                $ciscoService->logout(session('cml_token'));
+            }
+            $ciscoService->revokeToken();
         } catch (\Exception $e) {
-            // ignore revoke errors
+            // Log the error but don't interrupt logout process
+            Log::warning('Failed to revoke CML token during logout: ' . $e->getMessage());
         }
 
+        // Logout Laravel user
         Auth::guard('web')->logout();
 
+        // Clean session data
         $request->session()->invalidate();
         $request->session()->forget('cml_token');
         $request->session()->regenerateToken();
-        $request->sessin()->destroy();
+
+        // Ensure complete session destruction
+        $request->session()->flush();
 
         return redirect('/');
     }

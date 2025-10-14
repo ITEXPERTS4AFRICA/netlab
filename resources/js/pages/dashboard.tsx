@@ -24,6 +24,7 @@ import {
     Timer,
     ExternalLink
 } from 'lucide-react';
+
 import { motion, Variants } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { router } from '@inertiajs/react';

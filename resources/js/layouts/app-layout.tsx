@@ -1,4 +1,5 @@
 import AppLayoutTemplate from '@/layouts/app/app-sidebar-layout';
+import NotificationCenter from '@/components/notification-center';
 import { type BreadcrumbItem } from '@/types';
 import { type ReactNode } from 'react';
 import { Toaster } from 'sonner';
@@ -15,4 +16,3 @@ export default ({ children, breadcrumbs, ...props }: AppLayoutProps) => (
         <Toaster  position='bottom-left'/>
     </AppLayoutTemplate>
 );
-

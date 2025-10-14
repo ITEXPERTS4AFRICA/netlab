@@ -11,6 +11,21 @@ Route::get('/', function () {
 
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
+
+    // Notifications API
+    Route::prefix('notifications')->group(function () {
+        Route::get('/', [\App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
+        Route::get('/unread-count', [\App\Http\Controllers\NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
+        Route::get('/recent', [\App\Http\Controllers\NotificationController::class, 'recent'])->name('notifications.recent');
+        Route::get('/stats', [\App\Http\Controllers\NotificationController::class, 'stats'])->name('notifications.stats');
+        Route::patch('/{notification}/read', [\App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('notifications.mark-read');
+        Route::patch('/mark-all-read', [\App\Http\Controllers\NotificationController::class, 'markAllAsRead'])->name('notifications.mark-all-read');
+        Route::delete('/{notification}', [\App\Http\Controllers\NotificationController::class, 'destroy'])->name('notifications.destroy');
+        Route::delete('/destroy-all', [\App\Http\Controllers\NotificationController::class, 'destroyAll'])->name('notifications.destroy-all');
+        Route::delete('/destroy-read', [\App\Http\Controllers\NotificationController::class, 'destroyRead'])->name('notifications.destroy-read');
+        Route::post('/test', [\App\Http\Controllers\NotificationController::class, 'createTest'])->name('notifications.test');
+    });
+
     Route::get('labs',[\App\Http\Controllers\LabsController::class,'index' ])->name('labs');
     Route::get('labs/my-reserved',[\App\Http\Controllers\LabsController::class,'myReservedLabs' ])->name('labs.my-reserved');
     Route::resource('reservations', \App\Http\Controllers\ReservationController::class)->except(['edit', 'update']);

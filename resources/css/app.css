@@ -197,6 +197,50 @@
 body {
   letter-spacing: var(--tracking-normal);
 }
+
+/* Network-themed animations for splash screen */
+@keyframes dataFlow {
+  0% {
+    opacity: 0.1;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0.1;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes networkPulse {
+  0% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0.3;
+  }
+}
+
+.network-node {
+  animation: dataFlow 2s ease-in-out infinite;
+}
+
+.network-connection {
+  animation: networkPulse 3s ease-in-out infinite;
+}
+
+/* Subtle grid overlay for network feel */
+.network-grid {
+  background-image:
+    linear-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
 @layer base {
     * {
         @apply border-border;

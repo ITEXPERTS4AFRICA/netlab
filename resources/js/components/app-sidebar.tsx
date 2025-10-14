@@ -43,11 +43,12 @@ const mainNavItems: NavItem[] = [
         title:'Labs',
         href: '/labs',
         icon: SendToBackIcon,
-    }
+    },
+
 ];
 
 const footerNavItems: NavItem[] = [
-
+    
 ];
 
 export function AppSidebar() {
@@ -91,7 +92,7 @@ export function AppSidebar() {
                 {/* Active Labs Section */}
                 {activeLabs.length > 0 && (
                     <SidebarGroup>
-                        <SidebarGroupLabel className="flex items-center gap-2">
+                        <SidebarGroupLabel >
                             <Zap className="h-4 w-4 text-green-600" />
                             Active Labs
                             <Badge variant="secondary" className="ml-auto text-xs">
@@ -118,7 +119,7 @@ export function AppSidebar() {
                                                     <div className="text-xs text-muted-foreground">
                                                         {reservation.time_remaining && (
                                                             <span>
-                                                                {Math.floor(reservation.time_remaining / 60)}h {reservation.time_remaining % 60}m left
+                                                                {Math.floor(reservation.time_remaining / 60)}h {reservation.time_remaining % 120}m left
                                                             </span>
                                                         )}
                                                     </div>
