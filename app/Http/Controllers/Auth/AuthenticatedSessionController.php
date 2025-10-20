@@ -84,7 +84,7 @@ class AuthenticatedSessionController extends Controller
     /**
      * Destroy an authenticated session.
      */
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(User $user, Request $request): RedirectResponse
     {
         $ciscoService = app(\App\Services\CiscoApiService::class);
 
@@ -98,6 +98,9 @@ class AuthenticatedSessionController extends Controller
             // Log the error but don't interrupt logout process
             Log::warning('Failed to revoke CML token during logout: ' . $e->getMessage());
         }
+
+
+        Auth::logout($user);
 
         // Logout Laravel user
         Auth::guard('web')->logout();
