@@ -1,3 +1,34 @@
+/**
+ * Centre de notifications interactif pour l'application NetLab
+ *
+ * Ce composant React fournit une interface complète de gestion des notifications
+ * avec filtrage, actions contextuelles et mise à jour en temps réel.
+ *
+ * Fonctionnalités principales :
+ * - Affichage des notifications avec système de priorité
+ * - Filtres avancés (non lus, haute priorité, par catégorie)
+ * - Actions contextuelles (marquer comme lu, supprimer)
+ * - Mise à jour automatique du compteur de notifications
+ * - Interface responsive avec animations fluides
+ * - Gestion du clavier (touche Échap pour fermer)
+ * - Intégration avec l'API backend Laravel
+ *
+ * Types de notifications supportés :
+ * - reservation_reminder : Rappels de réservation
+ * - lab_available : Laboratoire disponible
+ * - reservation_confirmed : Confirmation de réservation
+ * - system_alert : Alertes système
+ *
+ * Niveaux de priorité :
+ * - high : Priorité élevée (rouge)
+ * - medium : Priorité moyenne (jaune)
+ * - low : Priorité faible (gris)
+ *
+ * @author NetLab Team
+ * @version 1.2.0
+ * @since 2025-01-01
+ */
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Bell, X, Check, Clock, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';

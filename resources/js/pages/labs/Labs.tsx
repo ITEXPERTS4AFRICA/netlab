@@ -1,3 +1,29 @@
+/**
+ * Page principale d'affichage des laboratoires réseau
+ *
+ * Cette page React/TypeScript affiche la liste de tous les laboratoires CML disponibles
+ * avec des fonctionnalités avancées de recherche, filtrage et visualisation.
+ *
+ * Fonctionnalités principales :
+ * - Affichage paginé des laboratoires avec animations fluides
+ * - Recherche en temps réel par titre et description
+ * - Filtres rapides par état (running, stopped)
+ * - Visualisation des topologies via modal interactif
+ * - Interface de réservation intégrée
+ * - Gestion d'erreurs et états de chargement
+ * - Informations de débogage pour le développement
+ *
+ * Interface utilisateur :
+ * - Design moderne avec animations Framer Motion
+ * - Cartes responsives avec informations détaillées
+ * - Badges colorés selon l'état des labs
+ * - Squelettes de chargement élégants
+ * - Modales d'aperçu des topologies avec annotations
+ *
+ * @author NetLab Team
+ * @version 2.0.0
+ */
+
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
@@ -27,6 +53,9 @@ import {
 import { motion, Variants } from 'framer-motion';
 import { useState, useMemo, useEffect } from 'react';
 
+/**
+ * Configuration des breadcrumbs pour la navigation
+ */
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Labs',
@@ -34,26 +63,49 @@ const breadcrumbs: BreadcrumbItem[] = [
     }
 ];
 
+/**
+ * Interface définissant la structure d'un laboratoire
+ */
 type Lab = {
+    /** Identifiant unique du laboratoire */
     id: string;
+    /** État actuel du lab (DEFINED_ON_CORE, STOPPED, etc.) */
     state: string;
+    /** Titre/nom du laboratoire */
     lab_title: string;
+    /** Nombre de nœuds/équipements réseau */
     node_count: string|number;
+    /** Description détaillée du laboratoire */
     lab_description: string;
+    /** Date de création du lab (format ISO) */
     created: string;
+    /** Date de dernière modification (format ISO) */
     modified: string;
 };
 
+/**
+ * Interface définissant la structure de la pagination
+ */
 type Pagination = {
+    /** Page actuelle */
     page: number;
+    /** Nombre d'éléments par page */
     per_page: number;
+    /** Nombre total d'éléments */
     total: number;
+    /** Nombre total de pages */
     total_pages: number;
 };
 
+/**
+ * Interface définissant les propriétés reçues de Laravel/Inertia
+ */
 type Props = {
+    /** Liste des laboratoires à afficher */
     labs: Lab[];
+    /** Informations de pagination */
     pagination: Pagination;
+    /** Message d'erreur optionnel */
     error?: string;
 };
 

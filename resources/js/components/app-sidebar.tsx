@@ -1,3 +1,33 @@
+/**
+ * Barre latérale principale de l'application NetLab
+ *
+ * Ce composant React gère la navigation principale de l'application avec
+ * un système de sidebar collapsible et des sections dynamiques pour les
+ * laboratoires actifs.
+ *
+ * Fonctionnalités principales :
+ * - Navigation principale avec éléments statiques et dynamiques
+ * - Section dédiée aux laboratoires actifs avec accès rapide
+ * - Intégration avec le système de réservations utilisateur
+ * - Interface pliable (icon mode) pour économiser l'espace
+ * - Navigation contextuelle vers les espaces de travail
+ * - Indicateurs visuels pour les réservations actives
+ *
+ * Structure de navigation :
+ * - Header : Logo de l'application (toujours visible)
+ * - Content : Navigation principale + Section labs actifs
+ * - Footer : Navigation utilisateur et éléments de pied de page
+ *
+ * Navigation dynamique :
+ * - Ajout automatique d'un lien "My Reserved Labs" si l'utilisateur a des réservations
+ * - Affichage des 3 premiers labs actifs avec temps restant
+ * - Lien vers la page complète des labs si plus de 3 réservations
+ *
+ * @author NetLab Team
+ * @version 1.1.0
+ * @since 2025-01-01
+ */
+
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
