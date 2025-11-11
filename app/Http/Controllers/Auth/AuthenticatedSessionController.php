@@ -7,10 +7,13 @@ use App\Http\Requests\Auth\LoginRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use App\Services\CiscoApiService;
 use App\Models\User;
+use Illuminate\Support\Str;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -29,51 +32,25 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request, CiscoApiService $cisco ): RedirectResponse
     {
-        $request->session()->regenerate();
+        $request->ensureIsNotRateLimited();
 
-        $request->validate([
-            'username' => 'required|string',
-            'password' => 'required'
-        ]);
+        $remember = $request->boolean('remember');
 
-        $username = $request->username;
-        $password = $request->password;
+        if ($this->attemptLocalLogin($request, $remember)) {
+            $request->session()->regenerate();
+            RateLimiter::clear($request->throttleKey());
 
-        // Try a limited number of attempts to authenticate against CML
-        $attempts = 0;
-        $maxAttempts = 3;
-        $result = null;
-        while ($attempts < $maxAttempts) {
-            $attempts++;
-            $result = $cisco->auth_extended($username, $password);
-            if (is_array($result) && !isset($result['error'])) {
-                break;
+            if (! app()->environment('testing')) {
+                $this->attemptCmlAuthentication($request, $cisco, $remember, strict: false);
             }
-            sleep(1);
+
+            return redirect()->intended(route('dashboard', absolute: false));
         }
 
-        if (!is_array($result) || isset($result['error'])) {
-            $errorMessage = is_array($result) && isset($result['error']) ? $result['error'] : 'Authentification incorrecte';
-            $request->session()->put('status', $errorMessage);
-            return back()->withErrors(['message' => $errorMessage]);
-        }
+        $this->attemptCmlAuthentication($request, $cisco, $remember, strict: true);
 
-        $token = $result['token'];
-
-        // persist token in session via the service and set it for future calls
-        $cisco->setToken($token);
-
-        // Ensure a local Laravel user exists to satisfy Laravel's auth middleware
-        $user = User::where('name', $username)->first();
-        if (! $user) {
-            $user = User::create([
-                'name' => $username,
-                'email' => $username . '@local.netlab',
-                'password' => bcrypt(\Illuminate\Support\Str::random(40)),
-            ]);
-        }
-
-        Auth::login($user);
+        $request->session()->regenerate();
+        RateLimiter::clear($request->throttleKey());
 
         return redirect()->intended(route('dashboard', absolute: false));
     }
@@ -99,5 +76,107 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerateToken();
 
         return redirect('/');
+    }
+
+    /**
+     * Attempt to authenticate against the local database.
+     */
+    protected function attemptLocalLogin(LoginRequest $request, bool $remember): bool
+    {
+        $password = $request->input('password');
+
+        $credentials = [];
+
+        if ($request->filled('email')) {
+            $credentials[] = ['email' => $request->input('email'), 'password' => $password];
+        }
+
+        if ($request->filled('username')) {
+            $credentials[] = ['name' => $request->input('username'), 'password' => $password];
+        }
+
+        foreach ($credentials as $data) {
+            if (Auth::attempt($data, $remember)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Attempt to authenticate against Cisco CML and persist the session token.
+     *
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    protected function attemptCmlAuthentication(LoginRequest $request, CiscoApiService $cisco, bool $remember, bool $strict): bool
+    {
+        $username = $request->input('username') ?? $request->input('email');
+        $password = $request->input('password');
+
+        if (! $username || ! $password) {
+            if ($strict) {
+                throw ValidationException::withMessages([
+                    'email' => __('auth.failed'),
+                ]);
+            }
+
+            return false;
+        }
+
+        $attempts = 0;
+        $maxAttempts = 3;
+        $result = null;
+
+        while ($attempts < $maxAttempts) {
+            $attempts++;
+            $result = $cisco->auth_extended($username, $password);
+
+            if (is_array($result) && ! isset($result['error'])) {
+                break;
+            }
+
+            usleep(250000);
+        }
+
+        if (! is_array($result) || isset($result['error'])) {
+            if ($strict) {
+                $message = __('auth.failed');
+
+                if (is_array($result) && isset($result['error'])) {
+                    logger()->warning('CML auth failed', ['error' => $result['error']]);
+                }
+
+                RateLimiter::hit($request->throttleKey());
+
+                throw ValidationException::withMessages([
+                    'email' => $message,
+                ]);
+            }
+
+            return false;
+        }
+
+        if (isset($result['token'])) {
+            $cisco->setToken($result['token']);
+        }
+
+        if (! Auth::check()) {
+            $email = $request->input('email') ?: $username.'@local.netlab';
+
+            $user = User::where('email', $email)->first();
+
+            if (! $user) {
+                $user = User::create([
+                    'name' => $username,
+                    'email' => $email,
+                    'password' => bcrypt(Str::random(40)),
+                ]);
+            }
+
+            Auth::login($user, $remember);
+        }
+
+        return true;
     }
 }

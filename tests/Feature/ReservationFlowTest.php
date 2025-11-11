@@ -44,11 +44,23 @@ class ReservationFlowTest extends TestCase
         $user = User::factory()->create();
         $lab = Lab::create(['cml_id' => 'lab-uuid-2', 'name' => 'Lab Two']);
 
-        // bind a simple fake CiscoApiService that returns success
+        // bind a fake CiscoApiService that returns success
         $this->app->singleton(CiscoApiService::class, function () {
-            return new class {
-                public function startLab($token, $id) { return ['ok' => true]; }
-                public function stopLab($token, $id) { return ['ok' => true]; }
+            return new class extends CiscoApiService {
+                public function __construct()
+                {
+                    // Pas d'initialisation parent requise pour le test.
+                }
+
+                public function startLab($tokenOrId, $idOrNull = null): array
+                {
+                    return ['ok' => true, 'id' => $idOrNull ?? $tokenOrId];
+                }
+
+                public function stopLab($tokenOrId, $idOrNull = null): array
+                {
+                    return ['ok' => true, 'id' => $idOrNull ?? $tokenOrId];
+                }
             };
         });
 

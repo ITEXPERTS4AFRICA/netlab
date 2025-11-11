@@ -25,17 +25,19 @@ class ReservationController extends Controller
         return response()->json($reservations);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, Lab $lab)
     {
         $request->validate([
-            'lab_id' => 'required|exists:labs,cml_id',
+            'lab_id' => 'sometimes|exists:labs,cml_id',
             'start_at' => 'required|date|after:now',
             'end_at' => 'required|date|after:start_at',
             'rate_id' => 'nullable|exists:rates,id',
         ]);
 
         $user = Auth::user();
-        $lab = \App\Models\Lab::where('cml_id', $request->lab_id)->firstOrFail();
+        $lab = $request->filled('lab_id')
+            ? Lab::where('cml_id', $request->lab_id)->firstOrFail()
+            : $lab;
 
         // check overlap
         $start = new \DateTime($request->start_at);

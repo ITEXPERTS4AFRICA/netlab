@@ -194,9 +194,11 @@ class LabsController extends Controller
 
     public function workspace(Lab $lab, CiscoApiService $cisco)
     {
+        $token = session('cml_token');
+
         // Ensure the lab exists in our database, create if not
         if (!$lab->exists) {
-            $response = $cisco->getlab(session('cml_token'), $lab->cml_id);
+            $response = $cisco->getlab($token, $lab->cml_id);
             if (isset($response['error'])) {
                 abort(404, 'Lab not found');
             }
@@ -215,7 +217,7 @@ class LabsController extends Controller
         }
 
         // Get current lab state from CML
-        $labState = $cisco->getLabState(session('cml_token'), $lab->cml_id);
+        $labState = $cisco->getLabState($token, $lab->cml_id);
         if (!isset($labState['error'])) {
             $lab->state = $labState['state'] ?? $lab->state;
             $lab->save();
@@ -236,12 +238,26 @@ class LabsController extends Controller
         }
 
         // Get annotations for the lab
-        $annotations = $cisco->getLabsAnnotation(session('cml_token'), $lab->cml_id);
+        $annotations = $cisco->getLabsAnnotation($token, $lab->cml_id);
+
+        // Fetch lab nodes for console management
+        $nodes = $cisco->getLabNodes($token, $lab->cml_id);
+        if (isset($nodes['error'])) {
+            $nodes = [];
+        }
+
+        // Fetch active console sessions (best effort)
+        $consoleSessions = $cisco->console->getConsoleSessions();
+        if (isset($consoleSessions['error'])) {
+            $consoleSessions = [];
+        }
 
         return Inertia::render('labs/Workspace', [
             'lab' => $lab,
             'reservation' => $reservation,
             'annotations' => $annotations,
+            'nodes' => $nodes,
+            'consoleSessions' => $consoleSessions,
         ]);
     }
 

@@ -21,7 +21,8 @@ import {
     ExternalLink,
     Timer
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import LabConsolePanel, { type ConsoleSession, type ConsoleSessionsResponse } from '@/components/lab-console-panel';
+import { useEffect, useMemo, useState } from 'react';
 import { router } from '@inertiajs/react';
 import { toast } from 'sonner';
 
@@ -61,15 +62,35 @@ type Reservation = {
     status: string;
 };
 
+type LabNode = {
+    id: string;
+    label?: string;
+    name?: string;
+    state?: string;
+    node_definition?: string;
+};
+
 type Props = {
     lab: Lab;
     reservation: Reservation | null;
+    nodes: LabNode[] | Record<string, LabNode>;
+    consoleSessions: ConsoleSession[] | ConsoleSessionsResponse | null;
 };
 
 export default function Workspace() {
-    const { lab, reservation } = usePage<Props>().props;
+    const { lab, reservation, nodes, consoleSessions } = usePage<Props>().props;
     const [editMode, setEditMode] = useState(false);
     const [timeLeft, setTimeLeft] = useState<number>(0);
+
+    const nodeList = useMemo<LabNode[]>(() => {
+        if (Array.isArray(nodes)) {
+            return nodes;
+        }
+        if (nodes && typeof nodes === 'object') {
+            return Object.values(nodes);
+        }
+        return [];
+    }, [nodes]);
 
     useEffect(() => {
         if (!reservation) return;
@@ -301,60 +322,70 @@ export default function Workspace() {
                 </Card>
 
                 {/* Workspace Area */}
-                <div className="flex-1 relative bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-                    {/* Annotations Canvas */}
-                    <div className="absolute inset-0">
-                        <AnnotationLab
-                            labId={lab.id}
-                            editMode={editMode}
-                            onEditModeChange={setEditMode}
-                            className="w-full h-full"
-                        />
-                    </div>
-
-                    {/* Edit Mode Overlay */}
-                    {editMode && (
-                        <div className="absolute top-4 right-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 border border-gray-200 dark:border-gray-700 z-10">
-                            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                <Edit className="h-4 w-4 text-blue-600" />
-                                <span>Edit Mode Active</span>
-                            </div>
-                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                Drag annotations to reposition • Changes are auto-saved
-                            </p>
+                <div className="flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
+                    <div className="relative flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                        {/* Annotations Canvas */}
+                        <div className="absolute inset-0">
+                            <AnnotationLab
+                                labId={lab.id}
+                                editMode={editMode}
+                                onEditModeChange={setEditMode}
+                                className="h-full w-full"
+                            />
                         </div>
-                    )}
 
-                    {/* Lab State Overlay */}
-                    {!editMode && lab.state !== 'RUNNING' && (
-                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-10">
-                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md mx-4 text-center">
-                                <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto mb-4">
-                                    {lab.state === 'STOPPED' ? (
-                                        <AlertTriangle className="h-8 w-8 text-gray-600 dark:text-gray-400" />
-                                    ) : lab.state === 'STARTING' || lab.state === 'STOPPING' ? (
-                                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                                    ) : (
-                                        <Info className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                        {/* Edit Mode Overlay */}
+                        {editMode && (
+                            <div className="absolute right-4 top-4 z-10 rounded-lg border border-gray-200 bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                                <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                    <Edit className="h-4 w-4 text-blue-600" />
+                                    <span>Edit Mode Active</span>
+                                </div>
+                                <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                                    Drag annotations to reposition • Changes are auto-saved
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Lab State Overlay */}
+                        {!editMode && lab.state !== 'RUNNING' && (
+                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black bg-opacity-50">
+                                <div className="mx-4 max-w-md rounded-lg bg-white p-6 text-center shadow-xl dark:bg-gray-800">
+                                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
+                                        {lab.state === 'STOPPED' ? (
+                                            <AlertTriangle className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                                        ) : lab.state === 'STARTING' || lab.state === 'STOPPING' ? (
+                                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+                                        ) : (
+                                            <Info className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                                        )}
+                                    </div>
+                                    <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+                                        Lab {lab.state.toLowerCase()}
+                                    </h3>
+                                    <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                                        {lab.state === 'STOPPED' && 'The lab is currently stopped. Start it to view and interact with annotations.'}
+                                        {lab.state === 'STARTING' && 'The lab is starting up. This may take a few minutes...'}
+                                        {lab.state === 'STOPPING' && 'The lab is stopping. Please wait...'}
+                                    </p>
+                                    {lab.state === 'STOPPED' && (
+                                        <Button onClick={handleStartLab} className="bg-green-600 hover:bg-green-700">
+                                            <Play className="mr-2 h-4 w-4" />
+                                            Start Lab
+                                        </Button>
                                     )}
                                 </div>
-                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                                    Lab {lab.state.toLowerCase()}
-                                </h3>
-                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                                    {lab.state === 'STOPPED' && 'The lab is currently stopped. Start it to view and interact with annotations.'}
-                                    {lab.state === 'STARTING' && 'The lab is starting up. This may take a few minutes...'}
-                                    {lab.state === 'STOPPING' && 'The lab is stopping. Please wait...'}
-                                </p>
-                                {lab.state === 'STOPPED' && (
-                                    <Button onClick={handleStartLab} className="bg-green-600 hover:bg-green-700">
-                                        <Play className="h-4 w-4 mr-2" />
-                                        Start Lab
-                                    </Button>
-                                )}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
+
+                    <div className="min-h-[28rem] w-full flex-shrink-0 overflow-hidden lg:w-[420px]">
+                        <LabConsolePanel
+                            cmlLabId={lab.cml_id}
+                            nodes={nodeList}
+                            initialSessions={consoleSessions}
+                        />
+                    </div>
                 </div>
             </div>
         </AppLayout>

@@ -11,29 +11,21 @@ use Illuminate\Support\Facades\Auth;
 
 class LabRuntimeController extends Controller
 {
-    public function start(Request $request, CiscoApiService $cisco)
+    public function start(Request $request, Lab $lab, CiscoApiService $cisco)
     {
         $token = session('cml_token');
 
-        $lab_id = $cisco->getLabs($token);
-
-        // call start
-        $labs = $cisco->getLab($token, $lab_id);
-
-        // Try to start
-        $startResp = $cisco->startLab($token, $labs->cml_id);
-
+        $startResp = $cisco->startLab($token, $lab->cml_id);
 
         if (is_array($startResp) && isset($startResp['error'])) {
             return response()->json(['error' => 'Failed to start lab', 'detail' => $startResp], 500);
         }
 
-        // create usage record
         $user = Auth::user();
         $usage = UsageRecord::create([
             'reservation_id' => null,
             'user_id' => $user->id,
-            'lab_id' => $labs->id,
+            'lab_id' => $lab->id,
             'started_at' => now(),
         ]);
 
@@ -55,7 +47,8 @@ class LabRuntimeController extends Controller
         }
 
         $usage->ended_at = now();
-        $usage->duration_seconds = $usage->ended_at->diffInSeconds($usage->started_at);
+        $duration = $usage->ended_at->diffInSeconds($usage->started_at);
+        $usage->duration_seconds = max(1, $duration);
 
         // cost calculation left to billing step
         $usage->save();
