@@ -9,7 +9,7 @@ return new class extends Migration {
     {
         Schema::create('reservations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignUlid('user_id')->constrained()->cascadeOnDelete();
             $table->foreignId('lab_id')->constrained('labs')->cascadeOnDelete();
             $table->foreignId('rate_id')->nullable()->constrained('rates')->nullOnDelete();
             $table->dateTimeTz('start_at');

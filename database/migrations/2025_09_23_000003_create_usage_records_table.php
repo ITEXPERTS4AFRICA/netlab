@@ -10,7 +10,7 @@ return new class extends Migration {
         Schema::create('usage_records', function (Blueprint $table) {
             $table->id();
             $table->foreignId('reservation_id')->nullable()->constrained('reservations')->nullOnDelete();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignUlid('user_id')->constrained()->cascadeOnDelete();
             $table->foreignId('lab_id')->constrained('labs')->cascadeOnDelete();
             $table->dateTimeTz('started_at');
             $table->dateTimeTz('ended_at')->nullable();

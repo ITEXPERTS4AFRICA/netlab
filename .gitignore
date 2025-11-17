@@ -25,3 +25,14 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Fichiers temporaires
+ComposerConfig::disableProcessTimeout
+dev
+npx
+vite
+hot
+*.backup
+
+# Historique de l'éditeur
+.history/
