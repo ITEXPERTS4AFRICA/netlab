@@ -68,9 +68,11 @@ class LabsController extends Controller
                 return [
                     'id' => $lab->cml_id, // Utiliser cml_id pour compatibilité avec l'ancien système
                     'db_id' => $lab->id, // ID de la base de données
+                    'title' => $lab->lab_title ?? 'Sans titre', // Alias pour compatibilité
                     'state' => $lab->state ?? 'STOPPED',
                     'lab_title' => $lab->lab_title ?? 'Sans titre',
                     'lab_description' => $description ?? $lab->short_description ?? '',
+                    'description' => $description ?? $lab->short_description ?? '', // Alias pour compatibilité
                     'short_description' => $lab->short_description,
                     'node_count' => $lab->node_count ?? 0,
                     'link_count' => $lab->link_count ?? 0,
@@ -82,11 +84,14 @@ class LabsController extends Controller
                     'difficulty_level' => $lab->difficulty_level,
                     'estimated_duration_minutes' => $lab->estimated_duration_minutes,
                     'is_featured' => $lab->is_featured,
-                    'rating' => $lab->rating,
+                    'rating' => $lab->rating ? (float) $lab->rating : null,
                     'rating_count' => $lab->rating_count,
                     'view_count' => $lab->view_count,
                     'reservation_count' => $lab->reservation_count,
                     'active_reservations_count' => $lab->reservations_count ?? 0,
+                    'tags' => $lab->tags ?? [],
+                    'categories' => $lab->categories ?? [],
+                    'metadata' => $lab->metadata ?? [],
                 ];
             });
 

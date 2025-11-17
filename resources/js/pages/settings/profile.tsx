@@ -10,6 +10,7 @@ import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import AppLayout from '@/layouts/app-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 import { edit } from '@/routes/profile';
@@ -148,6 +149,57 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                                     />
 
                                     <InputError className="mt-2" message={errors.bio} />
+                                </div>
+
+                                <Separator />
+
+                                <div className="space-y-4">
+                                    <HeadingSmall title="Métadonnées professionnelles" description="Informations supplémentaires pour votre profil" />
+                                    
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="skills">Compétences (séparées par des virgules)</Label>
+                                        <Input
+                                            id="skills"
+                                            type="text"
+                                            className="mt-1 block w-full"
+                                            defaultValue={Array.isArray(auth.user.skills) ? auth.user.skills.join(', ') : auth.user.skills || ''}
+                                            name="skills"
+                                            placeholder="Ex: Réseaux, Sécurité, Cloud..."
+                                        />
+                                        <InputError className="mt-2" message={errors.skills} />
+                                        <p className="text-xs text-muted-foreground">
+                                            Séparez les compétences par des virgules
+                                        </p>
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="certifications">Certifications (séparées par des virgules)</Label>
+                                        <Input
+                                            id="certifications"
+                                            type="text"
+                                            className="mt-1 block w-full"
+                                            defaultValue={Array.isArray(auth.user.certifications) ? auth.user.certifications.join(', ') : auth.user.certifications || ''}
+                                            name="certifications"
+                                            placeholder="Ex: CCNA, CCNP, AWS..."
+                                        />
+                                        <InputError className="mt-2" message={errors.certifications} />
+                                        <p className="text-xs text-muted-foreground">
+                                            Séparez les certifications par des virgules
+                                        </p>
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="education">Formation</Label>
+                                        <textarea
+                                            id="education"
+                                            name="education"
+                                            className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                            defaultValue={typeof auth.user.education === 'string' ? auth.user.education : (Array.isArray(auth.user.education) ? JSON.stringify(auth.user.education) : '')}
+                                            placeholder="Votre parcours académique..."
+                                            rows={3}
+                                        />
+                                        <InputError className="mt-2" message={errors.education} />
+                                    </div>
                                 </div>
 
                                 {mustVerifyEmail && auth.user.email_verified_at === null && (

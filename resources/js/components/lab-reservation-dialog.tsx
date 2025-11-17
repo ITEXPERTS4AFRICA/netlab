@@ -21,11 +21,20 @@ import { Label } from '@/components/ui/label';
 interface Lab {
   id: string;
   title?: string;
+  lab_title?: string;
   description?: string;
+  short_description?: string;
   state: string;
   price_cents?: number;
   currency?: string;
   db_id?: number;
+  estimated_duration_minutes?: number;
+  difficulty_level?: string;
+  rating?: number;
+  rating_count?: number;
+  tags?: string[];
+  categories?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 interface LabReservationDialogProps {
@@ -38,10 +47,9 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [isInstant, setIsInstant] = useState(false);
-  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const { data, setData, post, processing, errors, reset } = useForm({
+  const { data, setData, processing, errors, reset } = useForm({
     lab_id: lab.id,
     start_at: '',
     end_at: '',
@@ -288,11 +296,10 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       // Si un paiement est requis, rediriger vers CinetPay IMMÉDIATEMENT
       if (result.requires_payment === true && result.payment_url) {
         console.log('✅ Redirection vers CinetPay:', result.payment_url);
-        setPaymentUrl(result.payment_url);
         // Fermer le dialog avant la redirection
         setOpen(false);
         // Redirection immédiate vers CinetPay
-        window.location.href = result.payment_url;
+        globalThis.location.href = result.payment_url;
         return;
       }
 
@@ -307,7 +314,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       if (result.payment_url && !result.requires_payment) {
         console.log('⚠️ payment_url trouvé sans requires_payment, redirection quand même:', result.payment_url);
         setOpen(false);
-        window.location.href = result.payment_url;
+        globalThis.location.href = result.payment_url;
         return;
       }
 
@@ -369,7 +376,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
             <div className="flex items-center justify-between">
               <h3 className="font-medium flex items-center gap-2">
                 <User className="h-4 w-4 text-muted-foreground" />
-                {lab.title || `Lab ${lab.id}`}
+                {lab.title || lab.lab_title || `Lab ${lab.id}`}
               </h3>
               <Badge
                 variant={lab.state === 'STOPPED' ? 'destructive' : lab.state === 'RUNNING' ? 'default' : 'secondary'}
@@ -387,11 +394,80 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {lab.description && (
+            {/* Description */}
+            {(lab.description || lab.short_description) && (
               <p className="text-sm text-muted-foreground leading-relaxed">
-                {lab.description}
+                {lab.short_description || lab.description}
               </p>
             )}
+
+            {/* Métadonnées du lab */}
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              {/* Prix */}
+              {lab.price_cents && lab.price_cents > 0 && (
+                <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                  <DollarSign className="h-4 w-4 text-primary" />
+                  <div className="text-xs">
+                    <p className="font-medium">Prix/heure</p>
+                    <p className="text-muted-foreground">
+                      {(lab.price_cents / 100).toLocaleString('fr-FR')} {lab.currency || 'XOF'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Durée estimée */}
+              {lab.estimated_duration_minutes && (
+                <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                  <Clock className="h-4 w-4 text-primary" />
+                  <div className="text-xs">
+                    <p className="font-medium">Durée</p>
+                    <p className="text-muted-foreground">
+                      {lab.estimated_duration_minutes} min
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Difficulté */}
+              {lab.difficulty_level && (
+                <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                  <AlertTriangle className="h-4 w-4 text-primary" />
+                  <div className="text-xs">
+                    <p className="font-medium">Difficulté</p>
+                    <p className="text-muted-foreground capitalize">
+                      {lab.difficulty_level}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Note */}
+              {lab.rating && lab.rating > 0 && (
+                <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                  <CheckCircle className="h-4 w-4 text-primary" />
+                  <div className="text-xs">
+                    <p className="font-medium">Note</p>
+                    <p className="text-muted-foreground">
+                      {lab.rating.toFixed(1)} ⭐ ({lab.rating_count || 0})
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Tags */}
+            {lab.tags && Array.isArray(lab.tags) && lab.tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {lab.tags.map((tag: string, index: number) => (
+                  <Badge key={index} variant="outline" className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {/* État du lab */}
             {lab.state !== 'RUNNING' && (
               <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                 <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />

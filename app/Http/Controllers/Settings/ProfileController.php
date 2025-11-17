@@ -29,7 +29,26 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $validated = $request->validated();
+        
+        // Convertir les compétences et certifications en array si ce sont des strings
+        if (isset($validated['skills']) && is_string($validated['skills'])) {
+            $validated['skills'] = array_filter(array_map('trim', explode(',', $validated['skills'])));
+        }
+        
+        if (isset($validated['certifications']) && is_string($validated['certifications'])) {
+            $validated['certifications'] = array_filter(array_map('trim', explode(',', $validated['certifications'])));
+        }
+        
+        // Si education est une string JSON, la décoder
+        if (isset($validated['education']) && is_string($validated['education'])) {
+            $decoded = json_decode($validated['education'], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $validated['education'] = $decoded;
+            }
+        }
+        
+        $request->user()->fill($validated);
 
         if ($request->user()->isDirty('email')) {
             $request->user()->email_verified_at = null;

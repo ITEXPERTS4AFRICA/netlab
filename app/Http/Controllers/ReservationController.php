@@ -225,13 +225,31 @@ class ReservationController extends Controller
     {
         // Préparer les données pour CinetPay selon le SDK officiel
         // Le SDK officiel n'utilise PAS les champs customer lors de l'initiation
+        // Utiliser le prix réel calculé depuis les métadonnées du lab
         $paymentData = [
             'transaction_id' => 'RES_' . $reservation->id . '_' . Str::random(8),
-            'amount' => $reservation->estimated_cents,
+            'amount' => $reservation->estimated_cents, // Prix réel calculé basé sur le prix du lab et la durée
             'currency' => $lab->currency ?? 'XOF',
-            'description' => "Réservation - {$lab->lab_title}",
+            'description' => "Réservation - {$lab->lab_title}" . ($lab->short_description ? " ({$lab->short_description})" : ''),
             'customer_id' => (string) $user->id, // Utilisé comme cpm_custom pour identifier le payeur
         ];
+
+        // Log détaillé pour vérifier que les prix réels sont utilisés
+        $reservationStart = new \DateTime($reservation->start_at);
+        $reservationEnd = new \DateTime($reservation->end_at);
+        $duration = $reservationStart->diff($reservationEnd);
+        $durationHours = $duration->h + ($duration->days * 24) + ($duration->i / 60);
+
+        \Log::info('Payment data prepared with real lab prices', [
+            'lab_id' => $lab->id,
+            'lab_title' => $lab->lab_title,
+            'lab_price_cents_per_hour' => $lab->price_cents,
+            'reservation_estimated_cents' => $reservation->estimated_cents,
+            'currency' => $paymentData['currency'],
+            'duration_hours' => $durationHours,
+            'start_at' => $reservation->start_at,
+            'end_at' => $reservation->end_at,
+        ]);
 
         // Initialiser le paiement avec CinetPay
         $result = $this->cinetPayService->initiatePayment($paymentData);
