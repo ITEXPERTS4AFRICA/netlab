@@ -152,11 +152,21 @@ class LabsController extends Controller
             if ($lab && $token) {
                 $labState = $cisco->getLabState($token, $lab->cml_id);
                 if (!isset($labState['error'])) {
-                    $currentState = $labState;
-                    // Mettre à jour l'état dans la base de données
-                    $lab->state = $currentState;
-                    $lab->save();
+                    // Extraire l'état du lab (peut être dans 'state' ou directement la valeur)
+                    $currentState = is_array($labState)
+                        ? ($labState['state'] ?? $labState['data']['state'] ?? null)
+                        : (is_string($labState) ? $labState : null);
+
+                    if ($currentState) {
+                        // Mettre à jour l'état dans la base de données
+                        $lab->state = $currentState;
+                        $lab->save();
+                    }
+                } else {
+                    $currentState = $lab->state ?? 'STOPPED';
                 }
+            } else {
+                $currentState = $lab->state ?? 'STOPPED';
             }
 
             // Calculer les informations temporelles
@@ -187,20 +197,28 @@ class LabsController extends Controller
                 ];
             }
 
+            // S'assurer que lab_description est une string, pas un objet
+            $labDescription = $lab->lab_description;
+            if (is_array($labDescription)) {
+                $labDescription = json_encode($labDescription);
+            } elseif (!is_string($labDescription)) {
+                $labDescription = (string) $labDescription;
+            }
+
             return [
-                'reservation_id' => $reservation->id,
-                'lab_id' => $lab->id,
-                'cml_id' => $lab->cml_id,
-                'lab_title' => $lab->lab_title,
-                'lab_description' => $lab->lab_description,
-                'node_count' => $lab->node_count,
-                'current_state' => $currentState,
-                'reservation_start' => $reservation->start_at->format('Y-m-d H:i'),
-                'reservation_end' => $reservation->end_at->format('Y-m-d H:i'),
+                'reservation_id' => (string) $reservation->id,
+                'lab_id' => (string) $lab->id,
+                'cml_id' => (string) $lab->cml_id,
+                'lab_title' => (string) ($lab->lab_title ?? ''),
+                'lab_description' => $labDescription,
+                'node_count' => (int) ($lab->node_count ?? 0),
+                'current_state' => (string) ($currentState ?? 'STOPPED'),
+                'reservation_start' => $reservation->start_at->format('Y-m-d H:i:s'),
+                'reservation_end' => $reservation->end_at->format('Y-m-d H:i:s'),
                 'duration_hours' => round($reservation->start_at->diffInHours($reservation->end_at), 1),
                 'time_info' => $timeInfo,
-                'can_access' => $canAccess,
-                'status' => $reservation->status,
+                'can_access' => (bool) $canAccess,
+                'status' => (string) $reservation->status,
             ];
         });
 

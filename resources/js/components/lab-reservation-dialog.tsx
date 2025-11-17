@@ -39,6 +39,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [isInstant, setIsInstant] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const { data, setData, post, processing, errors, reset } = useForm({
     lab_id: lab.id,
@@ -81,15 +82,25 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
 
   const handleSlotSelect = (slot: TimeSlot) => {
     setSelectedSlot(slot);
-    // Convert slot times to datetime-local format
+    // Convert slot times to ISO format (UTC)
     const slotDate = selectedDate.toISOString().split('T')[0];
-    const startDateTime = `${slotDate}T${slot.startTime}:00`;
-    const endDateTime = `${slotDate}T${slot.endTime}:00`;
+    let startDateTime = new Date(`${slotDate}T${slot.startTime}:00`);
+    let endDateTime = new Date(`${slotDate}T${slot.endTime}:00`);
+
+    // Si le créneau est dans le passé, utiliser demain
+    const now = new Date();
+    if (startDateTime <= now) {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowDate = tomorrow.toISOString().split('T')[0];
+      startDateTime = new Date(`${tomorrowDate}T${slot.startTime}:00`);
+      endDateTime = new Date(`${tomorrowDate}T${slot.endTime}:00`);
+    }
 
     setData({
       lab_id: lab.id,
-      start_at: startDateTime,
-      end_at: endDateTime,
+      start_at: startDateTime.toISOString(),
+      end_at: endDateTime.toISOString(),
       instant: isInstant,
     });
   };
@@ -98,12 +109,12 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
   const calculateEstimatedPrice = (): number => {
     if (!lab.price_cents || lab.price_cents === 0) return 0;
     if (!selectedSlot) return 0;
-    
+
     // Calculer la durée en heures
     const start = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.startTime}:00`);
     const end = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.endTime}:00`);
     const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    
+
     // Prix par heure (ou prix fixe si durée < 1h)
     return Math.max(lab.price_cents, Math.ceil(durationHours) * lab.price_cents);
   };
@@ -113,30 +124,73 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!data.start_at || !data.end_at) {
+    // Vérifier qu'un créneau est sélectionné
+    if (!selectedSlot && !isInstant) {
+      alert('Veuillez sélectionner un créneau horaire');
       return;
     }
 
-    const startDateTime = new Date(data.start_at);
-    const endDateTime = new Date(data.end_at);
+    // Préparer les dates
+    let startAt: string;
+    let endAt: string;
+
+    if (isInstant) {
+      // Réservation instantanée : maintenant + 4 heures
+      const now = new Date();
+      const end = new Date(now.getTime() + 4 * 60 * 60 * 1000); // +4 heures
+      startAt = now.toISOString();
+      endAt = end.toISOString();
+    } else if (data.start_at && data.end_at) {
+      // Utiliser les dates du formulaire
+      const startDateTime = new Date(data.start_at);
+      const endDateTime = new Date(data.end_at);
+
+      // S'assurer que les dates sont dans le futur
+      const now = new Date();
+      if (startDateTime <= now) {
+        // Si le créneau est passé, utiliser demain
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const slotDate = tomorrow.toISOString().split('T')[0];
+        const [startHours, startMinutes] = selectedSlot?.startTime.split(':') || ['09', '00'];
+        const [endHours, endMinutes] = selectedSlot?.endTime.split(':') || ['13', '00'];
+
+        startDateTime.setFullYear(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
+        startDateTime.setHours(parseInt(startHours), parseInt(startMinutes), 0, 0);
+
+        endDateTime.setFullYear(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
+        endDateTime.setHours(parseInt(endHours), parseInt(endMinutes), 0, 0);
+      }
+
+      startAt = startDateTime.toISOString();
+      endAt = endDateTime.toISOString();
+    } else if (selectedSlot) {
+      // Générer les dates depuis le créneau sélectionné
+      const slotDate = selectedDate.toISOString().split('T')[0];
+      const startDateTime = new Date(`${slotDate}T${selectedSlot.startTime}:00`);
+      const endDateTime = new Date(`${slotDate}T${selectedSlot.endTime}:00`);
+
+      // S'assurer que les dates sont dans le futur
+      const now = new Date();
+      if (startDateTime <= now) {
+        // Si le créneau est passé, utiliser demain
+        startDateTime.setDate(startDateTime.getDate() + 1);
+        endDateTime.setDate(endDateTime.getDate() + 1);
+      }
+
+      startAt = startDateTime.toISOString();
+      endAt = endDateTime.toISOString();
+    } else {
+      alert('Veuillez sélectionner un créneau horaire');
+      return;
+    }
+
+    const startDateTime = new Date(startAt);
+    const endDateTime = new Date(endAt);
 
     if (endDateTime <= startDateTime) {
+      alert('L\'heure de fin doit être après l\'heure de début');
       return;
-    }
-
-    // Pour les réservations instantanées, ajuster start_at à maintenant
-    if (isInstant) {
-      const now = new Date();
-      const slotDate = selectedDate.toISOString().split('T')[0];
-      const endTime = selectedSlot?.endTime || '23:59';
-      const endDateTimeStr = `${slotDate}T${endTime}:00`;
-      
-      setData({
-        ...data,
-        start_at: now.toISOString(),
-        end_at: endDateTimeStr,
-        instant: true,
-      });
     }
 
     // Utiliser l'API REST au lieu de Inertia pour gérer le paiement
@@ -153,28 +207,112 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
         credentials: 'same-origin', // Inclure les cookies de session pour l'authentification
         body: JSON.stringify({
           lab_id: lab.id, // cml_id (UUID)
-          start_at: isInstant ? new Date().toISOString() : data.start_at,
-          end_at: data.end_at,
-          instant: isInstant,
+          start_at: startAt,
+          end_at: endAt,
+          instant: isInstant || false,
         }),
       });
 
-      const result = await response.json();
+      let result;
+      let responseText = '';
+      try {
+        responseText = await response.text();
+        console.log('Raw response:', responseText);
+
+        // Nettoyer la réponse si elle contient du CSS du SDK CinetPay
+        // Le SDK peut injecter du CSS avant le JSON
+        let cleanedResponse = responseText;
+        if (responseText.includes('</style>')) {
+          // Extraire le JSON après le </style>
+          const jsonStart = responseText.indexOf('</style>') + 8;
+          cleanedResponse = responseText.substring(jsonStart).trim();
+          console.log('Cleaned response (removed CSS):', cleanedResponse);
+        }
+
+        result = JSON.parse(cleanedResponse);
+      } catch (e) {
+        console.error('Failed to parse response:', e);
+        console.error('Response status:', response.status);
+        console.error('Response headers:', Object.fromEntries(response.headers.entries()));
+        console.error('Response text:', responseText);
+        throw new Error(`Réponse invalide du serveur (${response.status}): ${responseText.substring(0, 200)}`);
+      }
 
       if (!response.ok) {
-        const errorMessage = result.error || result.message || 'Erreur lors de la création de la réservation';
-        console.error('Reservation error:', result);
+        // Gérer les erreurs de validation Laravel (422)
+        if (response.status === 422 && result.errors) {
+          // Erreurs de validation Laravel
+          const validationErrors = Object.entries(result.errors)
+            .map(([field, messages]) => {
+              const msgArray = Array.isArray(messages) ? messages : [messages];
+              return `${field}: ${msgArray.join(', ')}`;
+            })
+            .join('; ');
+          console.error('Validation errors:', result.errors);
+          throw new Error(validationErrors || 'Erreurs de validation');
+        }
+
+        // Gérer les erreurs détaillées de CinetPay
+        let errorMessage = typeof result.error === 'string'
+          ? result.error
+          : result.message || 'Erreur lors de la création de la réservation';
+
+        // Si c'est une erreur CinetPay avec code et description
+        if (result.code && result.description) {
+          errorMessage = `${errorMessage} (Code: ${result.code})`;
+          if (result.description) {
+            errorMessage += ` - ${result.description}`;
+          }
+        }
+
+        console.error('Reservation error:', {
+          status: response.status,
+          error: result.error,
+          code: result.code,
+          description: result.description,
+          errors: result.errors,
+          fullResult: result,
+        });
         throw new Error(errorMessage);
       }
 
-      // Si un paiement est requis, rediriger vers CinetPay
-      if (result.requires_payment && result.payment_url) {
+      // Log pour déboguer le paiement
+      console.log('Reservation response:', {
+        requires_payment: result.requires_payment,
+        payment_url: result.payment_url,
+        estimated_cents: result.reservation?.estimated_cents,
+        payment: result.payment,
+        fullResult: result,
+      });
+
+      // Si un paiement est requis, rediriger vers CinetPay IMMÉDIATEMENT
+      if (result.requires_payment === true && result.payment_url) {
+        console.log('✅ Redirection vers CinetPay:', result.payment_url);
         setPaymentUrl(result.payment_url);
+        // Fermer le dialog avant la redirection
+        setOpen(false);
+        // Redirection immédiate vers CinetPay
         window.location.href = result.payment_url;
         return;
       }
 
-      // Sinon, rediriger vers les réservations
+      // Si requires_payment est true mais pas de payment_url, afficher un message
+      if (result.requires_payment === true && !result.payment_url) {
+        console.error('❌ Paiement requis mais pas de payment_url fourni', result);
+        setUploadError('Erreur: URL de paiement non disponible. Veuillez contacter le support.');
+        return;
+      }
+
+      // Si payment_url existe même sans requires_payment explicite, rediriger quand même
+      if (result.payment_url && !result.requires_payment) {
+        console.log('⚠️ payment_url trouvé sans requires_payment, redirection quand même:', result.payment_url);
+        setOpen(false);
+        window.location.href = result.payment_url;
+        return;
+      }
+
+      // Sinon, rediriger vers les réservations (lab gratuit ou paiement non requis)
+      console.log('✅ Pas de paiement requis, redirection vers /labs/my-reserved');
       setOpen(false);
       reset();
       router.visit('/labs/my-reserved', {
@@ -185,8 +323,9 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       console.error('Reservation error:', error);
       // Afficher l'erreur dans le formulaire
       const errorMessage = error instanceof Error ? error.message : 'Une erreur est survenue';
-      setData('errors', { general: errorMessage });
-      
+      // Ne pas utiliser setData pour les erreurs, utiliser un state local
+      setUploadError(errorMessage);
+
       // Afficher aussi dans une alerte visuelle
       alert(errorMessage);
     }
@@ -196,6 +335,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
     setOpen(isOpen);
     if (!isOpen) {
       reset();
+      setUploadError(null); // Réinitialiser l'erreur lors de la fermeture
     }
   };
 
@@ -306,7 +446,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
                   const nextHour = Math.min(currentHour + 4, 22);
                   const startTime = `${currentHour.toString().padStart(2, '0')}:00`;
                   const endTime = `${nextHour.toString().padStart(2, '0')}:00`;
-                  
+
                   const instantSlot: TimeSlot = {
                     id: `${lab.id}-instant-${Date.now()}`,
                     startTime,
@@ -315,7 +455,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
                     maxUsers: 1,
                     currentUsers: 0,
                   };
-                  
+
                   setSelectedSlot(instantSlot);
                   handleSlotSelect(instantSlot);
                 }
@@ -362,20 +502,32 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
                 </span>
               </div>
               <p className="text-sm text-green-700 dark:text-green-300">
-                Le lab démarrera immédiatement après la confirmation. 
+                Le lab démarrera immédiatement après la confirmation.
                 {estimatedPrice > 0 && ' Le paiement sera requis avant l\'accès.'}
               </p>
             </div>
           )}
 
-          {Object.keys(errors).length > 0 && (
+          {(uploadError || Object.keys(errors).length > 0) && (
             <div className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
               <div className="text-sm text-red-700 dark:text-red-300">
-                {Object.entries(errors).map(([field, message]) => (
-                  <p key={field} className="mb-1">
-                    <strong>{field === 'general' ? 'Erreur' : field}:</strong> {message}
+                {uploadError && (
+                  <p className="mb-1">
+                    <strong>Erreur:</strong> {uploadError}
                   </p>
-                ))}
+                )}
+                {Object.entries(errors).map(([field, message]) => {
+                  const errorText = Array.isArray(message)
+                    ? message.join(', ')
+                    : typeof message === 'string'
+                    ? message
+                    : JSON.stringify(message);
+                  return (
+                    <p key={field} className="mb-1">
+                      <strong>{field === 'general' ? 'Erreur' : field}:</strong> {errorText}
+                    </p>
+                  );
+                })}
               </div>
             </div>
           )}

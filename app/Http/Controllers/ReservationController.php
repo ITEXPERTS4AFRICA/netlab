@@ -35,13 +35,13 @@ class ReservationController extends Controller
             // Calculer la durée totale en heures (avec minutes)
             $diff = $startAt->diff($endAt);
             $totalHours = $diff->h + ($diff->days * 24) + ($diff->i / 60);
-            
+
             // Prix par heure (le prix du lab est considéré comme prix par heure)
             $pricePerHour = $lab->price_cents;
-            
+
             // Arrondir à l'heure supérieure et multiplier
             $hours = max(1, ceil($totalHours));
-            
+
             return $hours * $pricePerHour;
         }
 
@@ -61,17 +61,50 @@ class ReservationController extends Controller
 
     public function store(Request $request, $lab = null)
     {
-        $request->validate([
-            'lab_id' => 'required|string', // cml_id (UUID)
-            'start_at' => 'required|date',
-            'end_at' => 'required|date|after:start_at',
-            'rate_id' => 'nullable|exists:rates,id',
-            'instant' => 'nullable|boolean', // Réservation instantanée
-            'skip_payment' => 'nullable|boolean', // Ignorer le paiement (pour labs gratuits)
+        // Log pour déboguer
+        \Log::info('Reservation request received', [
+            'data' => $request->all(),
+            'headers' => $request->headers->all(),
         ]);
 
+        try {
+            $validated = $request->validate([
+                'lab_id' => 'required|string', // cml_id (UUID)
+                'start_at' => ['required', 'date', function ($attribute, $value, $fail) {
+                    try {
+                        new \DateTime($value);
+                    } catch (\Exception $e) {
+                        $fail('Le champ ' . $attribute . ' doit être une date valide.');
+                    }
+                }],
+                'end_at' => ['required', 'date', function ($attribute, $value, $fail) use ($request) {
+                    try {
+                        $end = new \DateTime($value);
+                        $start = new \DateTime($request->start_at);
+                        if ($end <= $start) {
+                            $fail('La date de fin doit être après la date de début.');
+                        }
+                    } catch (\Exception $e) {
+                        $fail('Le champ ' . $attribute . ' doit être une date valide.');
+                    }
+                }],
+                'rate_id' => 'nullable|exists:rates,id',
+                'instant' => 'nullable|boolean', // Réservation instantanée
+                'skip_payment' => 'nullable|boolean', // Ignorer le paiement (pour labs gratuits)
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Reservation validation failed', [
+                'errors' => $e->errors(),
+                'request_data' => $request->all(),
+            ]);
+            return response()->json([
+                'message' => 'Les données fournies sont invalides.',
+                'errors' => $e->errors(),
+            ], 422);
+        }
+
         $user = Auth::user();
-        
+
         // Trouver le lab par cml_id
         $lab = Lab::where('cml_id', $request->lab_id)->firstOrFail();
 
@@ -80,32 +113,46 @@ class ReservationController extends Controller
             return response()->json(['error' => 'Ce lab n\'est pas disponible pour la réservation'], 403);
         }
 
-        $start = new \DateTime($request->start_at);
-        $end = new \DateTime($request->end_at);
-        $isInstant = $request->boolean('instant', false);
+        try {
+            $start = new \DateTime($request->start_at);
+            $end = new \DateTime($request->end_at);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Format de date invalide: ' . $e->getMessage()], 422);
+        }
 
-        // Pour les réservations instantanées, vérifier que le start_at est maintenant ou dans les 15 prochaines minutes
+        $isInstant = $request->boolean('instant', false);
+        $now = new \DateTime();
+
+        // Pour les réservations instantanées, ajuster start_at à maintenant si nécessaire
         if ($isInstant) {
-            $now = new \DateTime();
-            $fifteenMinutesFromNow = (clone $now)->modify('+15 minutes');
-            
             if ($start < $now) {
-                $start = $now; // Ajuster au moment présent
+                $start = clone $now; // Ajuster au moment présent
             }
-            
+
+            // Vérifier que start_at est dans les 15 prochaines minutes
+            $fifteenMinutesFromNow = (clone $now)->modify('+15 minutes');
             if ($start > $fifteenMinutesFromNow) {
                 return response()->json(['error' => 'Une réservation instantanée doit commencer dans les 15 prochaines minutes'], 422);
             }
         } else {
-            // Pour les réservations normales, start_at doit être dans le futur
-            if ($start <= new \DateTime()) {
-                return response()->json(['error' => 'La date de début doit être dans le futur'], 422);
+            // Pour les réservations normales, start_at doit être dans le futur (au moins 1 minute)
+            $oneMinuteFromNow = (clone $now)->modify('+1 minute');
+            if ($start <= $oneMinuteFromNow) {
+                return response()->json(['error' => 'La date de début doit être dans le futur (au moins 1 minute)'], 422);
             }
         }
 
-        // Vérifier les conflits
+        // Vérifier les conflits (exclure les réservations annulées et les réservations pending expirées)
+        // Les réservations pending de plus de 15 minutes sont considérées comme expirées
         $conflict = Reservation::where('lab_id', $lab->id)
             ->where('status', '!=', 'cancelled')
+            ->where(function($q) use ($user) {
+                // Exclure les réservations pending expirées (plus de 15 minutes)
+                $q->where(function($q2) {
+                    $q2->where('status', '!=', 'pending')
+                       ->orWhere('created_at', '>', now()->subMinutes(15));
+                });
+            })
             ->where(function($q) use ($start,$end){
                 $q->whereBetween('start_at', [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')])
                   ->orWhereBetween('end_at', [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')])
@@ -121,6 +168,15 @@ class ReservationController extends Controller
         // Calculer le prix
         $estimatedCents = $this->calculateReservationPrice($lab, $start, $end);
         $skipPayment = $request->boolean('skip_payment', false) || $estimatedCents === 0;
+
+        // Log pour déboguer le paiement
+        \Log::info('Reservation payment check', [
+            'lab_id' => $lab->id,
+            'lab_price_cents' => $lab->price_cents,
+            'estimated_cents' => $estimatedCents,
+            'skip_payment' => $skipPayment,
+            'will_initiate_payment' => $estimatedCents > 0 && !$skipPayment,
+        ]);
 
         // Créer la réservation
         $reservation = Reservation::create([
@@ -140,9 +196,12 @@ class ReservationController extends Controller
                 $apiService = new CiscoApiService();
                 $apiService->setToken($token);
                 $labState = $apiService->getLabState($token, $lab->cml_id);
-                
-                if (!isset($labState['error']) && ($labState['state'] ?? 'STOPPED') === 'STOPPED') {
-                    $apiService->startLab($token, $lab->cml_id);
+
+                if (!isset($labState['error'])) {
+                    $state = is_array($labState) ? ($labState['state'] ?? null) : null;
+                    if ($state === 'STOPPED') {
+                        $apiService->startLab($token, $lab->cml_id);
+                    }
                 }
             }
         }
@@ -164,36 +223,31 @@ class ReservationController extends Controller
      */
     protected function initiateReservationPayment(Request $request, Reservation $reservation, $user, Lab $lab)
     {
-        // Préparer les données pour CinetPay
+        // Préparer les données pour CinetPay selon le SDK officiel
+        // Le SDK officiel n'utilise PAS les champs customer lors de l'initiation
         $paymentData = [
             'transaction_id' => 'RES_' . $reservation->id . '_' . Str::random(8),
             'amount' => $reservation->estimated_cents,
             'currency' => $lab->currency ?? 'XOF',
             'description' => "Réservation - {$lab->lab_title}",
-            'customer_id' => $user->id,
-            'customer_name' => $user->name,
-            'customer_surname' => $user->cml_fullname ?? '',
-            'customer_email' => $user->email,
-            'customer_phone_number' => $request->input('customer_phone_number', $user->phone ?? '+225000000000'),
-            'customer_address' => $request->input('customer_address', $user->organization ?? ''),
-            'customer_city' => $request->input('customer_city', ''),
-            'customer_country' => $request->input('customer_country', 'CM'),
-            'customer_state' => $request->input('customer_state', 'CM'),
-            'customer_zip_code' => $request->input('customer_zip_code', ''),
-            'metadata' => json_encode([
-                'reservation_id' => $reservation->id,
-                'user_id' => $user->id,
-                'lab_id' => $lab->id,
-            ]),
-            'lang' => 'FR',
+            'customer_id' => (string) $user->id, // Utilisé comme cpm_custom pour identifier le payeur
         ];
 
         // Initialiser le paiement avec CinetPay
         $result = $this->cinetPayService->initiatePayment($paymentData);
 
         if (!$result['success']) {
+            \Log::error('CinetPay payment initiation failed in ReservationController', [
+                'error' => $result['error'] ?? 'Unknown error',
+                'code' => $result['code'] ?? 'UNKNOWN',
+                'description' => $result['description'] ?? null,
+                'reservation_id' => $reservation->id,
+            ]);
+
             return response()->json([
                 'error' => $result['error'] ?? 'Erreur lors de l\'initialisation du paiement',
+                'code' => $result['code'] ?? 'UNKNOWN',
+                'description' => $result['description'] ?? null,
                 'reservation' => $reservation,
             ], 500);
         }
@@ -207,12 +261,19 @@ class ReservationController extends Controller
             'amount' => $reservation->estimated_cents,
             'currency' => $paymentData['currency'],
             'status' => 'pending',
-            'customer_name' => $paymentData['customer_name'],
-            'customer_surname' => $paymentData['customer_surname'],
-            'customer_email' => $paymentData['customer_email'],
-            'customer_phone_number' => $paymentData['customer_phone_number'],
+            'customer_name' => $user->name ?? 'N/A',
+            'customer_surname' => $user->cml_fullname ?? 'N/A',
+            'customer_email' => $user->email ?? 'N/A',
+            'customer_phone_number' => $user->phone ?? '000000000', // Valeur par défaut si NULL
             'description' => $paymentData['description'],
             'cinetpay_response' => $result['data'],
+        ]);
+
+        \Log::info('Reservation payment initiated successfully', [
+            'reservation_id' => $reservation->id,
+            'payment_id' => $payment->id,
+            'payment_url' => $result['payment_url'],
+            'transaction_id' => $paymentData['transaction_id'],
         ]);
 
         return response()->json([
@@ -334,7 +395,7 @@ class ReservationController extends Controller
             'auto_started' => $needsAutoStart,
             'annotations_count' => is_array($annotations) ? count($annotations) : 0,
         ]);
-        
+
 
         if ($needsAutoStart) {
             $reservation->update(['status' => 'active']);
