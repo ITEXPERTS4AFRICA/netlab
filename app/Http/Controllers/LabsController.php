@@ -256,13 +256,6 @@ class LabsController extends Controller
             ]);
         }
 
-        // Get current lab state from CML
-        $labState = $cisco->getLabState($token, $lab->cml_id);
-        if (!isset($labState['error'])) {
-            $lab->state = $labState['state'] ?? $lab->state;
-            $lab->save();
-        }
-
         // Get active reservation for the user
         $user = Auth::user();
         $reservation = Reservation::where('user_id', $user->id)
@@ -277,19 +270,40 @@ class LabsController extends Controller
             return redirect()->route('labs')->with('error', 'You do not have an active reservation for this lab.');
         }
 
-        // Get annotations for the lab
-        $annotations = $cisco->getLabsAnnotation($token, $lab->cml_id);
-
-        // Fetch lab nodes for console management
-        $nodes = $cisco->getLabNodes($token, $lab->cml_id);
-        if (isset($nodes['error'])) {
-            $nodes = [];
+        // Get current lab state from CML (only if token is available)
+        if ($token) {
+            $labState = $cisco->getLabState($token, $lab->cml_id);
+            if (!isset($labState['error'])) {
+                $lab->state = $labState['state'] ?? $lab->state;
+                $lab->save();
+            }
         }
 
-        // Fetch active console sessions (best effort)
-        $consoleSessions = $cisco->console->getConsoleSessions();
-        if (isset($consoleSessions['error'])) {
-            $consoleSessions = [];
+        // Get annotations for the lab (only if token is available)
+        $annotations = [];
+        if ($token) {
+            $annotations = $cisco->getLabsAnnotation($token, $lab->cml_id);
+            if (isset($annotations['error'])) {
+                $annotations = [];
+            }
+        }
+
+        // Fetch lab nodes for console management (only if token is available)
+        $nodes = [];
+        if ($token) {
+            $nodes = $cisco->getLabNodes($token, $lab->cml_id);
+            if (isset($nodes['error'])) {
+                $nodes = [];
+            }
+        }
+
+        // Fetch active console sessions (best effort, only if token is available)
+        $consoleSessions = [];
+        if ($token) {
+            $consoleSessions = $cisco->console->getConsoleSessions();
+            if (isset($consoleSessions['error'])) {
+                $consoleSessions = [];
+            }
         }
 
         return Inertia::render('labs/Workspace', [

@@ -151,6 +151,9 @@ class CiscoApiService
     {
         if ($idOrNull !== null) {
             // Ancien format: getLab($token, $id)
+            if ($tokenOrId === null) {
+                return ['error' => 'Token CML non disponible. Veuillez vous reconnecter.'];
+            }
             $this->labs->setToken($tokenOrId);
             return $this->labs->getLab($idOrNull);
         }
@@ -206,6 +209,9 @@ class CiscoApiService
     public function getLabState($tokenOrId, $idOrNull = null): array
     {
         if ($idOrNull !== null) {
+            if ($tokenOrId === null) {
+                return ['error' => 'Token CML non disponible. Veuillez vous reconnecter.'];
+            }
             $this->labs->setToken($tokenOrId);
             return $this->labs->getLabState($idOrNull);
         }
@@ -224,6 +230,9 @@ class CiscoApiService
     public function getLabsAnnotation($tokenOrId, $idOrNull = null): array
     {
         if ($idOrNull !== null) {
+            if ($tokenOrId === null) {
+                return ['error' => 'Token CML non disponible. Veuillez vous reconnecter.'];
+            }
             $this->labs->setToken($tokenOrId);
             return $this->labs->getLabAnnotations($idOrNull);
         }
@@ -333,6 +342,9 @@ class CiscoApiService
     public function getLabNodes($tokenOrLabId, $labIdOrNull = null): array
     {
         if ($labIdOrNull !== null) {
+            if ($tokenOrLabId === null) {
+                return ['error' => 'Token CML non disponible. Veuillez vous reconnecter.'];
+            }
             $this->nodes->setToken($tokenOrLabId);
             return $this->nodes->getLabNodes($labIdOrNull);
         }
