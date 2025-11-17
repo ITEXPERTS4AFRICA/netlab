@@ -11,9 +11,9 @@ class CmlLoginAndDashboardTest extends TestCase
     public function test_login_and_dashboard_shows_labs()
     {
         Http::fake([
-            '*/v0/auth_extended' => Http::response(['token' => 'testtoken'], 200),
-            '*/v0/labs' => Http::response(['90f84e38-a71c-4d57-8d90-00fa8a197385'], 200),
-            '*/v0/labs/*' => Http::response(['id' => '90f84e38-a71c-4d57-8d90-00fa8a197385', 'name' => 'Lab One', 'description' => 'Test lab'], 200),
+            '*/api/v0/auth_extended' => Http::response(['token' => 'testtoken'], 200),
+            '*/api/v0/labs' => Http::response(['90f84e38-a71c-4d57-8d90-00fa8a197385'], 200),
+            '*/api/v0/labs/*' => Http::response(['id' => '90f84e38-a71c-4d57-8d90-00fa8a197385', 'name' => 'Lab One', 'description' => 'Test lab'], 200),
         ]);
 
         $response = $this->post('/login', [

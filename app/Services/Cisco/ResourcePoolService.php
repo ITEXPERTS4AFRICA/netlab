@@ -9,7 +9,7 @@ class ResourcePoolService extends BaseCiscoApiService
      */
     public function createResourcePools(array $data): array
     {
-        return $this->post('/v0/resource_pools', $data);
+        return $this->post('/api/v0/resource_pools', $data);
     }
 
     /**
@@ -17,7 +17,7 @@ class ResourcePoolService extends BaseCiscoApiService
      */
     public function getAllResourcePools(): array
     {
-        return $this->get('/v0/resource_pools');
+        return $this->get('/api/v0/resource_pools');
     }
 
     /**
@@ -25,7 +25,7 @@ class ResourcePoolService extends BaseCiscoApiService
      */
     public function getResourcePool(string $resourcePoolId): array
     {
-        return $this->get("/v0/resource_pools/{$resourcePoolId}");
+        return $this->get("/api/v0/resource_pools/{$resourcePoolId}");
     }
 
     /**
@@ -33,7 +33,7 @@ class ResourcePoolService extends BaseCiscoApiService
      */
     public function updateResourcePool(string $resourcePoolId, array $data): array
     {
-        return $this->patch("/v0/resource_pools/{$resourcePoolId}", $data);
+        return $this->patch("/api/v0/resource_pools/{$resourcePoolId}", $data);
     }
 
     /**
@@ -41,7 +41,7 @@ class ResourcePoolService extends BaseCiscoApiService
      */
     public function deleteResourcePool(string $resourcePoolId): array
     {
-        return $this->delete("/v0/resource_pools/{$resourcePoolId}");
+        return $this->delete("/api/v0/resource_pools/{$resourcePoolId}");
     }
 
     /**
@@ -49,7 +49,7 @@ class ResourcePoolService extends BaseCiscoApiService
      */
     public function getResourcePoolUsage(): array
     {
-        return $this->get('/v0/resource_pool_usage');
+        return $this->get('/api/v0/resource_pool_usage');
     }
 
     /**
@@ -57,7 +57,7 @@ class ResourcePoolService extends BaseCiscoApiService
      */
     public function getSingleResourcePoolUsage(string $resourcePoolId): array
     {
-        return $this->get("/v0/resource_pool_usage/{$resourcePoolId}");
+        return $this->get("/api/v0/resource_pool_usage/{$resourcePoolId}");
     }
 }
 

@@ -15,7 +15,7 @@
     },
     servers: [
         {
-    url: "/api/v0"
+    url: "/api/api/v0"
         }
     ],
     paths: {

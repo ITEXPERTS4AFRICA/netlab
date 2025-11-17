@@ -9,8 +9,8 @@ class SearchService extends BaseCiscoApiService
      */
     public function searchLabs(array $criteria): array
     {
-        $labs = $this->get('/v0/labs?show_all=true');
-        
+        $labs = $this->get('/api/v0/labs?show_all=true');
+
         return collect($labs)->filter(function($lab) use ($criteria) {
             return $this->matchLabCriteria($lab, $criteria);
         })->values()->all();
@@ -21,8 +21,8 @@ class SearchService extends BaseCiscoApiService
      */
     public function findNodesByType(string $labId, string $nodeType): array
     {
-        $nodes = $this->get("/v0/labs/{$labId}/nodes");
-        
+        $nodes = $this->get("/api/v0/labs/{$labId}/nodes");
+
         return collect($nodes)->filter(function($node) use ($nodeType) {
             return ($node['node_definition'] ?? '') === $nodeType;
         })->values()->all();
@@ -33,15 +33,15 @@ class SearchService extends BaseCiscoApiService
      */
     public function searchByTags(array $tags, string $mode = 'any'): array
     {
-        $labs = $this->get('/v0/labs?show_all=true');
-        
+        $labs = $this->get('/api/v0/labs?show_all=true');
+
         return collect($labs)->filter(function($lab) use ($tags, $mode) {
             $labTags = $lab['tags'] ?? [];
-            
+
             if ($mode === 'all') {
                 return empty(array_diff($tags, $labTags));
             }
-            
+
             return !empty(array_intersect($tags, $labTags));
         })->values()->all();
     }
@@ -52,8 +52,8 @@ class SearchService extends BaseCiscoApiService
     public function globalSearch(string $query): array
     {
         $query = strtolower($query);
-        $labs = $this->get('/v0/labs?show_all=true');
-        
+        $labs = $this->get('/api/v0/labs?show_all=true');
+
         return collect($labs)->filter(function($lab) use ($query) {
             $searchable = implode(' ', [
                 $lab['lab_title'] ?? '',
@@ -61,7 +61,7 @@ class SearchService extends BaseCiscoApiService
                 $lab['owner'] ?? '',
                 implode(' ', $lab['tags'] ?? [])
             ]);
-            
+
             return strpos(strtolower($searchable), $query) !== false;
         })->values()->all();
     }
@@ -71,8 +71,8 @@ class SearchService extends BaseCiscoApiService
      */
     public function advancedSearch(array $filters): array
     {
-        $labs = $this->get('/v0/labs?show_all=true');
-        
+        $labs = $this->get('/api/v0/labs?show_all=true');
+
         return collect($labs)->filter(function($lab) use ($filters) {
             // Filtre par état
             if (isset($filters['state'])) {
@@ -80,41 +80,41 @@ class SearchService extends BaseCiscoApiService
                     return false;
                 }
             }
-            
+
             // Filtre par propriétaire
             if (isset($filters['owner'])) {
                 if (($lab['owner'] ?? '') !== $filters['owner']) {
                     return false;
                 }
             }
-            
+
             // Filtre par nombre de nodes
             if (isset($filters['min_nodes'])) {
                 if (count($lab['nodes'] ?? []) < $filters['min_nodes']) {
                     return false;
                 }
             }
-            
+
             if (isset($filters['max_nodes'])) {
                 if (count($lab['nodes'] ?? []) > $filters['max_nodes']) {
                     return false;
                 }
             }
-            
+
             // Filtre par date de création
             if (isset($filters['created_after'])) {
                 if (strtotime($lab['created'] ?? 0) < strtotime($filters['created_after'])) {
                     return false;
                 }
             }
-            
+
             // Filtre par date de modification
             if (isset($filters['modified_after'])) {
                 if (strtotime($lab['modified'] ?? 0) < strtotime($filters['modified_after'])) {
                     return false;
                 }
             }
-            
+
             return true;
         })->values()->all();
     }
@@ -124,19 +124,19 @@ class SearchService extends BaseCiscoApiService
      */
     public function findByNetworkConfig(array $config): array
     {
-        $labs = $this->get('/v0/labs?show_all=true');
-        
+        $labs = $this->get('/api/v0/labs?show_all=true');
+
         return collect($labs)->filter(function($lab) use ($config) {
             // Recherche par subnet
             if (isset($config['subnet'])) {
                 // Logique de recherche par subnet dans la topologie
             }
-            
+
             // Recherche par protocole de routage
             if (isset($config['routing_protocol'])) {
                 // Logique de recherche
             }
-            
+
             return true;
         })->values()->all();
     }
@@ -146,8 +146,8 @@ class SearchService extends BaseCiscoApiService
      */
     public function findNodesWithConfig(string $labId, array $configCriteria): array
     {
-        $nodes = $this->get("/v0/labs/{$labId}/nodes");
-        
+        $nodes = $this->get("/api/v0/labs/{$labId}/nodes");
+
         return collect($nodes)->filter(function($node) use ($configCriteria) {
             foreach ($configCriteria as $key => $value) {
                 if (($node['configuration'][$key] ?? null) !== $value) {
@@ -170,19 +170,19 @@ class SearchService extends BaseCiscoApiService
                         return false;
                     }
                     break;
-                    
+
                 case 'owner':
                     if (($lab['owner'] ?? '') !== $value) {
                         return false;
                     }
                     break;
-                    
+
                 case 'state':
                     if (($lab['state'] ?? '') !== $value) {
                         return false;
                     }
                     break;
-                    
+
                 case 'tags':
                     $labTags = $lab['tags'] ?? [];
                     $searchTags = is_array($value) ? $value : [$value];
@@ -192,7 +192,7 @@ class SearchService extends BaseCiscoApiService
                     break;
             }
         }
-        
+
         return true;
     }
 
@@ -201,9 +201,9 @@ class SearchService extends BaseCiscoApiService
      */
     public function getSuggestions(string $partial): array
     {
-        $labs = $this->get('/v0/labs?show_all=true');
+        $labs = $this->get('/api/v0/labs?show_all=true');
         $suggestions = [];
-        
+
         // Suggestions de titres
         foreach ($labs as $lab) {
             $title = $lab['lab_title'] ?? '';
@@ -215,7 +215,7 @@ class SearchService extends BaseCiscoApiService
                 ];
             }
         }
-        
+
         return array_slice($suggestions, 0, 10);
     }
 
@@ -225,7 +225,7 @@ class SearchService extends BaseCiscoApiService
     public function facetedSearch(array $criteria): array
     {
         $results = $this->searchLabs($criteria);
-        
+
         return [
             'results' => $results,
             'facets' => [
@@ -242,12 +242,12 @@ class SearchService extends BaseCiscoApiService
     protected function groupByField(array $items, string $field): array
     {
         $grouped = [];
-        
+
         foreach ($items as $item) {
             $value = $item[$field] ?? 'unknown';
             $grouped[$value] = ($grouped[$value] ?? 0) + 1;
         }
-        
+
         return $grouped;
     }
 }

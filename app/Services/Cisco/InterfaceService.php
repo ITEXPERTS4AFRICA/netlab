@@ -9,7 +9,7 @@ class InterfaceService extends BaseCiscoApiService
      */
     public function getInterface(string $labId, string $interfaceId): array
     {
-        return $this->get("/v0/labs/{$labId}/interfaces/{$interfaceId}");
+        return $this->get("/api/v0/labs/{$labId}/interfaces/{$interfaceId}");
     }
 
     /**
@@ -17,7 +17,7 @@ class InterfaceService extends BaseCiscoApiService
      */
     public function updateInterface(string $labId, string $interfaceId, array $data): array
     {
-        return $this->patch("/v0/labs/{$labId}/interfaces/{$interfaceId}", $data);
+        return $this->patch("/api/v0/labs/{$labId}/interfaces/{$interfaceId}", $data);
     }
 
     /**
@@ -25,7 +25,7 @@ class InterfaceService extends BaseCiscoApiService
      */
     public function deleteInterface(string $labId, string $interfaceId): array
     {
-        return $this->delete("/v0/labs/{$labId}/interfaces/{$interfaceId}");
+        return $this->delete("/api/v0/labs/{$labId}/interfaces/{$interfaceId}");
     }
 
     /**
@@ -33,7 +33,7 @@ class InterfaceService extends BaseCiscoApiService
      */
     public function getInterfaceState(string $labId, string $interfaceId): array
     {
-        return $this->get("/v0/labs/{$labId}/interfaces/{$interfaceId}/state");
+        return $this->get("/api/v0/labs/{$labId}/interfaces/{$interfaceId}/state");
     }
 
     /**
@@ -41,7 +41,7 @@ class InterfaceService extends BaseCiscoApiService
      */
     public function startInterface(string $labId, string $interfaceId): array
     {
-        return $this->put("/v0/labs/{$labId}/interfaces/{$interfaceId}/state/start");
+        return $this->put("/api/v0/labs/{$labId}/interfaces/{$interfaceId}/state/start");
     }
 
     /**
@@ -49,7 +49,7 @@ class InterfaceService extends BaseCiscoApiService
      */
     public function stopInterface(string $labId, string $interfaceId): array
     {
-        return $this->put("/v0/labs/{$labId}/interfaces/{$interfaceId}/state/stop");
+        return $this->put("/api/v0/labs/{$labId}/interfaces/{$interfaceId}/state/stop");
     }
 }
 

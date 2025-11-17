@@ -74,6 +74,82 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                                     <InputError className="mt-2" message={errors.email} />
                                 </div>
 
+                                <div className="grid gap-2">
+                                    <Label htmlFor="phone">Téléphone</Label>
+
+                                    <Input
+                                        id="phone"
+                                        type="tel"
+                                        className="mt-1 block w-full"
+                                        defaultValue={auth.user.phone || ''}
+                                        name="phone"
+                                        autoComplete="tel"
+                                        placeholder="+33 6 12 34 56 78"
+                                    />
+
+                                    <InputError className="mt-2" message={errors.phone} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="organization">Organisation</Label>
+
+                                    <Input
+                                        id="organization"
+                                        type="text"
+                                        className="mt-1 block w-full"
+                                        defaultValue={auth.user.organization || ''}
+                                        name="organization"
+                                        placeholder="Nom de l'organisation"
+                                    />
+
+                                    <InputError className="mt-2" message={errors.organization} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="department">Département</Label>
+
+                                    <Input
+                                        id="department"
+                                        type="text"
+                                        className="mt-1 block w-full"
+                                        defaultValue={auth.user.department || ''}
+                                        name="department"
+                                        placeholder="Département"
+                                    />
+
+                                    <InputError className="mt-2" message={errors.department} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="position">Poste</Label>
+
+                                    <Input
+                                        id="position"
+                                        type="text"
+                                        className="mt-1 block w-full"
+                                        defaultValue={auth.user.position || ''}
+                                        name="position"
+                                        placeholder="Votre poste"
+                                    />
+
+                                    <InputError className="mt-2" message={errors.position} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="bio">Biographie</Label>
+
+                                    <textarea
+                                        id="bio"
+                                        name="bio"
+                                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                        defaultValue={auth.user.bio || ''}
+                                        placeholder="Parlez-nous de vous..."
+                                        rows={4}
+                                    />
+
+                                    <InputError className="mt-2" message={errors.bio} />
+                                </div>
+
                                 {mustVerifyEmail && auth.user.email_verified_at === null && (
                                     <div>
                                         <p className="-mt-4 text-sm text-muted-foreground">

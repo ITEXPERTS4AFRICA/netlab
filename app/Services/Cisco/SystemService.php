@@ -9,7 +9,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getUsers(): array
     {
-        return $this->get('/v0/users');
+        return $this->get('/api/v0/users');
     }
 
     /**
@@ -17,7 +17,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getDevices(): array
     {
-        return $this->get('/v0/devices');
+        return $this->get('/api/v0/devices');
     }
 
     /**
@@ -25,7 +25,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getSystemAuthConfig(): array
     {
-        return $this->get('/v0/system/auth/config');
+        return $this->get('/api/v0/system/auth/config');
     }
 
     /**
@@ -33,7 +33,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function updateSystemAuthConfig(array $data): array
     {
-        return $this->patch('/v0/system/auth/config', $data);
+        return $this->patch('/api/v0/system/auth/config', $data);
     }
 
     /**
@@ -41,7 +41,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function setSystemAuthConfig(array $data): array
     {
-        return $this->put('/v0/system/auth/config', $data);
+        return $this->put('/api/v0/system/auth/config', $data);
     }
 
     /**
@@ -49,7 +49,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function testSystemAuth(array $data): array
     {
-        return $this->post('/v0/system/auth/test', $data);
+        return $this->post('/api/v0/system/auth/test', $data);
     }
 
     /**
@@ -57,7 +57,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getSystemAuthGroups(): array
     {
-        return $this->get('/v0/system/auth/groups');
+        return $this->get('/api/v0/system/auth/groups');
     }
 
     /**
@@ -65,7 +65,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function refreshSystemAuth(): array
     {
-        return $this->put('/v0/system/auth/refresh');
+        return $this->put('/api/v0/system/auth/refresh');
     }
 
     /**
@@ -73,7 +73,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function addLabRepo(array $data): array
     {
-        return $this->post('/v0/lab_repos', $data);
+        return $this->post('/api/v0/lab_repos', $data);
     }
 
     /**
@@ -81,7 +81,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getLabRepos(): array
     {
-        return $this->get('/v0/lab_repos');
+        return $this->get('/api/v0/lab_repos');
     }
 
     /**
@@ -89,7 +89,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function refreshLabRepos(): array
     {
-        return $this->put('/v0/lab_repos/refresh');
+        return $this->put('/api/v0/lab_repos/refresh');
     }
 
     /**
@@ -97,7 +97,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function deleteLabRepo(string $repoId): array
     {
-        return $this->delete("/v0/lab_repos/{$repoId}");
+        return $this->delete("/api/v0/lab_repos/{$repoId}");
     }
 
     /**
@@ -105,7 +105,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getComputeHosts(): array
     {
-        return $this->get('/v0/system/compute_hosts');
+        return $this->get('/api/v0/system/compute_hosts');
     }
 
     /**
@@ -113,7 +113,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getComputeHostsConfiguration(): array
     {
-        return $this->get('/v0/system/compute_hosts/configuration');
+        return $this->get('/api/v0/system/compute_hosts/configuration');
     }
 
     /**
@@ -121,7 +121,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function updateComputeHostsConfiguration(array $data): array
     {
-        return $this->patch('/v0/system/compute_hosts/configuration', $data);
+        return $this->patch('/api/v0/system/compute_hosts/configuration', $data);
     }
 
     /**
@@ -129,7 +129,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getComputeHost(string $computeId): array
     {
-        return $this->get("/v0/system/compute_hosts/{$computeId}");
+        return $this->get("/api/v0/system/compute_hosts/{$computeId}");
     }
 
     /**
@@ -137,7 +137,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function updateComputeHost(string $computeId, array $data): array
     {
-        return $this->patch("/v0/system/compute_hosts/{$computeId}", $data);
+        return $this->patch("/api/v0/system/compute_hosts/{$computeId}", $data);
     }
 
     /**
@@ -145,7 +145,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function deleteComputeHost(string $computeId): array
     {
-        return $this->delete("/v0/system/compute_hosts/{$computeId}");
+        return $this->delete("/api/v0/system/compute_hosts/{$computeId}");
     }
 
     /**
@@ -153,7 +153,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getExternalConnectors(): array
     {
-        return $this->get('/v0/system/external_connectors');
+        return $this->get('/api/v0/system/external_connectors');
     }
 
     /**
@@ -161,7 +161,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function updateExternalConnectors(): array
     {
-        return $this->put('/v0/system/external_connectors');
+        return $this->put('/api/v0/system/external_connectors');
     }
 
     /**
@@ -169,7 +169,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getExternalConnector(string $connectorId): array
     {
-        return $this->get("/v0/system/external_connectors/{$connectorId}");
+        return $this->get("/api/v0/system/external_connectors/{$connectorId}");
     }
 
     /**
@@ -177,7 +177,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function updateExternalConnector(string $connectorId, array $data): array
     {
-        return $this->patch("/v0/system/external_connectors/{$connectorId}", $data);
+        return $this->patch("/api/v0/system/external_connectors/{$connectorId}", $data);
     }
 
     /**
@@ -185,7 +185,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function deleteExternalConnector(string $connectorId): array
     {
-        return $this->delete("/v0/system/external_connectors/{$connectorId}");
+        return $this->delete("/api/v0/system/external_connectors/{$connectorId}");
     }
 
     /**
@@ -193,7 +193,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getMaintenanceMode(): array
     {
-        return $this->get('/v0/system/maintenance_mode');
+        return $this->get('/api/v0/system/maintenance_mode');
     }
 
     /**
@@ -201,7 +201,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function updateMaintenanceMode(array $data): array
     {
-        return $this->patch('/v0/system/maintenance_mode', $data);
+        return $this->patch('/api/v0/system/maintenance_mode', $data);
     }
 
     /**
@@ -209,7 +209,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function addSystemNotice(array $data): array
     {
-        return $this->post('/v0/system/notices', $data);
+        return $this->post('/api/v0/system/notices', $data);
     }
 
     /**
@@ -217,7 +217,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getSystemNotices(): array
     {
-        return $this->get('/v0/system/notices');
+        return $this->get('/api/v0/system/notices');
     }
 
     /**
@@ -225,7 +225,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getSystemNotice(string $noticeId): array
     {
-        return $this->get("/v0/system/notices/{$noticeId}");
+        return $this->get("/api/v0/system/notices/{$noticeId}");
     }
 
     /**
@@ -233,7 +233,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function updateSystemNotice(string $noticeId, array $data): array
     {
-        return $this->patch("/v0/system/notices/{$noticeId}", $data);
+        return $this->patch("/api/v0/system/notices/{$noticeId}", $data);
     }
 
     /**
@@ -241,7 +241,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function deleteSystemNotice(string $noticeId): array
     {
-        return $this->delete("/v0/system/notices/{$noticeId}");
+        return $this->delete("/api/v0/system/notices/{$noticeId}");
     }
 
     /**
@@ -251,7 +251,7 @@ class SystemService extends BaseCiscoApiService
     {
         $response = \Illuminate\Support\Facades\Http::withToken($this->token)
             ->withOptions(['verify' => false])
-            ->get("{$this->baseUrl}/v0/system_archive");
+            ->get("{$this->baseUrl}/api/v0/system_archive");
 
         return $this->handleRawResponse($response, 'Unable to get system archive');
     }
@@ -261,7 +261,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getSystemHealth(): array
     {
-        return $this->get('/v0/system_health');
+        return $this->get('/api/v0/system_health');
     }
 
     /**
@@ -269,7 +269,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getSystemStats(): array
     {
-        return $this->get('/v0/system_stats');
+        return $this->get('/api/v0/system_stats');
     }
 
     /**
@@ -279,7 +279,7 @@ class SystemService extends BaseCiscoApiService
     {
         $response = \Illuminate\Support\Facades\Http::withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/json'])
-            ->get("{$this->baseUrl}/v0/system_information");
+            ->get("{$this->baseUrl}/api/v0/system_information");
 
         return $this->handleResponse($response, 'Unable to get system information');
     }
@@ -289,7 +289,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getAllConsoleKeys(): array
     {
-        return $this->get('/v0/keys/console');
+        return $this->get('/api/v0/keys/console');
     }
 
     /**
@@ -297,7 +297,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getAllVncKeys(): array
     {
-        return $this->get('/v0/keys/vnc');
+        return $this->get('/api/v0/keys/vnc');
     }
 }
 

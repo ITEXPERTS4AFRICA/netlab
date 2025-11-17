@@ -9,7 +9,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function getLicensing(): array
     {
-        return $this->get('/v0/licensing');
+        return $this->get('/api/v0/licensing');
     }
 
     /**
@@ -17,7 +17,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function setProductLicense(array $data): array
     {
-        return $this->put('/v0/licensing/product_license', $data);
+        return $this->put('/api/v0/licensing/product_license', $data);
     }
 
     /**
@@ -25,7 +25,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function updateLicensingFeatures(array $data): array
     {
-        return $this->patch('/v0/licensing/features', $data);
+        return $this->patch('/api/v0/licensing/features', $data);
     }
 
     /**
@@ -33,7 +33,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function getLicensingStatus(): array
     {
-        return $this->get('/v0/licensing/status');
+        return $this->get('/api/v0/licensing/status');
     }
 
     /**
@@ -41,7 +41,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function getLicensingTechSupport(): array
     {
-        return $this->get('/v0/licensing/tech_support');
+        return $this->get('/api/v0/licensing/tech_support');
     }
 
     /**
@@ -49,7 +49,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function setupLicensingTransport(array $data): array
     {
-        return $this->put('/v0/licensing/transport', $data);
+        return $this->put('/api/v0/licensing/transport', $data);
     }
 
     /**
@@ -57,7 +57,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function setupLicensingRegistration(array $data): array
     {
-        return $this->post('/v0/licensing/registration', $data);
+        return $this->post('/api/v0/licensing/registration', $data);
     }
 
     /**
@@ -65,7 +65,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function renewLicensingAuthorization(): array
     {
-        return $this->put('/v0/licensing/authorization/renew');
+        return $this->put('/api/v0/licensing/authorization/renew');
     }
 
     /**
@@ -73,7 +73,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function requestLicensingRenewal(): array
     {
-        return $this->put('/v0/licensing/registration/renew');
+        return $this->put('/api/v0/licensing/registration/renew');
     }
 
     /**
@@ -81,7 +81,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function deregisterLicensing(): array
     {
-        return $this->delete('/v0/licensing/deregistration');
+        return $this->delete('/api/v0/licensing/deregistration');
     }
 
     /**
@@ -89,7 +89,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function enableReservationMode(): array
     {
-        return $this->put('/v0/licensing/reservation/mode');
+        return $this->put('/api/v0/licensing/reservation/mode');
     }
 
     /**
@@ -97,7 +97,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function initiateReservationRequest(array $data): array
     {
-        return $this->post('/v0/licensing/reservation/request', $data);
+        return $this->post('/api/v0/licensing/reservation/request', $data);
     }
 
     /**
@@ -105,7 +105,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function completeReservation(array $data): array
     {
-        return $this->post('/v0/licensing/reservation/complete', $data);
+        return $this->post('/api/v0/licensing/reservation/complete', $data);
     }
 
     /**
@@ -113,7 +113,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function cancelReservation(): array
     {
-        return $this->delete('/v0/licensing/reservation/cancel');
+        return $this->delete('/api/v0/licensing/reservation/cancel');
     }
 
     /**
@@ -121,7 +121,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function releaseReservation(): array
     {
-        return $this->delete('/v0/licensing/reservation/release');
+        return $this->delete('/api/v0/licensing/reservation/release');
     }
 
     /**
@@ -129,7 +129,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function discardReservationCode(array $data): array
     {
-        return $this->post('/v0/licensing/reservation/discard', $data);
+        return $this->post('/api/v0/licensing/reservation/discard', $data);
     }
 
     /**
@@ -137,7 +137,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function getConfirmationCode(): array
     {
-        return $this->get('/v0/licensing/reservation/confirmation_code');
+        return $this->get('/api/v0/licensing/reservation/confirmation_code');
     }
 
     /**
@@ -145,7 +145,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function removeConfirmationCode(): array
     {
-        return $this->delete('/v0/licensing/reservation/confirmation_code');
+        return $this->delete('/api/v0/licensing/reservation/confirmation_code');
     }
 
     /**
@@ -153,7 +153,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function getReturnCode(): array
     {
-        return $this->get('/v0/licensing/reservation/return_code');
+        return $this->get('/api/v0/licensing/reservation/return_code');
     }
 
     /**
@@ -161,7 +161,7 @@ class LicensingService extends BaseCiscoApiService
      */
     public function removeReturnCode(): array
     {
-        return $this->delete('/v0/licensing/reservation/return_code');
+        return $this->delete('/api/v0/licensing/reservation/return_code');
     }
 }
 

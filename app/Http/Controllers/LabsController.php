@@ -14,91 +14,108 @@ class LabsController extends Controller
 {
     /**
      * Display a listing of the resource.
+     * Affiche uniquement les labs publiés (is_published = true)
      */
     public function index(Request $request, CiscoApiService $cisco)
     {
-        $token = session('cml_token');
-
-        // Check if CML token exists
-        if (!$token) {
-            return Inertia::render('labs/Labs', [
-                'labs' => [],
-                'pagination' => [
-                    'page' => 1,
-                    'per_page' => 2,
-                    'total' => 0,
-                    'total_pages' => 0,
-                ],
-                'error' => 'CML authentication required. Please log in to CML first.',
-            ]);
-        }
-
         try {
-            $labs_ids = Cache::has('labs_ids') ? Cache::get('labs_ids') : $cisco->getLabs($token);
+            // Récupérer uniquement les labs publiés depuis la base de données
+            $query = Lab::where('is_published', true)
+                ->withCount(['reservations' => function ($q) {
+                    $q->where('status', 'active')
+                      ->where('end_at', '>', now());
+                }])
+                ->orderBy('is_featured', 'desc') // Labs en avant en premier
+                ->orderBy('created_at', 'desc');
 
-
-            // Handle API errors
-
-            if (isset($labs_ids['error'])) {
-                return Inertia::render('labs/Labs', [
-                    'labs' => [],
-                    'pagination' => [
-                        'page' => 1,
-                        'per_page' => 9,
-                        'total' => 0,
-                        'total_pages' => 0,
-                    ],
-                    'error' => 'Unable to fetch labs from CML: ' . $labs_ids['error'],
-                ]);
+            // Recherche par titre ou description
+            if ($request->has('search') && $request->search) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('lab_title', 'like', "%{$search}%")
+                      ->orWhere('short_description', 'like', "%{$search}%")
+                      ->orWhere('lab_description', 'like', "%{$search}%");
+                });
             }
 
-            if (!Cache::has('labs_ids')) {
-                Cache::put('labs_ids', $labs_ids, now()->addMinutes(5));
+            // Filtre par difficulté
+            if ($request->has('difficulty') && $request->difficulty !== 'all') {
+                $query->where('difficulty_level', $request->difficulty);
             }
 
-            $page = max(1, (int) $request->query('page', 1));
-            $perPage = max(1, (int) $request->query('per_page', 11));
-            $total = count($labs_ids);
-            $totalPages = ceil($total / $perPage);
+            // Filtre par état (optionnel, pour compatibilité)
+            if ($request->has('state') && $request->state !== 'all') {
+                $query->where('state', $request->state);
+            }
 
-            $currentLabIds = array_slice($labs_ids, ($page - 1) * $perPage, $perPage);
+            // Pagination
+            $perPage = max(1, (int) $request->query('per_page', 12));
+            $labs = $query->paginate($perPage);
 
-            $labs = collect($currentLabIds)->map(function ($id) use ($cisco, $token) {
-                $response = $cisco->getlab($token, $id);
-                return !isset($response['error']) ? $response : null;
-            })->filter()->toArray();
-
-            foreach($labs as $key => $lab) {
-                $Lab = Lab::where('cml_id', $lab['id'])->first();
-                if(!$Lab) {
-                    Lab::create([
-                        'cml_id' => $lab['id'],
-                        'created' => $lab['created'],
-                        'modified' => $lab['modified'],
-                        'lab_description' => $lab['lab_description'],
-                        'node_count' => $lab['node_count'],
-                        'state' => $lab['state'],
-                        'lab_title' => $lab['lab_title'],
-                        'owner' => $lab['owner'],
-                        'link_count' => $lab['link_count'],
-                        'effective_permissions' => $lab['effective_permissions']
-                    ]);
+            // Formater les labs pour le frontend (compatibilité avec l'ancien format)
+            $formattedLabs = $labs->map(function ($lab) {
+                // Décoder lab_description si c'est une string JSON
+                $description = $lab->lab_description;
+                if (is_string($description)) {
+                    $decoded = json_decode($description, true);
+                    if (is_string($decoded)) {
+                        $description = $decoded;
+                    } elseif (is_array($decoded)) {
+                        $description = is_array($decoded) ? json_encode($decoded) : $description;
+                    }
                 }
-            }
-            return Inertia::render('labs/Labs', [
 
-                'labs' => $labs,
+                return [
+                    'id' => $lab->cml_id, // Utiliser cml_id pour compatibilité avec l'ancien système
+                    'db_id' => $lab->id, // ID de la base de données
+                    'state' => $lab->state ?? 'STOPPED',
+                    'lab_title' => $lab->lab_title ?? 'Sans titre',
+                    'lab_description' => $description ?? $lab->short_description ?? '',
+                    'short_description' => $lab->short_description,
+                    'node_count' => $lab->node_count ?? 0,
+                    'link_count' => $lab->link_count ?? 0,
+                    'created' => $lab->created ?? $lab->created_at->format('c'),
+                    'modified' => $lab->modified ?? $lab->updated_at->format('c'),
+                    // Métadonnées enrichies
+                    'price_cents' => $lab->price_cents,
+                    'currency' => $lab->currency ?? 'XOF',
+                    'difficulty_level' => $lab->difficulty_level,
+                    'estimated_duration_minutes' => $lab->estimated_duration_minutes,
+                    'is_featured' => $lab->is_featured,
+                    'rating' => $lab->rating,
+                    'rating_count' => $lab->rating_count,
+                    'view_count' => $lab->view_count,
+                    'reservation_count' => $lab->reservation_count,
+                    'active_reservations_count' => $lab->reservations_count ?? 0,
+                ];
+            });
+
+            return Inertia::render('labs/Labs', [
+                'labs' => $formattedLabs->toArray(),
                 'pagination' => [
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'total' => $total,
-                    'total_pages' => $totalPages,
+                    'page' => $labs->currentPage(),
+                    'per_page' => $labs->perPage(),
+                    'total' => $labs->total(),
+                    'total_pages' => $labs->lastPage(),
                 ],
             ]);
 
         } catch (\Exception $e) {
-            // Handle any unexpected errors
-            return redirect()->back()->with('error', 'An error occurred: ' . $e->getMessage());
+            \Log::error('Erreur récupération labs publiés', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return Inertia::render('labs/Labs', [
+                'labs' => [],
+                'pagination' => [
+                    'page' => 1,
+                    'per_page' => 12,
+                    'total' => 0,
+                    'total_pages' => 0,
+                ],
+                'error' => 'Une erreur est survenue lors de la récupération des labs: ' . $e->getMessage(),
+            ]);
         }
     }
 

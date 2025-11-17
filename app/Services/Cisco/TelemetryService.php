@@ -9,7 +9,7 @@ class TelemetryService extends BaseCiscoApiService
      */
     public function submitFeedback(array $data): array
     {
-        return $this->post('/v0/feedback', $data);
+        return $this->post('/api/v0/feedback', $data);
     }
 
     /**
@@ -17,7 +17,7 @@ class TelemetryService extends BaseCiscoApiService
      */
     public function getTelemetryEvents(): array
     {
-        return $this->get('/v0/telemetry/events');
+        return $this->get('/api/v0/telemetry/events');
     }
 
     /**
@@ -25,7 +25,7 @@ class TelemetryService extends BaseCiscoApiService
      */
     public function getTelemetrySettings(): array
     {
-        return $this->get('/v0/telemetry');
+        return $this->get('/api/v0/telemetry');
     }
 
     /**
@@ -33,7 +33,7 @@ class TelemetryService extends BaseCiscoApiService
      */
     public function setTelemetrySettings(array $data): array
     {
-        return $this->put('/v0/telemetry', $data);
+        return $this->put('/api/v0/telemetry', $data);
     }
 
     /**
@@ -41,7 +41,7 @@ class TelemetryService extends BaseCiscoApiService
      */
     public function getDiagnostics(string $category): array
     {
-        return $this->get("/v0/diagnostics/{$category}");
+        return $this->get("/api/v0/diagnostics/{$category}");
     }
 
     /**
@@ -49,7 +49,7 @@ class TelemetryService extends BaseCiscoApiService
      */
     public function getDiagnosticEventData(): array
     {
-        return $this->get('/v0/diagnostic_event_data');
+        return $this->get('/api/v0/diagnostic_event_data');
     }
 }
 

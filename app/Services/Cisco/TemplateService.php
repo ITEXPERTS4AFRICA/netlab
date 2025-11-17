@@ -16,8 +16,8 @@ class TemplateService extends BaseCiscoApiService
     public function saveAsTemplate(string $labId, array $metadata): array
     {
         // Récupérer la topologie du lab
-        $topology = $this->get("/v0/labs/{$labId}/topology");
-        $labInfo = $this->get("/v0/labs/{$labId}");
+        $topology = $this->get("/api/v0/labs/{$labId}/topology");
+        $labInfo = $this->get("/api/v0/labs/{$labId}");
 
         $template = [
             'id' => Str::uuid()->toString(),
@@ -59,18 +59,18 @@ class TemplateService extends BaseCiscoApiService
 
         // Préparer les données du lab
         $labData = $template['topology'];
-        
+
         // Appliquer les overrides
         if (isset($overrides['title'])) {
             $labData['lab_title'] = $overrides['title'];
         }
-        
+
         if (isset($overrides['description'])) {
             $labData['lab_description'] = $overrides['description'];
         }
 
         // Créer le lab via l'API
-        $result = $this->post('/v0/import', ['topology' => json_encode($labData)]);
+        $result = $this->post('/api/v0/import', ['topology' => json_encode($labData)]);
 
         return $result;
     }
@@ -253,7 +253,7 @@ class TemplateService extends BaseCiscoApiService
         if (isset($filters['tags'])) {
             $templateTags = $template['tags'] ?? [];
             $filterTags = is_array($filters['tags']) ? $filters['tags'] : [$filters['tags']];
-            
+
             if (!array_intersect($templateTags, $filterTags)) {
                 return false;
             }
@@ -263,7 +263,7 @@ class TemplateService extends BaseCiscoApiService
             $search = strtolower($filters['search']);
             $name = strtolower($template['name'] ?? '');
             $description = strtolower($template['description'] ?? '');
-            
+
             if (strpos($name, $search) === false && strpos($description, $search) === false) {
                 return false;
             }

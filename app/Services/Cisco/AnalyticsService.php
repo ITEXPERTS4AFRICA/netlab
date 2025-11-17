@@ -25,8 +25,8 @@ class AnalyticsService extends BaseCiscoApiService
      */
     public function getLabUsageStats(string $labId): array
     {
-        $labInfo = $this->get("/v0/labs/{$labId}");
-        
+        $labInfo = $this->get("/api/v0/labs/{$labId}");
+
         return [
             'lab_id' => $labId,
             'title' => $labInfo['lab_title'] ?? '',
@@ -43,7 +43,7 @@ class AnalyticsService extends BaseCiscoApiService
      */
     public function getUserUsageReport(string $userId, string $period = 'monthly'): array
     {
-        $labs = $this->get('/v0/labs?show_all=true');
+        $labs = $this->get('/api/v0/labs?show_all=true');
         $userLabs = collect($labs)->where('owner', $userId);
 
         return [
@@ -62,7 +62,7 @@ class AnalyticsService extends BaseCiscoApiService
     public function getPerformanceMetrics(): array
     {
         $cacheKey = 'analytics:performance';
-        
+
         return Cache::remember($cacheKey, 300, function() {
             $metrics = DB::table('api_metrics')
                 ->where('created_at', '>=', now()->subHours(24))
@@ -83,8 +83,8 @@ class AnalyticsService extends BaseCiscoApiService
      */
     public function getResourceStats(): array
     {
-        $labs = $this->get('/v0/labs?show_all=true');
-        
+        $labs = $this->get('/api/v0/labs?show_all=true');
+
         return [
             'total_labs' => count($labs),
             'running_labs' => collect($labs)->where('state', 'STARTED')->count(),
@@ -101,10 +101,10 @@ class AnalyticsService extends BaseCiscoApiService
     public function getUsageTrends(int $days = 30): array
     {
         $trends = [];
-        
+
         for ($i = 0; $i < $days; $i++) {
             $date = now()->subDays($i)->toDateString();
-            
+
             $trends[$date] = [
                 'date' => $date,
                 'api_calls' => $this->getApiCallsForDate($date),
@@ -155,7 +155,7 @@ class AnalyticsService extends BaseCiscoApiService
 
     protected function getRunningLabsCount(): int
     {
-        $labs = $this->get('/v0/labs?show_all=true');
+        $labs = $this->get('/api/v0/labs?show_all=true');
         return collect($labs)->where('state', 'STARTED')->count();
     }
 
@@ -164,7 +164,7 @@ class AnalyticsService extends BaseCiscoApiService
         $recentCalls = DB::table('api_metrics')
             ->where('created_at', '>=', now()->subMinutes(5))
             ->count();
-            
+
         return $recentCalls / 5; // calls per minute
     }
 }

@@ -15,9 +15,9 @@ import {
 } from '@/components/ui/sidebar';
 
 import { dashboard } from '@/routes';
-import { type NavItem } from '@/types';
+import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, SendToBackIcon, Zap, ExternalLink } from 'lucide-react';
+import { LayoutGrid, SendToBackIcon, Zap, ExternalLink, Users, Shield, Settings, FlaskConical } from 'lucide-react';
 import AppLogo from './app-logo';
 import { Badge } from '@/components/ui/badge';
 import { router } from '@inertiajs/react';
@@ -51,7 +51,10 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
-    const { userActiveReservations = [] } = usePage<{ userActiveReservations: ActiveReservation[] }>().props;
+    const page = usePage<SharedData & { userActiveReservations?: ActiveReservation[] }>();
+    const { userActiveReservations = [], auth } = page.props;
+    const user = auth.user;
+    const isAdmin = user && 'role' in user && user.role === 'admin';
 
     // Filter only active (non-expired) reservations
     const now = new Date();
@@ -71,6 +74,30 @@ export function AppSidebar() {
         });
     }
 
+    // Admin navigation items
+    const adminNavItems: NavItem[] = [
+        {
+            title: 'Tableau de bord',
+            href: '/admin',
+            icon: LayoutGrid,
+        },
+        {
+            title: 'Utilisateurs',
+            href: '/admin/users',
+            icon: Users,
+        },
+        {
+            title: 'Labs',
+            href: '/admin/labs',
+            icon: FlaskConical,
+        },
+        {
+            title: 'Configuration CML',
+            href: '/admin/cml-config',
+            icon: Settings,
+        },
+    ];
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -87,6 +114,19 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={dynamicNavItems} />
+
+                {/* Administration Section - Only visible for admins */}
+                {isAdmin && (
+                    <SidebarGroup>
+                        <SidebarGroupLabel className="flex items-center gap-2">
+                            <Shield className="h-4 w-4 text-red-600" />
+                            Administration
+                        </SidebarGroupLabel>
+                        <SidebarGroupContent>
+                            <NavMain items={adminNavItems} />
+                        </SidebarGroupContent>
+                    </SidebarGroup>
+                )}
 
                 {/* Active Labs Section */}
                 {activeLabs.length > 0 && (

@@ -23,6 +23,34 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
+        'is_active',
+        'avatar',
+        'bio',
+        'phone',
+        'organization',
+        'department',
+        'position',
+        'skills',
+        'certifications',
+        'education',
+        'total_reservations',
+        'total_labs_completed',
+        'last_activity_at',
+        'metadata',
+        // Champs CML
+        'cml_username',
+        'cml_user_id',
+        'cml_admin',
+        'cml_groups',
+        'cml_resource_pool_id',
+        'cml_pubkey',
+        'cml_directory_dn',
+        'cml_opt_in',
+        'cml_tour_version',
+        'cml_token',
+        'cml_token_expires_at',
+        'cml_owned_labs',
     ];
 
     /**
@@ -33,6 +61,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'cml_token', // Token CML ne doit pas être exposé dans les réponses JSON
     ];
 
     /**
@@ -45,6 +74,84 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
+            'skills' => 'array',
+            'certifications' => 'array',
+            'education' => 'array',
+            'metadata' => 'array',
+            'last_activity_at' => 'datetime',
+            // Casts CML
+            'cml_admin' => 'boolean',
+            'cml_groups' => 'array',
+            'cml_opt_in' => 'boolean',
+            'cml_token_expires_at' => 'datetime',
+            'cml_owned_labs' => 'array',
         ];
+    }
+
+    /**
+     * Vérifier si l'utilisateur est admin
+     */
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    /**
+     * Vérifier si l'utilisateur est instructeur
+     */
+    public function isInstructor(): bool
+    {
+        return $this->role === 'instructor';
+    }
+
+    /**
+     * Vérifier si l'utilisateur est étudiant
+     */
+    public function isStudent(): bool
+    {
+        return $this->role === 'student';
+    }
+
+    /**
+     * Relations
+     */
+    public function reservations()
+    {
+        return $this->hasMany(Reservation::class);
+    }
+
+    /**
+     * Vérifier si l'utilisateur est admin CML
+     */
+    public function isCmlAdmin(): bool
+    {
+        return $this->cml_admin === true;
+    }
+
+    /**
+     * Vérifier si l'utilisateur a un token CML valide
+     */
+    public function hasValidCmlToken(): bool
+    {
+        return !empty($this->cml_token) && 
+               $this->cml_token_expires_at && 
+               $this->cml_token_expires_at->isFuture();
+    }
+
+    /**
+     * Vérifier si l'utilisateur appartient à un groupe CML
+     */
+    public function belongsToCmlGroup(string $groupId): bool
+    {
+        return in_array($groupId, $this->cml_groups ?? []);
+    }
+
+    /**
+     * Vérifier si l'utilisateur possède un lab CML
+     */
+    public function ownsCmlLab(string $labId): bool
+    {
+        return in_array($labId, $this->cml_owned_labs ?? []);
     }
 }

@@ -22,7 +22,10 @@ import {
     AlertTriangle,
     Search,
     Activity,
-    X
+    X,
+    Star,
+    DollarSign,
+    TrendingUp
 } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { useState, useMemo, useEffect } from 'react';
@@ -36,12 +39,25 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 type Lab = {
     id: string;
+    db_id?: number;
     state: string;
     lab_title: string;
     node_count: string|number;
     lab_description: string;
+    short_description?: string;
     created: string;
     modified: string;
+    // Métadonnées enrichies
+    price_cents?: number;
+    currency?: string;
+    difficulty_level?: string;
+    estimated_duration_minutes?: number;
+    is_featured?: boolean;
+    rating?: number;
+    rating_count?: number;
+    view_count?: number;
+    reservation_count?: number;
+    active_reservations_count?: number;
 };
 
 type Pagination = {
@@ -452,7 +468,17 @@ export default function Labs() {
                     >
                         {filteredLabs.map((lab, index) => (
                             <motion.div key={lab.id} variants={cardVariants} whileHover="hover">
-                                <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-card via-card/95 to-card/80 hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500">
+                                <Card className={`group relative overflow-hidden border-0 bg-gradient-to-br from-card via-card/95 to-card/80 hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 ${lab.is_featured ? 'ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-400/10' : ''}`}>
+                                    {/* Badge "En avant" */}
+                                    {lab.is_featured && (
+                                        <div className="absolute top-3 right-3 z-10">
+                                            <Badge className="bg-yellow-500 text-white border-0 shadow-lg">
+                                                <Star className="h-3 w-3 mr-1 fill-white" />
+                                                En avant
+                                            </Badge>
+                                        </div>
+                                    )}
+
                                     {/* Status gradient stripe */}
                                     <motion.div
                                         className={`absolute top-0 left-0 right-0 h-1 ${
@@ -472,11 +498,29 @@ export default function Labs() {
 
                                     <CardHeader className="pb-4">
                                         <div className="flex items-start justify-between">
-                                            <div className="flex-1 min-w-0">
-                                                <CardTitle className="text-xl font-bold line-clamp-2 mb-3 group-hover:text-primary transition-colors duration-300">
-                                                    {lab.lab_title}
-                                                </CardTitle>
-                                                {getStatusBadge(lab.state)}
+                                            <div className="flex-1 min-w-0 pr-2">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <CardTitle className="text-xl font-bold line-clamp-2 group-hover:text-primary transition-colors duration-300">
+                                                        {lab.lab_title}
+                                                    </CardTitle>
+                                                    {lab.is_featured && (
+                                                        <Star className="h-5 w-5 text-yellow-400 fill-yellow-400 flex-shrink-0" />
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    {getStatusBadge(lab.state)}
+                                                    {lab.difficulty_level && (
+                                                        <Badge variant="outline" className="text-xs">
+                                                            {lab.difficulty_level}
+                                                        </Badge>
+                                                    )}
+                                                    {lab.rating && lab.rating_count > 0 && (
+                                                        <Badge variant="outline" className="text-xs">
+                                                            <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
+                                                            {lab.rating.toFixed(1)} ({lab.rating_count})
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             {/* Status indicator */}
@@ -504,11 +548,39 @@ export default function Labs() {
 
                                     <CardContent className="space-y-6">
                                         {/* Description */}
-                                        {lab.lab_description && (
+                                        {(lab.short_description || lab.lab_description) && (
                                             <p className="text-muted-foreground line-clamp-2 text-sm leading-relaxed">
-                                                {lab.lab_description}
+                                                {lab.short_description || lab.lab_description}
                                             </p>
                                         )}
+
+                                        {/* Prix et Durée */}
+                                        <div className="flex items-center gap-4 text-sm">
+                                            {lab.price_cents && lab.price_cents > 0 ? (
+                                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
+                                                    <DollarSign className="h-4 w-4 text-primary" />
+                                                    <span className="font-semibold text-primary">
+                                                        {((lab.price_cents || 0) / 100).toLocaleString('fr-FR')} {lab.currency || 'XOF'}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <Badge variant="secondary" className="text-xs">
+                                                    Gratuit
+                                                </Badge>
+                                            )}
+                                            {lab.estimated_duration_minutes && (
+                                                <div className="flex items-center gap-2 text-muted-foreground">
+                                                    <Clock className="h-4 w-4" />
+                                                    <span>{lab.estimated_duration_minutes} min</span>
+                                                </div>
+                                            )}
+                                            {lab.view_count > 0 && (
+                                                <div className="flex items-center gap-2 text-muted-foreground">
+                                                    <TrendingUp className="h-4 w-4" />
+                                                    <span>{lab.view_count} vues</span>
+                                                </div>
+                                            )}
+                                        </div>
 
                                         {/* Stats Grid */}
                                         <div className="grid grid-cols-2 gap-4">
@@ -530,7 +602,7 @@ export default function Labs() {
                                                 <Clock className="h-5 w-5 text-[hsl(var(--chart-5))]" />
                                                 <div>
                                                     <div className="text-sm font-medium">
-                                                        {new Date(lab.modified).toLocaleDateString('en-US', {
+                                                        {new Date(lab.modified).toLocaleDateString('fr-FR', {
                                                             month: 'short',
                                                             day: 'numeric'
                                                         })}

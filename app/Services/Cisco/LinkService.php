@@ -9,7 +9,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function getLinkCondition(string $labId, string $linkId): array
     {
-        return $this->get("/v0/labs/{$labId}/links/{$linkId}/condition");
+        return $this->get("/api/v0/labs/{$labId}/links/{$linkId}/condition");
     }
 
     /**
@@ -17,7 +17,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function updateLinkCondition(string $labId, string $linkId, array $data): array
     {
-        return $this->patch("/v0/labs/{$labId}/links/{$linkId}/condition", $data);
+        return $this->patch("/api/v0/labs/{$labId}/links/{$linkId}/condition", $data);
     }
 
     /**
@@ -25,7 +25,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function deleteLinkCondition(string $labId, string $linkId): array
     {
-        return $this->delete("/v0/labs/{$labId}/links/{$linkId}/condition");
+        return $this->delete("/api/v0/labs/{$labId}/links/{$linkId}/condition");
     }
 
     /**
@@ -33,7 +33,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function createLink(string $labId, array $data): array
     {
-        return $this->post("/v0/labs/{$labId}/links", $data);
+        return $this->post("/api/v0/labs/{$labId}/links", $data);
     }
 
     /**
@@ -41,7 +41,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function getLabLinks(string $labId): array
     {
-        return $this->get("/v0/labs/{$labId}/links");
+        return $this->get("/api/v0/labs/{$labId}/links");
     }
 
     /**
@@ -49,7 +49,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function getLink(string $labId, string $linkId): array
     {
-        return $this->get("/v0/labs/{$labId}/links/{$linkId}");
+        return $this->get("/api/v0/labs/{$labId}/links/{$linkId}");
     }
 
     /**
@@ -57,7 +57,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function deleteLink(string $labId, string $linkId): array
     {
-        return $this->delete("/v0/labs/{$labId}/links/{$linkId}");
+        return $this->delete("/api/v0/labs/{$labId}/links/{$linkId}");
     }
 
     /**
@@ -65,7 +65,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function startLink(string $labId, string $linkId): array
     {
-        return $this->put("/v0/labs/{$labId}/links/{$linkId}/state/start");
+        return $this->put("/api/v0/labs/{$labId}/links/{$linkId}/state/start");
     }
 
     /**
@@ -73,7 +73,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function stopLink(string $labId, string $linkId): array
     {
-        return $this->put("/v0/labs/{$labId}/links/{$linkId}/state/stop");
+        return $this->put("/api/v0/labs/{$labId}/links/{$linkId}/state/stop");
     }
 
     /**
@@ -81,7 +81,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function checkLinkIfConverged(string $labId, string $linkId): array
     {
-        return $this->get("/v0/labs/{$labId}/links/{$linkId}/check_if_converged");
+        return $this->get("/api/v0/labs/{$labId}/links/{$linkId}/check_if_converged");
     }
 
     /**
@@ -89,7 +89,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function startLinkCapture(string $labId, string $linkId): array
     {
-        return $this->put("/v0/labs/{$labId}/links/{$linkId}/capture/start");
+        return $this->put("/api/v0/labs/{$labId}/links/{$linkId}/capture/start");
     }
 
     /**
@@ -97,7 +97,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function stopLinkCapture(string $labId, string $linkId): array
     {
-        return $this->put("/v0/labs/{$labId}/links/{$linkId}/capture/stop");
+        return $this->put("/api/v0/labs/{$labId}/links/{$linkId}/capture/stop");
     }
 
     /**
@@ -105,7 +105,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function getLinkCaptureStatus(string $labId, string $linkId): array
     {
-        return $this->get("/v0/labs/{$labId}/links/{$linkId}/capture/status");
+        return $this->get("/api/v0/labs/{$labId}/links/{$linkId}/capture/status");
     }
 
     /**
@@ -113,7 +113,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function getLinkCaptureKey(string $labId, string $linkId): array
     {
-        return $this->get("/v0/labs/{$labId}/links/{$linkId}/capture/key");
+        return $this->get("/api/v0/labs/{$labId}/links/{$linkId}/capture/key");
     }
 
     /**
@@ -124,7 +124,7 @@ class LinkService extends BaseCiscoApiService
         $response = \Illuminate\Support\Facades\Http::withToken($this->token)
             ->withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/octet-stream'])
-            ->get("{$this->baseUrl}/v0/pcap/{$linkCaptureKey}");
+            ->get("{$this->baseUrl}/api/v0/pcap/{$linkCaptureKey}");
 
         return $this->handleRawResponse($response, 'Unable to download PCAP');
     }
@@ -134,7 +134,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function getPcapPackets(string $linkCaptureKey): array
     {
-        return $this->get("/v0/pcap/{$linkCaptureKey}/packets");
+        return $this->get("/api/v0/pcap/{$linkCaptureKey}/packets");
     }
 
     /**
@@ -145,7 +145,7 @@ class LinkService extends BaseCiscoApiService
         $response = \Illuminate\Support\Facades\Http::withToken($this->token)
             ->withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/octet-stream'])
-            ->get("{$this->baseUrl}/v0/pcap/{$linkCaptureKey}/packet/{$packetId}");
+            ->get("{$this->baseUrl}/api/v0/pcap/{$linkCaptureKey}/packet/{$packetId}");
 
         return $this->handleRawResponse($response, 'Unable to download PCAP packet');
     }

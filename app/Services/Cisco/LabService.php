@@ -10,7 +10,7 @@ class LabService extends BaseCiscoApiService
     public function getLabs(): array
     {
         return $this->getCached(
-            '/v0/labs?show_all=true',
+            '/api/v0/labs?show_all=true',
             'labs:all',
             $this->cache->getTtl('labs')
         );
@@ -22,7 +22,7 @@ class LabService extends BaseCiscoApiService
     public function getLab(string $id): array
     {
         return $this->getCached(
-            "/v0/labs/{$id}",
+            "/api/v0/labs/{$id}",
             "lab:{$id}",
             $this->cache->getTtl('lab')
         );
@@ -33,7 +33,7 @@ class LabService extends BaseCiscoApiService
      */
     public function startLab(string $id): array
     {
-        $result = $this->put("/v0/labs/{$id}/start");
+        $result = $this->put("/api/v0/labs/{$id}/start");
         $this->cache->invalidateLab($id);
         return $result;
     }
@@ -43,7 +43,7 @@ class LabService extends BaseCiscoApiService
      */
     public function stopLab(string $id): array
     {
-        $result = $this->put("/v0/labs/{$id}/stop");
+        $result = $this->put("/api/v0/labs/{$id}/stop");
         $this->cache->invalidateLab($id);
         return $result;
     }
@@ -53,7 +53,7 @@ class LabService extends BaseCiscoApiService
      */
     public function wipeLab(string $id): array
     {
-        $result = $this->put("/v0/labs/{$id}/wipe");
+        $result = $this->put("/api/v0/labs/{$id}/wipe");
         $this->cache->invalidateLab($id);
         return $result;
     }
@@ -63,7 +63,7 @@ class LabService extends BaseCiscoApiService
      */
     public function deleteLab(string $id): array
     {
-        $result = $this->delete("/v0/labs/{$id}");
+        $result = $this->delete("/api/v0/labs/{$id}");
         $this->cache->invalidateLab($id);
         $this->cache->forget('labs:all');
         return $result;
@@ -74,7 +74,7 @@ class LabService extends BaseCiscoApiService
      */
     public function updateLab(string $id, array $data): array
     {
-        return $this->patch("/v0/labs/{$id}", $data);
+        return $this->patch("/api/v0/labs/{$id}", $data);
     }
 
     /**
@@ -82,7 +82,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getLabState(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/state");
+        return $this->get("/api/v0/labs/{$id}/state");
     }
 
     /**
@@ -93,7 +93,7 @@ class LabService extends BaseCiscoApiService
         $response = \Illuminate\Support\Facades\Http::withToken($this->token)
             ->withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/yaml'])
-            ->get("{$this->baseUrl}/v0/labs/{$id}/pyats_testbed");
+            ->get("{$this->baseUrl}/api/v0/labs/{$id}/pyats_testbed");
 
         return $this->handleRawResponse($response, 'Unable to fetch pyATS testbed');
     }
@@ -103,7 +103,7 @@ class LabService extends BaseCiscoApiService
      */
     public function checkIfConverged(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/check_if_converged");
+        return $this->get("/api/v0/labs/{$id}/check_if_converged");
     }
 
     /**
@@ -111,7 +111,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getTopology(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/topology");
+        return $this->get("/api/v0/labs/{$id}/topology");
     }
 
     /**
@@ -119,7 +119,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getLabSchema(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/topology");
+        return $this->get("/api/v0/labs/{$id}/topology");
     }
 
     /**
@@ -130,7 +130,7 @@ class LabService extends BaseCiscoApiService
         $response = \Illuminate\Support\Facades\Http::withToken($this->token)
             ->withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/yaml'])
-            ->get("{$this->baseUrl}/v0/labs/{$id}/download");
+            ->get("{$this->baseUrl}/api/v0/labs/{$id}/download");
 
         return $this->handleRawResponse($response, 'Unable to download lab');
     }
@@ -140,7 +140,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getLabAnnotations(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/annotations");
+        return $this->get("/api/v0/labs/{$id}/annotations");
     }
 
     /**
@@ -148,7 +148,7 @@ class LabService extends BaseCiscoApiService
      */
     public function createLabAnnotation(string $id, array $data): array
     {
-        return $this->post("/v0/labs/{$id}/annotations", $data);
+        return $this->post("/api/v0/labs/{$id}/annotations", $data);
     }
 
     /**
@@ -156,7 +156,7 @@ class LabService extends BaseCiscoApiService
      */
     public function updateLabAnnotation(string $id, string $annotationId, array $data): array
     {
-        return $this->patch("/v0/labs/{$id}/annotations/{$annotationId}", $data);
+        return $this->patch("/api/v0/labs/{$id}/annotations/{$annotationId}", $data);
     }
 
     /**
@@ -164,7 +164,7 @@ class LabService extends BaseCiscoApiService
      */
     public function deleteLabAnnotation(string $id, string $annotationId): array
     {
-        return $this->delete("/v0/labs/{$id}/annotations/{$annotationId}");
+        return $this->delete("/api/v0/labs/{$id}/annotations/{$annotationId}");
     }
 
     /**
@@ -172,7 +172,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getLabEvents(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/events");
+        return $this->get("/api/v0/labs/{$id}/events");
     }
 
     /**
@@ -180,7 +180,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getConnectorMappings(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/connector_mappings");
+        return $this->get("/api/v0/labs/{$id}/connector_mappings");
     }
 
     /**
@@ -188,7 +188,7 @@ class LabService extends BaseCiscoApiService
      */
     public function updateConnectorMappings(string $id, array $data): array
     {
-        return $this->patch("/v0/labs/{$id}/connector_mappings", $data);
+        return $this->patch("/api/v0/labs/{$id}/connector_mappings", $data);
     }
 
     /**
@@ -196,7 +196,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getResourcePools(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/resource_pools");
+        return $this->get("/api/v0/labs/{$id}/resource_pools");
     }
 
     /**
@@ -204,7 +204,7 @@ class LabService extends BaseCiscoApiService
      */
     public function findNodeByLabel(string $id, string $searchQuery): array
     {
-        return $this->get("/v0/labs/{$id}/find/node/label/{$searchQuery}");
+        return $this->get("/api/v0/labs/{$id}/find/node/label/{$searchQuery}");
     }
 
     /**
@@ -212,7 +212,7 @@ class LabService extends BaseCiscoApiService
      */
     public function findNodesByTag(string $id, string $searchQuery): array
     {
-        return $this->get("/v0/labs/{$id}/find_all/node/tag/{$searchQuery}");
+        return $this->get("/api/v0/labs/{$id}/find_all/node/tag/{$searchQuery}");
     }
 
     /**
@@ -220,7 +220,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getLabElementState(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/lab_element_state");
+        return $this->get("/api/v0/labs/{$id}/lab_element_state");
     }
 
     /**
@@ -228,7 +228,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getSimulationStats(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/simulation_stats");
+        return $this->get("/api/v0/labs/{$id}/simulation_stats");
     }
 
     /**
@@ -236,7 +236,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getLabTile(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/tile");
+        return $this->get("/api/v0/labs/{$id}/tile");
     }
 
     /**
@@ -244,7 +244,7 @@ class LabService extends BaseCiscoApiService
      */
     public function createInterfaces(string $id, array $data): array
     {
-        return $this->post("/v0/labs/{$id}/interfaces", $data);
+        return $this->post("/api/v0/labs/{$id}/interfaces", $data);
     }
 
     /**
@@ -252,7 +252,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getSmartAnnotations(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/smart_annotations");
+        return $this->get("/api/v0/labs/{$id}/smart_annotations");
     }
 
     /**
@@ -260,7 +260,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getSmartAnnotation(string $id, string $smartAnnotationId): array
     {
-        return $this->get("/v0/labs/{$id}/smart_annotations/{$smartAnnotationId}");
+        return $this->get("/api/v0/labs/{$id}/smart_annotations/{$smartAnnotationId}");
     }
 
     /**
@@ -268,7 +268,7 @@ class LabService extends BaseCiscoApiService
      */
     public function updateSmartAnnotation(string $id, string $smartAnnotationId, array $data): array
     {
-        return $this->patch("/v0/labs/{$id}/smart_annotations/{$smartAnnotationId}", $data);
+        return $this->patch("/api/v0/labs/{$id}/smart_annotations/{$smartAnnotationId}", $data);
     }
 
     /**
@@ -276,7 +276,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getSampleLabs(): array
     {
-        return $this->get('/v0/sample/labs');
+        return $this->get('/api/v0/sample/labs');
     }
 
     /**
@@ -284,7 +284,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getSampleLab(string $labId): array
     {
-        return $this->get("/v0/sample/labs/{$labId}");
+        return $this->get("/api/v0/sample/labs/{$labId}");
     }
 
     /**
@@ -292,7 +292,7 @@ class LabService extends BaseCiscoApiService
      */
     public function createLab(array $data): array
     {
-        return $this->post('/v0/labs', $data);
+        return $this->post('/api/v0/labs', $data);
     }
 
     /**
@@ -300,7 +300,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getLabGroups(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/groups");
+        return $this->get("/api/v0/labs/{$id}/groups");
     }
 
     /**
@@ -308,7 +308,7 @@ class LabService extends BaseCiscoApiService
      */
     public function updateLabGroups(string $id, array $data): array
     {
-        return $this->put("/v0/labs/{$id}/groups", $data);
+        return $this->put("/api/v0/labs/{$id}/groups", $data);
     }
 
     /**
@@ -316,7 +316,7 @@ class LabService extends BaseCiscoApiService
      */
     public function bootstrapLab(string $id, array $data = []): array
     {
-        return $this->put("/v0/labs/{$id}/bootstrap", $data);
+        return $this->put("/api/v0/labs/{$id}/bootstrap", $data);
     }
 
     /**
@@ -324,7 +324,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getLabAssociations(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/associations");
+        return $this->get("/api/v0/labs/{$id}/associations");
     }
 
     /**
@@ -332,7 +332,7 @@ class LabService extends BaseCiscoApiService
      */
     public function updateLabAssociations(string $id, array $data): array
     {
-        return $this->patch("/v0/labs/{$id}/associations", $data);
+        return $this->patch("/api/v0/labs/{$id}/associations", $data);
     }
 
     /**
@@ -340,7 +340,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getLabLayer3Addresses(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/layer3_addresses");
+        return $this->get("/api/v0/labs/{$id}/layer3_addresses");
     }
 
     /**
@@ -348,7 +348,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getBuildConfigurations(): array
     {
-        return $this->get('/v0/build_configurations');
+        return $this->get('/api/v0/build_configurations');
     }
 
     /**
@@ -356,7 +356,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getLabInterfaces(string $id): array
     {
-        return $this->get("/v0/labs/{$id}/interfaces");
+        return $this->get("/api/v0/labs/{$id}/interfaces");
     }
 }
 

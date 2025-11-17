@@ -9,7 +9,7 @@ class CiscoApiServiceTest extends TestCase
     public function test_auth_extended_success_stores_token()
     {
         Http::fake([
-            '*/v0/auth_extended' => Http::response(['token' => 'abc123'], 200),
+            '*/api/v0/auth_extended' => Http::response(['token' => 'abc123'], 200),
         ]);
 
         $service = new CiscoApiService();
@@ -23,7 +23,7 @@ class CiscoApiServiceTest extends TestCase
     public function test_auth_extended_failure_returns_error()
     {
         Http::fake([
-            '*/v0/auth_extended' => Http::response([], 403),
+            '*/api/v0/auth_extended' => Http::response([], 403),
         ]);
 
         $service = new CiscoApiService();

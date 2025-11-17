@@ -12,7 +12,7 @@ class AuthService extends BaseCiscoApiService
     public function authExtended(string $username, string $password): array
     {
         try {
-            $url = "{$this->baseUrl}/v0/auth_extended";
+            $url = "{$this->baseUrl}/api/v0/auth_extended";
             $response = Http::withOptions(['verify' => false])
                 ->withHeaders([
                     'Content-Type' => 'application/json',
@@ -35,7 +35,7 @@ class AuthService extends BaseCiscoApiService
             if ($response->status() === 403) {
                 return ['error' => 'Accès refusé. Identifiants invalides.'];
             }
-            
+
             return ['error' => 'Authentification incorrecte', 'status' => $response->status()];
         } catch (\Exception $e) {
             return ['error' => 'Exception: ' . $e->getMessage()];
@@ -50,11 +50,11 @@ class AuthService extends BaseCiscoApiService
     public function logout($token = null): mixed
     {
         $tokenToUse = $token ?? $this->token;
-        
+
         $response = Http::withToken($tokenToUse)
             ->withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/json'])
-            ->delete("{$this->baseUrl}/v0/logout");
+            ->delete("{$this->baseUrl}/api/v0/logout");
 
         return $response->successful() ? $response : $response->json();
     }
@@ -69,7 +69,7 @@ class AuthService extends BaseCiscoApiService
         }
 
         try {
-            $url = "{$this->baseUrl}/v0/revoke";
+            $url = "{$this->baseUrl}/api/v0/revoke";
             Http::withToken($this->token)
                 ->withOptions(['verify' => false])
                 ->post($url);
@@ -89,7 +89,7 @@ class AuthService extends BaseCiscoApiService
     {
         $response = Http::withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/json'])
-            ->get("{$this->baseUrl}/v0/web_session_timeout");
+            ->get("{$this->baseUrl}/api/v0/web_session_timeout");
 
         return $this->handleResponse($response, 'Unable to get web session timeout');
     }
@@ -99,7 +99,7 @@ class AuthService extends BaseCiscoApiService
      */
     public function updateWebSessionTimeout(int $timeout): array
     {
-        return $this->patch("/v0/web_session_timeout/{$timeout}");
+        return $this->patch("/api/v0/web_session_timeout/{$timeout}");
     }
 
     /**
@@ -113,7 +113,7 @@ class AuthService extends BaseCiscoApiService
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
                 ])
-                ->post("{$this->baseUrl}/v0/authenticate", [
+                ->post("{$this->baseUrl}/api/v0/authenticate", [
                     'username' => $username,
                     'password' => $password,
                 ]);
@@ -138,7 +138,7 @@ class AuthService extends BaseCiscoApiService
      */
     public function authOk(): array
     {
-        return $this->get('/v0/authok');
+        return $this->get('/api/v0/authok');
     }
 }
 

@@ -9,7 +9,7 @@ class GroupService extends BaseCiscoApiService
      */
     public function getGroups(): array
     {
-        return $this->get('/v0/groups');
+        return $this->get('/api/v0/groups');
     }
 
     /**
@@ -17,7 +17,7 @@ class GroupService extends BaseCiscoApiService
      */
     public function createGroup(array $data): array
     {
-        return $this->post('/v0/groups', $data);
+        return $this->post('/api/v0/groups', $data);
     }
 
     /**
@@ -25,7 +25,7 @@ class GroupService extends BaseCiscoApiService
      */
     public function getGroup(string $groupId): array
     {
-        return $this->get("/v0/groups/{$groupId}");
+        return $this->get("/api/v0/groups/{$groupId}");
     }
 
     /**
@@ -33,7 +33,7 @@ class GroupService extends BaseCiscoApiService
      */
     public function deleteGroup(string $groupId): array
     {
-        return $this->delete("/v0/groups/{$groupId}");
+        return $this->delete("/api/v0/groups/{$groupId}");
     }
 
     /**
@@ -41,7 +41,7 @@ class GroupService extends BaseCiscoApiService
      */
     public function updateGroup(string $groupId, array $data): array
     {
-        return $this->patch("/v0/groups/{$groupId}", $data);
+        return $this->patch("/api/v0/groups/{$groupId}", $data);
     }
 
     /**
@@ -49,7 +49,7 @@ class GroupService extends BaseCiscoApiService
      */
     public function getGroupLabs(string $groupId): array
     {
-        return $this->get("/v0/groups/{$groupId}/labs");
+        return $this->get("/api/v0/groups/{$groupId}/labs");
     }
 
     /**
@@ -57,7 +57,7 @@ class GroupService extends BaseCiscoApiService
      */
     public function getGroupMembers(string $groupId): array
     {
-        return $this->get("/v0/groups/{$groupId}/members");
+        return $this->get("/api/v0/groups/{$groupId}/members");
     }
 
     /**
@@ -65,7 +65,7 @@ class GroupService extends BaseCiscoApiService
      */
     public function getGroupUuidByName(string $groupName): array
     {
-        return $this->get("/v0/groups/{$groupName}/id");
+        return $this->get("/api/v0/groups/{$groupName}/id");
     }
 }
 

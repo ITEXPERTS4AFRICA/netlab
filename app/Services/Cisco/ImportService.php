@@ -9,7 +9,7 @@ class ImportService extends BaseCiscoApiService
      */
     public function importTopology(array $data): array
     {
-        return $this->post('/v0/import', $data);
+        return $this->post('/api/v0/import', $data);
     }
 
     /**
@@ -17,7 +17,7 @@ class ImportService extends BaseCiscoApiService
      */
     public function importVirl1xTopology(array $data): array
     {
-        return $this->post('/v0/import/virl-1x', $data);
+        return $this->post('/api/v0/import/virl-1x', $data);
     }
 
     /**
@@ -29,7 +29,7 @@ class ImportService extends BaseCiscoApiService
             'topology' => $yamlContent
         ], $options);
 
-        return $this->post('/v0/import', $data);
+        return $this->post('/api/v0/import', $data);
     }
 
     /**
@@ -37,7 +37,7 @@ class ImportService extends BaseCiscoApiService
      */
     public function importFromVirl1x(string $topology, bool $updateIfExists = false): array
     {
-        return $this->post('/v0/import/virl-1x', [
+        return $this->post('/api/v0/import/virl-1x', [
             'topology' => $topology,
             'update_if_exists' => $updateIfExists
         ]);

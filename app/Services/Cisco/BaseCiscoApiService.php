@@ -16,10 +16,29 @@ abstract class BaseCiscoApiService
 
     public function __construct()
     {
-        $this->baseUrl = config('services.cml.base_url');
+        // Utiliser la configuration depuis la base de données (Setting) en priorité
+        $this->baseUrl = $this->getCmlBaseUrl();
         $this->token = session('cml_token');
         $this->cache = app(CacheService::class);
         $this->resilience = app(ResilienceService::class);
+    }
+
+    /**
+     * Obtenir l'URL de base CML depuis la configuration
+     * Priorité : Base de données (Setting) > config > .env
+     */
+    protected function getCmlBaseUrl(): ?string
+    {
+        return \App\Helpers\CmlConfigHelper::getBaseUrl();
+    }
+
+    /**
+     * Obtenir les credentials CML depuis la configuration
+     * Priorité : Base de données (Setting) > config > .env
+     */
+    protected function getCmlCredentials(): array
+    {
+        return \App\Helpers\CmlConfigHelper::getCredentials();
     }
 
     /**
@@ -133,7 +152,9 @@ abstract class BaseCiscoApiService
     protected function handleResponse(Response $response, string $errorMessage): array
     {
         if ($response->successful()) {
-            return $response->json();
+            $json = $response->json();
+            // S'assurer qu'on retourne toujours un array
+            return is_array($json) ? $json : ['data' => $json];
         }
 
         return [
@@ -174,6 +195,22 @@ abstract class BaseCiscoApiService
     public function getToken(): ?string
     {
         return $this->token;
+    }
+
+    /**
+     * Définir l'URL de base
+     */
+    public function setBaseUrl(string $baseUrl): void
+    {
+        $this->baseUrl = rtrim($baseUrl, '/');
+    }
+
+    /**
+     * Obtenir l'URL de base
+     */
+    public function getBaseUrl(): string
+    {
+        return $this->baseUrl;
     }
 }
 

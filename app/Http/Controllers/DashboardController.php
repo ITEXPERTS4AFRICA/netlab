@@ -23,14 +23,22 @@ class DashboardController extends Controller
         $user = Auth::user();
         $token = session('cml_token');
 
-        $lab_id = $this->apiService->getLabs($token);
+        // Get labs from CML API
+        $lab_id = [];
+        if ($token) {
+            $this->apiService->setToken($token);
+            $lab_id = $this->apiService->getLabs();
+        }
 
         // Get lab statistics from database (local cache)
         // Check if the API response contains an error
         if (isset($lab_id['error'])) {
+            Log::warning('Failed to fetch labs from CML API', ['error' => $lab_id['error']]);
             $totalLabs = 0;
-        } else {
+        } elseif (is_array($lab_id)) {
             $totalLabs = count($lab_id);
+        } else {
+            $totalLabs = 0;
         }
         $activeReservations = Reservation::where('status', 'active')
             ->where('end_at', '>', now())
@@ -53,7 +61,7 @@ class DashboardController extends Controller
             ->where('end_at', '>', now())
             ->where('status', '!=', 'cancelled')
             ->get();
-        
+
 
         // Get CML data with caching and error handling
         $cmlLabsData = [];
@@ -62,12 +70,20 @@ class DashboardController extends Controller
 
         if ($token) {
             // Cache CML labs for 5 minutes
-            $cacheKeyLabs = 'cml_labs_dashboard_' . $token;
+            // Utiliser un hash du token pour éviter les clés trop longues
+            $tokenHash = substr(md5($token), 0, 16);
+            $cacheKeyLabs = 'cml_labs_dashboard_' . $tokenHash;
             $cmlLabsData = Cache::remember($cacheKeyLabs, now()->addMinutes(5), function () use ($token) {
                 try {
-                    if ($this->apiService->setToken($token)) {
-                        $labs = $this->apiService->getLabs($token);
-                        return is_array($labs) ? array_slice($labs, 0, 10) : [];
+                    $this->apiService->setToken($token);
+                    $labs = $this->apiService->getLabs();
+                    // Si c'est un array et qu'il n'y a pas d'erreur, retourner les labs
+                    if (is_array($labs) && !isset($labs['error'])) {
+                        return array_slice($labs, 0, 10);
+                    }
+                    // Si erreur, logger et retourner vide
+                    if (isset($labs['error'])) {
+                        Log::warning('Failed to fetch CML labs data', ['error' => $labs['error'], 'status' => $labs['status'] ?? 'unknown']);
                     }
                     return [];
                 } catch (\Exception $e) {
@@ -77,7 +93,7 @@ class DashboardController extends Controller
             });
 
             // Cache CML system health for 5 minutes
-            $cacheKeyHealth = 'cml_system_health_' . $token;
+            $cacheKeyHealth = 'cml_system_health_' . $tokenHash;
             $cmlSystemHealth = Cache::remember($cacheKeyHealth, now()->addMinutes(5), function () use ($token) {
                 try {
                     if ($this->apiService->setToken($token)) {
@@ -91,7 +107,7 @@ class DashboardController extends Controller
             });
 
             // Cache CML system stats for 5 minutes
-            $cacheKeyStats = 'cml_system_stats_' . $token;
+            $cacheKeyStats = 'cml_system_stats_' . $tokenHash;
             $systemStats = Cache::remember($cacheKeyStats, now()->addMinutes(5), function () use ($token) {
                 try {
                     if ($this->apiService->setToken($token)) {
@@ -118,16 +134,16 @@ class DashboardController extends Controller
         $weekReservations = Reservation::whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])->count();
         $monthReservations = Reservation::whereMonth('created_at', now()->month)->count();
 
-        // Calculate average session duration (SQLite compatible)
+        // Calculate average session duration (PostgreSQL compatible)
         $avgSessionDuration = Reservation::where('status', 'completed')
             ->whereNotNull('start_at')
             ->whereNotNull('end_at')
-            ->selectRaw('AVG((julianday(end_at) - julianday(start_at)) * 1440) as avg_duration')
+            ->selectRaw('AVG(EXTRACT(EPOCH FROM (end_at - start_at)) / 60) as avg_duration')
             ->first()
             ->avg_duration ?? 0;
 
-      
-     
+
+
 
         return Inertia::render('dashboard', [
             'stats' => [

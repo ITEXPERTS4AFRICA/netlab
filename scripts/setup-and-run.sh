@@ -28,7 +28,7 @@ echo "📦 Étape 2: Configuration de Node.js 20..."
 if [ -d "$HOME/.nvm" ]; then
     export NVM_DIR="$HOME/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    
+
     # Vérifier si Node.js 20 est installé
     if nvm list | grep -q "v20"; then
         nvm use 20
@@ -42,7 +42,7 @@ if [ -d "$HOME/.nvm" ]; then
     fi
 else
     echo "⚠️  nvm non trouvé. Installation de nvm..."
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/api/v0.39.0/install.sh | bash
     export NVM_DIR="$HOME/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     nvm install 20

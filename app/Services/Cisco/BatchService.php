@@ -12,19 +12,19 @@ class BatchService extends BaseCiscoApiService
      */
     public function startMultipleNodes(string $labId, array $nodeIds): array
     {
-        $responses = Http::pool(fn (Pool $pool) => 
-            collect($nodeIds)->map(fn ($nodeId) => 
+        $responses = Http::pool(fn (Pool $pool) =>
+            collect($nodeIds)->map(fn ($nodeId) =>
                 $pool->as($nodeId)
                     ->withToken($this->token)
                     ->withOptions(['verify' => false])
-                    ->put("{$this->baseUrl}/v0/labs/{$labId}/nodes/{$nodeId}/state/start")
+                    ->put("{$this->baseUrl}/api/v0/labs/{$labId}/nodes/{$nodeId}/state/start")
             )->all()
         );
 
         $results = [];
         foreach ($responses as $nodeId => $response) {
-            $results[$nodeId] = $response->successful() 
-                ? ['status' => 'started'] 
+            $results[$nodeId] = $response->successful()
+                ? ['status' => 'started']
                 : ['error' => $response->body()];
         }
 
@@ -39,19 +39,19 @@ class BatchService extends BaseCiscoApiService
      */
     public function stopMultipleNodes(string $labId, array $nodeIds): array
     {
-        $responses = Http::pool(fn (Pool $pool) => 
-            collect($nodeIds)->map(fn ($nodeId) => 
+        $responses = Http::pool(fn (Pool $pool) =>
+            collect($nodeIds)->map(fn ($nodeId) =>
                 $pool->as($nodeId)
                     ->withToken($this->token)
                     ->withOptions(['verify' => false])
-                    ->put("{$this->baseUrl}/v0/labs/{$labId}/nodes/{$nodeId}/state/stop")
+                    ->put("{$this->baseUrl}/api/v0/labs/{$labId}/nodes/{$nodeId}/state/stop")
             )->all()
         );
 
         $results = [];
         foreach ($responses as $nodeId => $response) {
-            $results[$nodeId] = $response->successful() 
-                ? ['status' => 'stopped'] 
+            $results[$nodeId] = $response->successful()
+                ? ['status' => 'stopped']
                 : ['error' => $response->body()];
         }
 
@@ -65,19 +65,19 @@ class BatchService extends BaseCiscoApiService
      */
     public function createMultipleLabs(array $labsData): array
     {
-        $responses = Http::pool(fn (Pool $pool) => 
-            collect($labsData)->map(fn ($data, $index) => 
+        $responses = Http::pool(fn (Pool $pool) =>
+            collect($labsData)->map(fn ($data, $index) =>
                 $pool->as($index)
                     ->withToken($this->token)
                     ->withOptions(['verify' => false])
-                    ->post("{$this->baseUrl}/v0/labs", $data)
+                    ->post("{$this->baseUrl}/api/v0/labs", $data)
             )->all()
         );
 
         $results = [];
         foreach ($responses as $index => $response) {
-            $results[$index] = $response->successful() 
-                ? $response->json() 
+            $results[$index] = $response->successful()
+                ? $response->json()
                 : ['error' => $response->body()];
         }
 
@@ -91,21 +91,21 @@ class BatchService extends BaseCiscoApiService
      */
     public function startMultipleLabs(array $labIds): array
     {
-        $responses = Http::pool(fn (Pool $pool) => 
-            collect($labIds)->map(fn ($labId) => 
+        $responses = Http::pool(fn (Pool $pool) =>
+            collect($labIds)->map(fn ($labId) =>
                 $pool->as($labId)
                     ->withToken($this->token)
                     ->withOptions(['verify' => false])
-                    ->put("{$this->baseUrl}/v0/labs/{$labId}/start")
+                    ->put("{$this->baseUrl}/api/v0/labs/{$labId}/start")
             )->all()
         );
 
         $results = [];
         foreach ($responses as $labId => $response) {
-            $results[$labId] = $response->successful() 
-                ? ['status' => 'started'] 
+            $results[$labId] = $response->successful()
+                ? ['status' => 'started']
                 : ['error' => $response->body()];
-            
+
             if ($response->successful()) {
                 $this->cache->invalidateLab($labId);
             }
@@ -119,21 +119,21 @@ class BatchService extends BaseCiscoApiService
      */
     public function stopMultipleLabs(array $labIds): array
     {
-        $responses = Http::pool(fn (Pool $pool) => 
-            collect($labIds)->map(fn ($labId) => 
+        $responses = Http::pool(fn (Pool $pool) =>
+            collect($labIds)->map(fn ($labId) =>
                 $pool->as($labId)
                     ->withToken($this->token)
                     ->withOptions(['verify' => false])
-                    ->put("{$this->baseUrl}/v0/labs/{$labId}/stop")
+                    ->put("{$this->baseUrl}/api/v0/labs/{$labId}/stop")
             )->all()
         );
 
         $results = [];
         foreach ($responses as $labId => $response) {
-            $results[$labId] = $response->successful() 
-                ? ['status' => 'stopped'] 
+            $results[$labId] = $response->successful()
+                ? ['status' => 'stopped']
                 : ['error' => $response->body()];
-            
+
             if ($response->successful()) {
                 $this->cache->invalidateLab($labId);
             }
@@ -147,19 +147,19 @@ class BatchService extends BaseCiscoApiService
      */
     public function bulkUpdateNodes(string $labId, array $updates): array
     {
-        $responses = Http::pool(fn (Pool $pool) => 
-            collect($updates)->map(fn ($data, $nodeId) => 
+        $responses = Http::pool(fn (Pool $pool) =>
+            collect($updates)->map(fn ($data, $nodeId) =>
                 $pool->as($nodeId)
                     ->withToken($this->token)
                     ->withOptions(['verify' => false])
-                    ->patch("{$this->baseUrl}/v0/labs/{$labId}/nodes/{$nodeId}", $data)
+                    ->patch("{$this->baseUrl}/api/v0/labs/{$labId}/nodes/{$nodeId}", $data)
             )->all()
         );
 
         $results = [];
         foreach ($responses as $nodeId => $response) {
-            $results[$nodeId] = $response->successful() 
-                ? $response->json() 
+            $results[$nodeId] = $response->successful()
+                ? $response->json()
                 : ['error' => $response->body()];
         }
 
@@ -173,21 +173,21 @@ class BatchService extends BaseCiscoApiService
      */
     public function deleteMultipleLabs(array $labIds): array
     {
-        $responses = Http::pool(fn (Pool $pool) => 
-            collect($labIds)->map(fn ($labId) => 
+        $responses = Http::pool(fn (Pool $pool) =>
+            collect($labIds)->map(fn ($labId) =>
                 $pool->as($labId)
                     ->withToken($this->token)
                     ->withOptions(['verify' => false])
-                    ->delete("{$this->baseUrl}/v0/labs/{$labId}")
+                    ->delete("{$this->baseUrl}/api/v0/labs/{$labId}")
             )->all()
         );
 
         $results = [];
         foreach ($responses as $labId => $response) {
-            $results[$labId] = $response->successful() 
-                ? ['status' => 'deleted'] 
+            $results[$labId] = $response->successful()
+                ? ['status' => 'deleted']
                 : ['error' => $response->body()];
-            
+
             if ($response->successful()) {
                 $this->cache->invalidateLab($labId);
             }
@@ -203,19 +203,19 @@ class BatchService extends BaseCiscoApiService
      */
     public function getMultipleNodeStates(string $labId, array $nodeIds): array
     {
-        $responses = Http::pool(fn (Pool $pool) => 
-            collect($nodeIds)->map(fn ($nodeId) => 
+        $responses = Http::pool(fn (Pool $pool) =>
+            collect($nodeIds)->map(fn ($nodeId) =>
                 $pool->as($nodeId)
                     ->withToken($this->token)
                     ->withOptions(['verify' => false])
-                    ->get("{$this->baseUrl}/v0/labs/{$labId}/nodes/{$nodeId}/state")
+                    ->get("{$this->baseUrl}/api/v0/labs/{$labId}/nodes/{$nodeId}/state")
             )->all()
         );
 
         $results = [];
         foreach ($responses as $nodeId => $response) {
-            $results[$nodeId] = $response->successful() 
-                ? $response->json() 
+            $results[$nodeId] = $response->successful()
+                ? $response->json()
                 : ['error' => $response->body()];
         }
 
@@ -227,19 +227,19 @@ class BatchService extends BaseCiscoApiService
      */
     public function getMultipleLabs(array $labIds): array
     {
-        $responses = Http::pool(fn (Pool $pool) => 
-            collect($labIds)->map(fn ($labId) => 
+        $responses = Http::pool(fn (Pool $pool) =>
+            collect($labIds)->map(fn ($labId) =>
                 $pool->as($labId)
                     ->withToken($this->token)
                     ->withOptions(['verify' => false])
-                    ->get("{$this->baseUrl}/v0/labs/{$labId}")
+                    ->get("{$this->baseUrl}/api/v0/labs/{$labId}")
             )->all()
         );
 
         $results = [];
         foreach ($responses as $labId => $response) {
-            $results[$labId] = $response->successful() 
-                ? $response->json() 
+            $results[$labId] = $response->successful()
+                ? $response->json()
                 : ['error' => $response->body()];
         }
 

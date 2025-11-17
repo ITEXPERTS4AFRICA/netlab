@@ -25,7 +25,7 @@ class EventService extends BaseCiscoApiService
      */
     public function streamLabEvents(string $labId, callable $callback): void
     {
-        $url = "{$this->baseUrl}/v0/labs/{$labId}/events/stream";
+        $url = "{$this->baseUrl}/api/v0/labs/{$labId}/events/stream";
         
         $stream = fopen($url, 'r', false, stream_context_create([
             'http' => [
@@ -123,7 +123,7 @@ public function getLabs(): array
     return app(CacheService::class)->remember(
         'labs.all',
         $this->cache->ttl['labs'],
-        fn() => $this->get('/v0/labs')
+        fn() => $this->get('/api/v0/labs')
     );
 }
 ```
@@ -231,7 +231,7 @@ class BatchService extends BaseCiscoApiService
         foreach ($nodeIds as $nodeId) {
             $promises[] = Http::async()
                 ->withToken($this->token)
-                ->put("{$this->baseUrl}/v0/labs/{$labId}/nodes/{$nodeId}/state/start");
+                ->put("{$this->baseUrl}/api/v0/labs/{$labId}/nodes/{$nodeId}/state/start");
         }
         
         return Http::pool(fn () => $promises);
@@ -245,7 +245,7 @@ class BatchService extends BaseCiscoApiService
         $results = [];
         
         foreach ($templates as $template) {
-            $results[] = $this->post('/v0/labs', $template);
+            $results[] = $this->post('/api/v0/labs', $template);
         }
         
         return $results;
@@ -401,7 +401,7 @@ class TemplateService extends BaseCiscoApiService
 {
     public function saveAsTemplate(string $labId, array $metadata): array
     {
-        $topology = $this->get("/v0/labs/{$labId}/topology");
+        $topology = $this->get("/api/v0/labs/{$labId}/topology");
         
         return [
             'id' => Str::uuid(),
@@ -418,7 +418,7 @@ class TemplateService extends BaseCiscoApiService
         
         $labData = array_merge($template['topology'], $overrides);
         
-        return $this->post('/v0/labs', $labData);
+        return $this->post('/api/v0/labs', $labData);
     }
     
     public function listTemplates(array $filters = []): array
@@ -510,12 +510,12 @@ class SearchService extends BaseCiscoApiService
 {
     public function searchLabs(array $criteria): array
     {
-        return $this->buildQuery('/v0/labs', $criteria);
+        return $this->buildQuery('/api/v0/labs', $criteria);
     }
     
     public function findNodesByType(string $labId, string $nodeType): array
     {
-        $nodes = $this->get("/v0/labs/{$labId}/nodes");
+        $nodes = $this->get("/api/v0/labs/{$labId}/nodes");
         return array_filter($nodes, fn($n) => $n['node_definition'] === $nodeType);
     }
     
@@ -614,7 +614,7 @@ protected function getCached(string $key, int $ttl, callable $callback)
 // Utilisation dans LabService
 public function getLabs(): array
 {
-    return $this->getCached('labs.all', 300, fn() => $this->get('/v0/labs'));
+    return $this->getCached('labs.all', 300, fn() => $this->get('/api/v0/labs'));
 }
 ```
 

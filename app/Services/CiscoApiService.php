@@ -41,7 +41,8 @@ class CiscoApiService
 
     public function __construct()
     {
-        $this->baseUrl = config('services.cml.base_url');
+        // Utiliser la configuration depuis la base de données (Setting) en priorité
+        $this->baseUrl = $this->getCmlBaseUrl();
         $this->token = session('cml_token');
 
         // Initialiser tous les services
@@ -58,6 +59,43 @@ class CiscoApiService
         $this->groups = new GroupService();
         $this->import = new ImportService();
         $this->console = new ConsoleService();
+
+        // Configurer l'URL de base pour tous les services
+        if ($this->baseUrl) {
+            $this->setBaseUrl($this->baseUrl);
+        }
+    }
+
+    /**
+     * Obtenir l'URL de base CML depuis la configuration
+     * Priorité : Base de données (Setting) > config > .env
+     */
+    protected function getCmlBaseUrl(): ?string
+    {
+        return \App\Helpers\CmlConfigHelper::getBaseUrl();
+    }
+
+    /**
+     * Définir l'URL de base pour tous les services
+     */
+    public function setBaseUrl(string $baseUrl): void
+    {
+        $this->baseUrl = rtrim($baseUrl, '/');
+
+        // Mettre à jour tous les services via leur méthode publique
+        $this->auth->setBaseUrl($this->baseUrl);
+        $this->labs->setBaseUrl($this->baseUrl);
+        $this->nodes->setBaseUrl($this->baseUrl);
+        $this->links->setBaseUrl($this->baseUrl);
+        $this->system->setBaseUrl($this->baseUrl);
+        $this->licensing->setBaseUrl($this->baseUrl);
+        $this->images->setBaseUrl($this->baseUrl);
+        $this->interfaces->setBaseUrl($this->baseUrl);
+        $this->resourcePools->setBaseUrl($this->baseUrl);
+        $this->telemetry->setBaseUrl($this->baseUrl);
+        $this->groups->setBaseUrl($this->baseUrl);
+        $this->import->setBaseUrl($this->baseUrl);
+        $this->console->setBaseUrl($this->baseUrl);
     }
 
     /**
@@ -409,7 +447,7 @@ class CiscoApiService
         return $this->interfaces->deleteInterface($labId, $interfaceId);
     }
 
-    // Image methods  
+    // Image methods
     public function getImageDefinitions(): array
     {
         return $this->images->getImageDefinitions();

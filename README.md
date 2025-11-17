@@ -121,6 +121,8 @@ L'application se connecte à une instance Cisco CML pour gérer les laboratoires
 
 ## 🧪 Tests
 
+### Tests généraux
+
 ```bash
 # Exécuter tous les tests
 composer test
@@ -128,6 +130,33 @@ composer test
 # Tests avec couverture
 php artisan test --coverage
 ```
+
+### Tests CML (TDD)
+
+```bash
+# Vérifier la connexion CML
+./scripts/test-cml-connection.sh
+
+# Tests de connexion de base
+php artisan test --filter CmlConnectionTest
+
+# Tests de tous les endpoints CML
+php artisan test --filter CmlEndpointsTest
+
+# Tous les tests CML
+php artisan test --filter Cml
+```
+
+**Configuration requise** : Ajoutez dans votre `.env` :
+```env
+CML_API_BASE_URL=https://54.38.146.213
+CML_USERNAME=votre_username
+CML_PASSWORD=votre_password
+```
+
+> ✅ L'URL de base CML est déjà configurée. Il ne reste qu'à ajouter vos identifiants.
+
+Voir [Guide TDD](./docs/TDD-GUIDE.md) pour plus de détails.
 
 ## 📝 License
 

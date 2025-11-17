@@ -12,15 +12,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Clock, Calendar, User, AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import { Clock, Calendar, User, AlertTriangle, CheckCircle, Info, Zap, DollarSign } from 'lucide-react';
 import { TimeSlotPicker, TimeSlot } from '@/components/ui/time-slot-picker';
 import { router } from '@inertiajs/react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 interface Lab {
   id: string;
   title?: string;
   description?: string;
   state: string;
+  price_cents?: number;
+  currency?: string;
+  db_id?: number;
 }
 
 interface LabReservationDialogProps {
@@ -32,11 +37,14 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
   const [open, setOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+  const [isInstant, setIsInstant] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
 
   const { data, setData, post, processing, errors, reset } = useForm({
     lab_id: lab.id,
     start_at: '',
     end_at: '',
+    instant: false,
   });
 
   // Generate time slots for the selected date
@@ -82,10 +90,27 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       lab_id: lab.id,
       start_at: startDateTime,
       end_at: endDateTime,
+      instant: isInstant,
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Calculer le prix estimé
+  const calculateEstimatedPrice = (): number => {
+    if (!lab.price_cents || lab.price_cents === 0) return 0;
+    if (!selectedSlot) return 0;
+    
+    // Calculer la durée en heures
+    const start = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.startTime}:00`);
+    const end = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.endTime}:00`);
+    const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    
+    // Prix par heure (ou prix fixe si durée < 1h)
+    return Math.max(lab.price_cents, Math.ceil(durationHours) * lab.price_cents);
+  };
+
+  const estimatedPrice = calculateEstimatedPrice();
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!data.start_at || !data.end_at) {
@@ -99,22 +124,72 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       return;
     }
 
-    post('reservations/custom-create', {
-      onSuccess: () => {
-        setOpen(false);
-        reset();
-        // Redirect to user's reserved labs page after successful reservation
-        router.visit('/labs/my-reserved', {
-          method: 'get',
-          preserveScroll: true,
-        });
-      },
-      onError: (errors) => {
-        console.error('Reservation error:', errors);
-        // Handle errors if needed
-      },
-      preserveScroll: true,
-    });
+    // Pour les réservations instantanées, ajuster start_at à maintenant
+    if (isInstant) {
+      const now = new Date();
+      const slotDate = selectedDate.toISOString().split('T')[0];
+      const endTime = selectedSlot?.endTime || '23:59';
+      const endDateTimeStr = `${slotDate}T${endTime}:00`;
+      
+      setData({
+        ...data,
+        start_at: now.toISOString(),
+        end_at: endDateTimeStr,
+        instant: true,
+      });
+    }
+
+    // Utiliser l'API REST au lieu de Inertia pour gérer le paiement
+    try {
+      // Utiliser cml_id pour trouver le lab
+      const response = await fetch(`/api/labs/reserve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin', // Inclure les cookies de session pour l'authentification
+        body: JSON.stringify({
+          lab_id: lab.id, // cml_id (UUID)
+          start_at: isInstant ? new Date().toISOString() : data.start_at,
+          end_at: data.end_at,
+          instant: isInstant,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        const errorMessage = result.error || result.message || 'Erreur lors de la création de la réservation';
+        console.error('Reservation error:', result);
+        throw new Error(errorMessage);
+      }
+
+      // Si un paiement est requis, rediriger vers CinetPay
+      if (result.requires_payment && result.payment_url) {
+        setPaymentUrl(result.payment_url);
+        window.location.href = result.payment_url;
+        return;
+      }
+
+      // Sinon, rediriger vers les réservations
+      setOpen(false);
+      reset();
+      router.visit('/labs/my-reserved', {
+        method: 'get',
+        preserveScroll: true,
+      });
+    } catch (error) {
+      console.error('Reservation error:', error);
+      // Afficher l'erreur dans le formulaire
+      const errorMessage = error instanceof Error ? error.message : 'Une erreur est survenue';
+      setData('errors', { general: errorMessage });
+      
+      // Afficher aussi dans une alerte visuelle
+      alert(errorMessage);
+    }
   };
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -216,21 +291,90 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
 
           <Separator />
 
+          {/* Option Réservation Instantanée */}
+          <div className="flex items-center space-x-2 p-4 rounded-lg bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/20">
+            <Checkbox
+              id="instant-reservation"
+              checked={isInstant}
+              onCheckedChange={(checked) => {
+                setIsInstant(checked === true);
+                if (checked) {
+                  // Sélectionner automatiquement le créneau actuel
+                  setSelectedDate(new Date());
+                  const now = new Date();
+                  const currentHour = now.getHours();
+                  const nextHour = Math.min(currentHour + 4, 22);
+                  const startTime = `${currentHour.toString().padStart(2, '0')}:00`;
+                  const endTime = `${nextHour.toString().padStart(2, '0')}:00`;
+                  
+                  const instantSlot: TimeSlot = {
+                    id: `${lab.id}-instant-${Date.now()}`,
+                    startTime,
+                    endTime,
+                    available: true,
+                    maxUsers: 1,
+                    currentUsers: 0,
+                  };
+                  
+                  setSelectedSlot(instantSlot);
+                  handleSlotSelect(instantSlot);
+                }
+              }}
+            />
+            <Label htmlFor="instant-reservation" className="flex items-center gap-2 cursor-pointer">
+              <Zap className="h-4 w-4 text-yellow-500" />
+              <span className="font-medium">Réservation instantanée</span>
+              <span className="text-xs text-muted-foreground">(Démarrage immédiat)</span>
+            </Label>
+          </div>
+
+          {/* Affichage du prix */}
+          {estimatedPrice > 0 && (
+            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border">
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-primary" />
+                <span className="font-medium">Prix estimé</span>
+              </div>
+              <span className="text-lg font-bold text-primary">
+                {(estimatedPrice / 100).toLocaleString('fr-FR')} {lab.currency || 'XOF'}
+              </span>
+            </div>
+          )}
+
           {/* Time Slot Picker */}
-          <TimeSlotPicker
-            selectedDate={selectedDate}
-            slots={timeSlots}
-            onSlotSelect={handleSlotSelect}
-            selectedSlot={selectedSlot}
-            maxSlotsPerUser={3}
-            userCurrentSlots={1}
-          />
+          {!isInstant && (
+            <TimeSlotPicker
+              selectedDate={selectedDate}
+              slots={timeSlots}
+              onSlotSelect={handleSlotSelect}
+              selectedSlot={selectedSlot}
+              maxSlotsPerUser={3}
+              userCurrentSlots={1}
+            />
+          )}
+
+          {isInstant && selectedSlot && (
+            <div className="p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <span className="font-medium text-green-800 dark:text-green-200">
+                  Réservation instantanée sélectionnée
+                </span>
+              </div>
+              <p className="text-sm text-green-700 dark:text-green-300">
+                Le lab démarrera immédiatement après la confirmation. 
+                {estimatedPrice > 0 && ' Le paiement sera requis avant l\'accès.'}
+              </p>
+            </div>
+          )}
 
           {Object.keys(errors).length > 0 && (
             <div className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
               <div className="text-sm text-red-700 dark:text-red-300">
                 {Object.entries(errors).map(([field, message]) => (
-                  <p key={field} className="mb-1">{message}</p>
+                  <p key={field} className="mb-1">
+                    <strong>{field === 'general' ? 'Erreur' : field}:</strong> {message}
+                  </p>
                 ))}
               </div>
             </div>

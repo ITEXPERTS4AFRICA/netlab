@@ -1398,7 +1398,7 @@
             "description": "Add beautiful and user-friendly forms to your command-line applications.",
             "support": {
                 "issues": "https://github.com/laravel/prompts/issues",
-                "source": "https://github.com/laravel/prompts/tree/v0.3.6"
+                "source": "https://github.com/laravel/prompts/tree/api/v0.3.6"
             },
             "time": "2025-07-07T14:17:42+00:00"
         },
@@ -3326,7 +3326,7 @@
             ],
             "support": {
                 "issues": "https://github.com/bobthecow/psysh/issues",
-                "source": "https://github.com/bobthecow/psysh/tree/v0.12.10"
+                "source": "https://github.com/bobthecow/psysh/tree/api/v0.12.10"
             },
             "time": "2025-08-04T12:39:37+00:00"
         },

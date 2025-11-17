@@ -9,7 +9,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function addNode(string $labId, array $data): array
     {
-        return $this->post("/v0/labs/{$labId}/nodes", $data);
+        return $this->post("/api/v0/labs/{$labId}/nodes", $data);
     }
 
     /**
@@ -17,7 +17,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getLabNodes(string $labId): array
     {
-        return $this->get("/v0/labs/{$labId}/nodes");
+        return $this->get("/api/v0/labs/{$labId}/nodes");
     }
 
     /**
@@ -25,7 +25,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getNode(string $labId, string $nodeId): array
     {
-        return $this->get("/v0/labs/{$labId}/nodes/{$nodeId}");
+        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}");
     }
 
     /**
@@ -33,7 +33,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function updateNode(string $labId, string $nodeId, array $data): array
     {
-        return $this->patch("/v0/labs/{$labId}/nodes/{$nodeId}", $data);
+        return $this->patch("/api/v0/labs/{$labId}/nodes/{$nodeId}", $data);
     }
 
     /**
@@ -41,7 +41,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function deleteNode(string $labId, string $nodeId): array
     {
-        return $this->delete("/v0/labs/{$labId}/nodes/{$nodeId}");
+        return $this->delete("/api/v0/labs/{$labId}/nodes/{$nodeId}");
     }
 
     /**
@@ -49,7 +49,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function wipeNodeDisks(string $labId, string $nodeId): array
     {
-        return $this->put("/v0/labs/{$labId}/nodes/{$nodeId}/wipe_disks");
+        return $this->put("/api/v0/labs/{$labId}/nodes/{$nodeId}/wipe_disks");
     }
 
     /**
@@ -57,7 +57,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function extractNodeConfiguration(string $labId, string $nodeId): array
     {
-        return $this->put("/v0/labs/{$labId}/nodes/{$nodeId}/extract_configuration");
+        return $this->put("/api/v0/labs/{$labId}/nodes/{$nodeId}/extract_configuration");
     }
 
     /**
@@ -65,7 +65,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getNodeState(string $labId, string $nodeId): array
     {
-        return $this->get("/v0/labs/{$labId}/nodes/{$nodeId}/state");
+        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}/state");
     }
 
     /**
@@ -73,7 +73,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function startNode(string $labId, string $nodeId): array
     {
-        return $this->put("/v0/labs/{$labId}/nodes/{$nodeId}/state/start");
+        return $this->put("/api/v0/labs/{$labId}/nodes/{$nodeId}/state/start");
     }
 
     /**
@@ -81,7 +81,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function stopNode(string $labId, string $nodeId): array
     {
-        return $this->put("/v0/labs/{$labId}/nodes/{$nodeId}/state/stop");
+        return $this->put("/api/v0/labs/{$labId}/nodes/{$nodeId}/state/stop");
     }
 
     /**
@@ -89,7 +89,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function checkNodeIfConverged(string $labId, string $nodeId): array
     {
-        return $this->get("/v0/labs/{$labId}/nodes/{$nodeId}/check_if_converged");
+        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}/check_if_converged");
     }
 
     /**
@@ -97,7 +97,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getNodeVncKey(string $labId, string $nodeId): array
     {
-        return $this->get("/v0/labs/{$labId}/nodes/{$nodeId}/keys/vnc");
+        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}/keys/vnc");
     }
 
     /**
@@ -105,7 +105,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getNodeConsoleKey(string $labId, string $nodeId): array
     {
-        return $this->get("/v0/labs/{$labId}/nodes/{$nodeId}/keys/console");
+        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}/keys/console");
     }
 
     /**
@@ -113,7 +113,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getConsoleLog(string $labId, string $nodeId, string $consoleId): array
     {
-        return $this->get("/v0/labs/{$labId}/nodes/{$nodeId}/consoles/{$consoleId}/log");
+        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}/consoles/{$consoleId}/log");
     }
 
     /**
@@ -121,7 +121,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function cloneNodeImage(string $labId, string $nodeId): array
     {
-        return $this->put("/v0/labs/{$labId}/nodes/{$nodeId}/clone_image");
+        return $this->put("/api/v0/labs/{$labId}/nodes/{$nodeId}/clone_image");
     }
 
     /**
@@ -129,7 +129,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getAllNodes(): array
     {
-        return $this->get('/v0/nodes');
+        return $this->get('/api/v0/nodes');
     }
 
     /**
@@ -137,7 +137,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getNodeLayer3Addresses(string $labId, string $nodeId): array
     {
-        return $this->get("/v0/labs/{$labId}/nodes/{$nodeId}/layer3_addresses");
+        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}/layer3_addresses");
     }
 
     /**
@@ -145,7 +145,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getNodeInterfaces(string $labId, string $nodeId): array
     {
-        return $this->get("/v0/labs/{$labId}/nodes/{$nodeId}/interfaces");
+        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}/interfaces");
     }
 
     /**
@@ -153,7 +153,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getNodeDefinitions(): array
     {
-        return $this->get('/v0/node_definitions');
+        return $this->get('/api/v0/node_definitions');
     }
 
     /**
@@ -161,7 +161,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function createNodeDefinition(array $data): array
     {
-        return $this->post('/v0/node_definitions', $data);
+        return $this->post('/api/v0/node_definitions', $data);
     }
 
     /**
@@ -169,7 +169,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function updateNodeDefinition(array $data): array
     {
-        return $this->put('/v0/node_definitions', $data);
+        return $this->put('/api/v0/node_definitions', $data);
     }
 
     /**
@@ -177,7 +177,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getNodeDefinition(string $defId): array
     {
-        return $this->get("/v0/node_definitions/{$defId}");
+        return $this->get("/api/v0/node_definitions/{$defId}");
     }
 
     /**
@@ -185,7 +185,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function deleteNodeDefinition(string $defId): array
     {
-        return $this->delete("/v0/node_definitions/{$defId}");
+        return $this->delete("/api/v0/node_definitions/{$defId}");
     }
 
     /**
@@ -193,7 +193,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function setNodeDefinitionReadOnly(string $defId): array
     {
-        return $this->put("/v0/node_definitions/{$defId}/read_only");
+        return $this->put("/api/v0/node_definitions/{$defId}/read_only");
     }
 
     /**
@@ -201,7 +201,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getSimplifiedNodeDefinitions(): array
     {
-        return $this->get('/v0/simplified_node_definitions');
+        return $this->get('/api/v0/simplified_node_definitions');
     }
 
     /**
@@ -209,7 +209,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getNodeDefinitionSchema(): array
     {
-        return $this->get('/v0/node_definition_schema');
+        return $this->get('/api/v0/node_definition_schema');
     }
 
     /**
@@ -217,7 +217,7 @@ class NodeService extends BaseCiscoApiService
      */
     public function getNodeDefinitionsImageDefinitions(string $defId): array
     {
-        return $this->get("/v0/node_definitions/{$defId}/image_definitions");
+        return $this->get("/api/v0/node_definitions/{$defId}/image_definitions");
     }
 }
 

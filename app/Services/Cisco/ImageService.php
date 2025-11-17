@@ -9,7 +9,7 @@ class ImageService extends BaseCiscoApiService
      */
     public function uploadImage(array $data): array
     {
-        return $this->post('/v0/images/upload', $data);
+        return $this->post('/api/v0/images/upload', $data);
     }
 
     /**
@@ -17,7 +17,7 @@ class ImageService extends BaseCiscoApiService
      */
     public function deleteManagedImage(string $filename): array
     {
-        return $this->delete("/v0/images/manage/{$filename}");
+        return $this->delete("/api/v0/images/manage/{$filename}");
     }
 
     /**
@@ -25,7 +25,7 @@ class ImageService extends BaseCiscoApiService
      */
     public function getImageDefinitionSchema(): array
     {
-        return $this->get('/v0/image_definition_schema');
+        return $this->get('/api/v0/image_definition_schema');
     }
 
     /**
@@ -33,7 +33,7 @@ class ImageService extends BaseCiscoApiService
      */
     public function getListImageDefinitionDropFolder(): array
     {
-        return $this->get('/v0/list_image_definition_drop_folder');
+        return $this->get('/api/v0/list_image_definition_drop_folder');
     }
 
     /**
@@ -41,7 +41,7 @@ class ImageService extends BaseCiscoApiService
      */
     public function getImageDefinitions(): array
     {
-        return $this->get('/v0/image_definitions');
+        return $this->get('/api/v0/image_definitions');
     }
 
     /**
@@ -49,7 +49,7 @@ class ImageService extends BaseCiscoApiService
      */
     public function createImageDefinition(array $data): array
     {
-        return $this->post('/v0/image_definitions', $data);
+        return $this->post('/api/v0/image_definitions', $data);
     }
 
     /**
@@ -57,7 +57,7 @@ class ImageService extends BaseCiscoApiService
      */
     public function updateImageDefinition(array $data): array
     {
-        return $this->put('/v0/image_definitions', $data);
+        return $this->put('/api/v0/image_definitions', $data);
     }
 
     /**
@@ -65,7 +65,7 @@ class ImageService extends BaseCiscoApiService
      */
     public function getImageDefinition(string $defId): array
     {
-        return $this->get("/v0/image_definitions/{$defId}");
+        return $this->get("/api/v0/image_definitions/{$defId}");
     }
 
     /**
@@ -73,7 +73,7 @@ class ImageService extends BaseCiscoApiService
      */
     public function deleteImageDefinition(string $defId): array
     {
-        return $this->delete("/v0/image_definitions/{$defId}");
+        return $this->delete("/api/v0/image_definitions/{$defId}");
     }
 
     /**
@@ -81,7 +81,7 @@ class ImageService extends BaseCiscoApiService
      */
     public function setImageDefinitionReadOnly(string $defId): array
     {
-        return $this->put("/v0/image_definitions/{$defId}/read_only");
+        return $this->put("/api/v0/image_definitions/{$defId}/read_only");
     }
 }
 
