@@ -1,7 +1,6 @@
 ---
 # NetLab - Laboratoire Virtuel Cisco
 ## Présentation du projet
-
 ---
 
 # Vue d'ensemble
@@ -13,6 +12,7 @@ NetLab est une **plateforme web moderne** développée avec Laravel et React/Typ
 <br>
 
 ### 🎯 Objectif principal
+
 - Interface intuitive pour la gestion des ressources de laboratoire
 - Système de réservations temporelles
 - Intégration complète avec l'API Cisco CML (Cisco Modeling Labs)
@@ -28,11 +28,13 @@ NetLab est une **plateforme web moderne** développée avec Laravel et React/Typ
 <div>
 
 ### 🏗️ Structure MVC
+
 - **Modèles** : User, Lab, Reservation, Annotations, Rate, UsageRecord
 - **Contrôleurs** : Dashboard, Labs, Reservation, Annotations, SmartAnnotations
 - **Services** : CiscoApiService, Auth, Runtime, System
 
 ### 🗄️ Base de données
+
 - Migrations complètes
 - Relations optimisées
 - Gestion des réservations temporelles
@@ -75,6 +77,7 @@ class Lab extends Model
 <div>
 
 ### ⚛️ Technologies frontend
+
 - **React 19** avec hooks personnalisés
 - **TypeScript** pour la sécurité de type
 - **Tailwind CSS** pour le styling
@@ -82,6 +85,7 @@ class Lab extends Model
 - **Inertia.js** pour l'intégration Laravel
 
 ### 📱 Fonctionnalités UI
+
 - Design responsive
 - Thème clair/sombre
 - Animations fluides
@@ -94,24 +98,22 @@ class Lab extends Model
 ```tsx
 // Exemple de composant React
 interface LabCardProps {
-  lab: Lab;
-  onReserve: (lab: Lab) => void;
+    lab: Lab;
+    onReserve: (lab: Lab) => void;
 }
 
 export function LabCard({ lab, onReserve }: LabCardProps) {
-  return (
-    <Card className="hover:shadow-lg transition-shadow">
-      <CardHeader>
-        <CardTitle>{lab.name}</CardTitle>
-        <CardDescription>{lab.description}</CardDescription>
-      </CardHeader>
-      <CardFooter>
-        <Button onClick={() => onReserve(lab)}>
-          Réserver
-        </Button>
-      </CardFooter>
-    </Card>
-  );
+    return (
+        <Card className="transition-shadow hover:shadow-lg">
+            <CardHeader>
+                <CardTitle>{lab.name}</CardTitle>
+                <CardDescription>{lab.description}</CardDescription>
+            </CardHeader>
+            <CardFooter>
+                <Button onClick={() => onReserve(lab)}>Réserver</Button>
+            </CardFooter>
+        </Card>
+    );
 }
 ```
 
@@ -130,6 +132,7 @@ export function LabCard({ lab, onReserve }: LabCardProps) {
 <div>
 
 ### 📋 Catalogue des labs
+
 - Liste complète des laboratoires disponibles
 - Recherche et filtrage avancés
 - Informations détaillées sur chaque lab
@@ -139,6 +142,7 @@ export function LabCard({ lab, onReserve }: LabCardProps) {
 <div>
 
 ### ⏰ Système de réservation
+
 - Créneaux horaires flexibles
 - Gestion des conflits
 - Notifications en temps réel
@@ -148,6 +152,7 @@ export function LabCard({ lab, onReserve }: LabCardProps) {
 <div>
 
 ### 👥 Gestion utilisateurs
+
 - Profils utilisateurs complets
 - Historique des réservations
 - Système de notation et commentaires
@@ -167,11 +172,13 @@ export function LabCard({ lab, onReserve }: LabCardProps) {
 <div>
 
 ### 🌐 CiscoApiService
+
 - Authentification sécurisée avec Cisco
 - Gestion des sessions utilisateur
 - Contrôle d'exécution des laboratoires
 
 ### ⚡ Fonctionnalités avancées
+
 - Démarrage/arrêt automatique des labs
 - Surveillance de l'état des machines virtuelles
 - Gestion des ressources réseau
@@ -194,7 +201,7 @@ class CiscoApiService
         // Démarrage du laboratoire
     }
 
-    public function getLabStatus(string $labId): array
+    public function getLabsListtatus(string $labId): array
     {
         // Récupération de l'état du lab
     }
@@ -216,6 +223,7 @@ class CiscoApiService
 <div>
 
 ### Backend (75% complet)
+
 - [x] Modèles de données complets
 - [x] Contrôleurs principaux implémentés
 - [x] Service Cisco API fonctionnel
@@ -223,6 +231,7 @@ class CiscoApiService
 - [x] Migrations de base de données
 
 ### Frontend (80% complet)
+
 - [x] Interface utilisateur moderne
 - [x] Composants de réservation
 - [x] Gestion des thèmes
@@ -234,6 +243,7 @@ class CiscoApiService
 <div>
 
 ### 📊 Métriques du projet
+
 - **50,000+ lignes de code**
 - **25+ composants React**
 - **8 contrôleurs Laravel**
@@ -255,6 +265,7 @@ class CiscoApiService
 <div>
 
 ### Backend
+
 - **Laravel 11** - Framework PHP moderne
 - **PHP 8.3+** - Performance optimale
 - **MySQL/PostgreSQL** - Base de données
@@ -265,6 +276,7 @@ class CiscoApiService
 <div>
 
 ### Frontend
+
 - **React 19** - Interface utilisateur
 - **TypeScript** - Sécurité de type
 - **Tailwind CSS** - Styling moderne
@@ -275,6 +287,7 @@ class CiscoApiService
 <div>
 
 ### Outils
+
 - **ESLint** - Qualité du code
 - **Prettier** - Formatage
 - **PHPUnit** - Tests PHP
@@ -295,12 +308,14 @@ class CiscoApiService
 <div>
 
 ### 🖥️ Pages principales
+
 - **Dashboard** avec métriques en temps réel
 - **Catalogue des laboratoires** avec recherche
 - **Espace de travail** utilisateur
 - **Gestion des réservations**
 
 ### 🎭 Thèmes et accessibilité
+
 - Mode clair/sombre automatique
 - Interface responsive
 - Contraste optimal
@@ -327,12 +342,14 @@ class CiscoApiService
 <div>
 
 ### 💬 Annotations intelligentes
+
 - Commentaires contextuels
 - Système de notation
 - Partage de connaissances
 - Recherche dans les annotations
 
 ### 📈 Analytics et rapports
+
 - Suivi d'utilisation détaillé
 - Métriques de performance
 - Rapports d'activité
@@ -343,6 +360,7 @@ class CiscoApiService
 <div>
 
 ### 🔐 Sécurité et authentification
+
 - Authentification robuste
 - Gestion des sessions
 - Autorisations granulaires
@@ -363,12 +381,14 @@ class CiscoApiService
 <div>
 
 ### 🚀 Court terme (1-2 mois)
+
 - [ ] Finalisation de l'API Cisco
 - [ ] Webhooks pour événements temps réel
 - [ ] Interface d'administration avancée
 - [ ] Tests d'intégration complets
 
 ### 📈 Moyen terme (3-6 mois)
+
 - [ ] Application mobile native
 - [ ] API publique pour intégrations tierces
 - [ ] Système de notifications push
@@ -379,6 +399,7 @@ class CiscoApiService
 <div>
 
 ### 🌟 Long terme (6-12 mois)
+
 - [ ] Marketplace d'extensions
 - [ ] Support multi-cloud
 - [ ] Formation intégrée
@@ -416,6 +437,7 @@ php artisan serve
 <br>
 
 ### ⚙️ Configuration Cisco CML
+
 - URL du serveur CML
 - Identifiants d'authentification
 - Configuration réseau
@@ -438,6 +460,7 @@ php artisan serve
 5. **Intégration Cisco** - Démarrage de labs réels
 
 ### 🎯 Cas d'usage
+
 - **Étudiants** : Apprentissage réseau pratique
 - **Formateurs** : Environnement d'enseignement
 - **Entreprises** : Formation continue
@@ -454,18 +477,21 @@ php artisan serve
 <div class="text-center">
 
 ### 🎯 Ce qui fait la différence
+
 - **Intégration Cisco CML** complète et sécurisée
 - **Interface moderne** et intuitive
 - **Architecture scalable** et maintenable
 - **Sécurité** de niveau entreprise
 
 ### 🚀 Prêt pour la production
+
 - Code de qualité professionnelle
 - Tests automatisés
 - Documentation complète
 - Support et maintenance
 
 ### 💼 Opportunités marché
+
 - **Formation** en réseau et cybersécurité
 - **Certification** Cisco
 - **Entreprises** et institutions éducatives
@@ -481,12 +507,15 @@ php artisan serve
 <div class="text-center">
 
 ### 📞 Contact
+
 **Équipe NetLab**
+
 - Développement : Laravel + React
 - Support : 24/7
 - Documentation : En ligne
 
 ### 🔗 Ressources
+
 - **GitHub** : Code source disponible
 - **Documentation** : Guide complet
 - **Démo** : Environnement de test

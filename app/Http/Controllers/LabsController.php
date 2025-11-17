@@ -57,7 +57,7 @@ class LabsController extends Controller
 
         try {
             // Récupération des IDs de labs depuis le cache ou l'API CML
-            $labs_ids = Cache::has('labs_ids') ? Cache::get('labs_ids') : $cisco->getLabs($token);
+            $labs_ids = Cache::has('labs_ids') ? Cache::get('labs_ids') : $cisco->getLabsList($token);
 
             // Gestion des erreurs de l'API CML
             if (isset($labs_ids['error'])) {
@@ -94,9 +94,9 @@ class LabsController extends Controller
             })->filter()->toArray();
 
             // Synchronisation automatique avec la base de données locale
-            foreach($labs as $key => $lab) {
+            foreach ($labs as $key => $lab) {
                 $Lab = Lab::where('cml_id', $lab['id'])->first();
-                if(!$Lab) {
+                if (!$Lab) {
                     Lab::create([
                         'cml_id' => $lab['id'],
                         'created' => $lab['created'],
@@ -122,7 +122,6 @@ class LabsController extends Controller
                     'total_pages' => $totalPages,
                 ],
             ]);
-
         } catch (\Exception $e) {
             // Gestion des erreurs inattendues avec redirection et message d'erreur
             return redirect()->back()->with('error', 'An error occurred: ' . $e->getMessage());
@@ -179,7 +178,7 @@ class LabsController extends Controller
 
             // Vérification de l'état actuel du lab via l'API CML si le lab existe
             if ($lab && $token) {
-                $labState = $cisco->getLabState($token, $lab->cml_id);
+                $labState = $cisco->getLabsListtate($token, $lab->cml_id);
                 if (!isset($labState['error'])) {
                     $currentState = $labState;
                     // Mise à jour de l'état en base de données pour synchronisation
@@ -291,7 +290,7 @@ class LabsController extends Controller
         }
 
         // Récupération de l'état actuel du lab depuis CML pour synchronisation
-        $labState = $cisco->getLabState(session('cml_token'), $lab->cml_id);
+        $labState = $cisco->getLabsListtate(session('cml_token'), $lab->cml_id);
 
         // Mise à jour de l'état en base de données si récupération réussie
         if (!isset($labState['error'])) {
@@ -314,7 +313,7 @@ class LabsController extends Controller
         }
 
         // Récupération des annotations du laboratoire depuis CML
-        $annotations = $cisco->getLabsAnnotation(session('cml_token'), $lab->cml_id);
+        $annotations = $cisco->getLabAnnotations(session('cml_token'), $lab->cml_id);
 
         // Affichage de l'espace de travail avec toutes les données nécessaires
         return Inertia::render('labs/Workspace', [

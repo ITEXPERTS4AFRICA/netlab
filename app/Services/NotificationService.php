@@ -39,17 +39,22 @@ class NotificationService
 
         // Check if user wants notifications
         if (!$user->notification_enabled) {
+
             return;
         }
 
         // Check if we should send notification based on user's advance notice preference
         $advanceMinutes = $user->notification_advance_minutes ?? 15;
         if ($minutesUntilStart > $advanceMinutes) {
+
+
             return;
         }
 
         // Check if we already sent a notification for this reservation
         if ($this->notificationAlreadySent($reservation, $advanceMinutes)) {
+
+            
             return;
         }
 

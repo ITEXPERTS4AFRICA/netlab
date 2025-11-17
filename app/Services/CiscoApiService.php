@@ -5,7 +5,8 @@ namespace App\Services;
 use Illuminate\Support\Facades\Http;
 use Phiki\Adapters\CommonMark\Transformers\Annotations\Annotation;
 
-class CiscoApiService {
+class CiscoApiService
+{
     protected $baseUrl;
     protected $token;
 
@@ -15,14 +16,15 @@ class CiscoApiService {
         $this->token = session('cml_token');
     }
 
-    public function auth_extended(String $username, String $password){
-        try{
+    public function auth_extended(String $username, String $password)
+    {
+        try {
             $url = "{$this->baseUrl}/v0/auth_extended";
             $response = Http::withOptions(['verify' => false])
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
-                ])
+                    ])
                 ->post($url, [
                     'username' => $username,
                     'password' => $password,
@@ -41,22 +43,258 @@ class CiscoApiService {
                 return ['error' => 'Accès refusé. Identifiants invalides.'];
             }
             return ['error' => 'Authentification incorrecte', 'status' => $response->status()];
-        }catch(\Exception $e){
-            return ['error'=>'Exception: '. $e->getMessage()];
-        }
-        finally{
+        } catch (\Exception $e) {
+            return ['error' => 'Exception: ' . $e->getMessage()];
+        } finally {
             $this->token = session('cml_token');
         }
+
     }
 
-    public function getLabsAnnotation($token, $lab_id){
+    public function logout($token)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->delete("{$this->baseUrl}/v0/logout");
+        return $response->successful() ? $response : $response->json();
+    }
+
+    //Check whether the API call is properly authenticated
+    public function getCheckAuth($token)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/authok");
+        return $response->successful();
+    }
+
+    // Lab related API endpoints, including creating new labs and getting the list of all labs.
+    public function getLabsListAnnotations($token, $lab_id)
+    {
         $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/annotations");
         return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab annotations', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-    public function getLabSchema($token, $lab_id){
+    public function getAnnotation($token, $lab_id, $annotation_id)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/annotations/{$annotation_id}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch annotation', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    public function getLabsList($token)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs?show_all=true");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch labs', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Return details about the specific lab
+    public function getLabsId($token)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{lab_id}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch labs', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Return YAML with  pyATS testbed for specified lab
+    public function getLabsTestbed($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/pyats_testbed");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab testbed', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    //Wait for convergence
+    public function getCheckIfConverged($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/check_if_converged");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to check convergence', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get the overall simulation state for the specified lab.
+    public function getLabsState($token, $lab_id)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/state");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab state', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get the topology for the specified lab.
+    public function getLabsTopology($token, $lab_id)
+    {
         $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/topology");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab schema', 'status' => $response->status(), 'body' => $response->body()];
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab topology', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Download the lab YAML file
+    public function getLabDownload($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/yaml'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/download");
+        return $response->successful() ? $response->body() : ['error' => 'Unable to download lab', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get list of events for the specified lab.
+    public function getLabsEvents($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/events");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab events', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get list of external connector mappings for the specified lab.
+    public function getConnectorMappings($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/connector_mappings");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch connector mappings', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get list of resource pools used by nodes in the specified lab.
+    public function getResourcePools($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/resource_pools");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch resource pools', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Search for the node label matching the query within all nodes of the given lab
+    public function getSearchNodes($token, $lab_id, $search_query){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/nodes?q={$search_query}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to search nodes', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Search for the node matching the given tags within given lab.
+    public function getFindNodesByTag($token, $id, $search_query){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$id}/find_all/node/tag/{$search_query}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to find nodes by tag', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get the State of all nodes, interfaces , and links in the lab.
+    public function getLabsElementState($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/lab_element_state");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab state', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // get information about the specified simulation, such as the amount of CPU its nodes are consuming.
+    public function getSimulations($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/simulation_stats");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch simulation stats', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get the info required to present the lab 'title' on the main page of the UI.
+    public function getLabsTile($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/tile");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab tile info', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get list of lab/group and lab/user associations.
+    public function getLabsAssociations($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/associations");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab associations', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // update list of lab/group and lab/user associations.
+    public function updateLabsAssociations($token, $lab_id, $data){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->patch("{$this->baseUrl}/v0/labs/{$lab_id}/associations", $data);
+        return $response->successful() ? $response->json() : ['error' => 'Unable to update lab associations', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    //Return the allocated L3 addresses for all node if the node is connected to an L2 extenal connector, when acquired via DHCP.
+    public function getLayer3Addresses($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/layer3_addresses");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch layer 3 addresses', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Download the PCAP file
+    public function getPcapDownload($token, $link_capture_key){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/pcap/{$link_capture_key}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to download PCAP', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Download all packets for this PCAP
+    public function getPcapDownloadPackets($token, $link_capture_key){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/pcap/{$link_capture_key}/packets");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to download PCAP packets', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Download specific packet form the PCAP
+    public function getPcapDownloadPacket($token, $link_capture_key, $packet_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/pcap/{$link_capture_key}/packet/{$packet_id}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to download PCAP packet', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get the list of available simple labs.
+    public function getSimpleLabs($token){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/simple/labs");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch simple labs', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get the list of available simple labs.
+    public function getSimpleLab($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/simple/labs/{$lab_id}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch simple lab', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get a list of all smart annotations for the specified lab.
+    public function getSmartAnnotations($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/smart_annotations");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch smart annotations', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get the details for the specified smart annotation.
+    public function getSmartAnnotation($token, $lab_id, $smart_annotation_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/smart_annotations/{$smart_annotation_id}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch smart annotation', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get data for the lab tiles. Do not use.
+    public function getPopulateLabTiles($token){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/populate_lab_tiles");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab tiles', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Get the data for a lab for User Interface. Do not use.
+    public function getPopulateLab($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/populate_lab/{$lab_id}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Start the specified lab as a simulation.
+    public function startLab($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->put("{$this->baseUrl}/v0/labs/{$lab_id}/start");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to start lab', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Stop the simulation for the specified lab.
+    public function stopLab($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->put("{$this->baseUrl}/v0/labs/{$lab_id}/stop");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to stop lab', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    //Wipe the persisted state for all nodes in this lab must be stopped before it can be wiped.
+    public function wipeLab($token, $lab_id){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->put("{$this->baseUrl}/v0/labs/{$lab_id}/wipe");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to wipe lab', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+
+    // System API endpoints for the underlying controller software and the host system where it runs.
+
+    // Retrieve the current system authentication configuration..
+    public function getSystemAuthConfig($token)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/system/auth/config");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to get system auth config', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    //Get the list of configured lab repos.
+    public function getLabRepos($token){
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/lab_repos");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab repos', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Performs a git pull on each configured lab repo and returns the result
+    public function refreshLabRepos($token)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->put("{$this->baseUrl}/v0/lab_repos/refresh");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to refresh lab repos', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    //Get the Web session timeout in seconds.
+    public function getWebSessionTimeout($token)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/web_session_timeout");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to get web session timeout', 'status' => $response->status(), 'body' => $response->body()];
+    }
+
+    // Set the Web session timeout in seconds
+    public function updateWebSessionTimeout($token, $timeout)
+    {
+        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->patch("{$this->baseUrl}/v0/web_session_timeout/{$timeout}");
+        return $response->successful() ? $response->json() : ['error' => 'Unable to update web session timeout', 'status' => $response->status(), 'body' => $response->body()];
     }
 
     public function getUsers($token)
@@ -65,11 +303,6 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to fetch users', 'status' => $response->status()];
     }
 
-    public function getLabs($token)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs?show_all=true");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch labs', 'status' => $response->status(), 'body' => $response->body()];
-    }
 
     public function getDevices($token)
     {
@@ -83,30 +316,9 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-    public function startLab($token, $id)
+
+    public function setToken($token)
     {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->put("{$this->baseUrl}/v0/labs/{$id}/start");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to start lab', 'status' => $response->status(), 'body' => $response->body()];
-    }
-
-    public function stopLab($token, $id)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->put("{$this->baseUrl}/v0/labs/{$id}/stop");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to stop lab', 'status' => $response->status(), 'body' => $response->body()];
-    }
-
-    public function wipeLab($token, $id)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->put("{$this->baseUrl}/v0/labs/{$id}/wipe");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to wipe lab', 'status' => $response->status(), 'body' => $response->body()];
-    }
-
-    public function logout($token){
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->delete("{$this->baseUrl}/v0/logout");
-        return $response->successful() ? $response : $response->json();
-    }
-
-    public function setToken($token){
         $this->token = $token;
         session()->put('cml_token', $token);
     }
@@ -145,7 +357,7 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to update lab', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-    public function getLabState($token, $id)
+    public function getLabsListtate($token, $id)
     {
         $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$id}/state");
         return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab state', 'status' => $response->status(), 'body' => $response->body()];
@@ -212,11 +424,7 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to fetch lab events', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-    public function getConnectorMappings($token, $id)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$id}/connector_mappings");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch connector mappings', 'status' => $response->status(), 'body' => $response->body()];
-    }
+
 
     public function updateConnectorMappings($token, $id, $data)
     {
@@ -224,11 +432,7 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to update connector mappings', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-    public function getResourcePools($token, $id)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$id}/resource_pools");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to fetch resource pools', 'status' => $response->status(), 'body' => $response->body()];
-    }
+
 
     public function findNodeByLabel($token, $id, $searchQuery)
     {
@@ -522,12 +726,7 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to get VNC keys', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-    // System API methods
-    public function getSystemAuthConfig($token)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/system/auth/config");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to get system auth config', 'status' => $response->status(), 'body' => $response->body()];
-    }
+
 
     public function updateSystemAuthConfig($token, $data)
     {
@@ -565,17 +764,9 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to add lab repo', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-    public function getLabRepos($token)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/lab_repos");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to get lab repos', 'status' => $response->status(), 'body' => $response->body()];
-    }
 
-    public function refreshLabRepos($token)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->put("{$this->baseUrl}/v0/lab_repos/refresh");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to refresh lab repos', 'status' => $response->status(), 'body' => $response->body()];
-    }
+
+
 
     public function deleteLabRepo($token, $repo_id)
     {
@@ -715,17 +906,6 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to get system information', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-    public function getWebSessionTimeout()
-    {
-        $response = Http::withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/web_session_timeout");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to get web session timeout', 'status' => $response->status(), 'body' => $response->body()];
-    }
-
-    public function updateWebSessionTimeout($token, $timeout)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->patch("{$this->baseUrl}/v0/web_session_timeout/{$timeout}");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to update web session timeout', 'status' => $response->status(), 'body' => $response->body()];
-    }
 
     // Node definitions API methods
     public function getNodeDefinitionsImageDefinitions($token, $def_id)
@@ -856,18 +1036,6 @@ class CiscoApiService {
         return $response->successful() ? $response->json() : ['error' => 'Unable to set image definition read-only', 'status' => $response->status(), 'body' => $response->body()];
     }
 
-    // Smart Annotations API methods
-    public function getSmartAnnotations($token, $lab_id)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/smart_annotations");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to get smart annotations', 'status' => $response->status(), 'body' => $response->body()];
-    }
-
-    public function getSmartAnnotation($token, $lab_id, $smart_annotation_id)
-    {
-        $response = Http::withToken($token)->withOptions(['verify' => false])->withHeaders(['Accept' => 'application/json'])->get("{$this->baseUrl}/v0/labs/{$lab_id}/smart_annotations/{$smart_annotation_id}");
-        return $response->successful() ? $response->json() : ['error' => 'Unable to get smart annotation', 'status' => $response->status(), 'body' => $response->body()];
-    }
 
     public function updateSmartAnnotation($token, $lab_id, $smart_annotation_id, $data)
     {

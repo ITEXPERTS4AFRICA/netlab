@@ -13,6 +13,7 @@ use Inertia\Response;
 use App\Services\CiscoApiService;
 use App\Models\User;
 
+
 class AuthenticatedSessionController extends Controller
 {
     /**
@@ -75,7 +76,6 @@ class AuthenticatedSessionController extends Controller
         }
 
         Auth::login($user);
-
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

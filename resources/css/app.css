@@ -7,6 +7,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
+
 :root {
   --background: oklch(0.9816 0.0017 247.8390);
   --foreground: oklch(0.3148 0.0435 243.3881);
@@ -163,6 +164,7 @@
   --tracking-widest: calc(var(--tracking-normal) + 0.1em);
 }
 
+/* Annotation */
 .annotation-text {
   transition: all 0.2s ease;
 }
@@ -257,5 +259,12 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    @apply outline-none;
   }
 }

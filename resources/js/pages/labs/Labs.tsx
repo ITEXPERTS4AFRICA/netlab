@@ -25,7 +25,7 @@
  */
 
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
+import { type BreadcrumbItem, type Lab,type Pagination } from '@/types';
 import { Head, usePage } from '@inertiajs/react';
 import { Card, CardTitle, CardContent, CardHeader, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -66,36 +66,36 @@ const breadcrumbs: BreadcrumbItem[] = [
 /**
  * Interface définissant la structure d'un laboratoire
  */
-type Lab = {
-    /** Identifiant unique du laboratoire */
-    id: string;
-    /** État actuel du lab (DEFINED_ON_CORE, STOPPED, etc.) */
-    state: string;
-    /** Titre/nom du laboratoire */
-    lab_title: string;
-    /** Nombre de nœuds/équipements réseau */
-    node_count: string|number;
-    /** Description détaillée du laboratoire */
-    lab_description: string;
-    /** Date de création du lab (format ISO) */
-    created: string;
-    /** Date de dernière modification (format ISO) */
-    modified: string;
-};
+// type Lab = {
+//     /** Identifiant unique du laboratoire */
+//     id: string;
+//     /** État actuel du lab (DEFINED_ON_CORE, STOPPED, etc.) */
+//     state: string;
+//     /** Titre/nom du laboratoire */
+//     lab_title: string;
+//     /** Nombre de nœuds/équipements réseau */
+//     node_count: string|number;
+//     /** Description détaillée du laboratoire */
+//     lab_description: string;
+//     /** Date de création du lab (format ISO) */
+//     created: string;
+//     /** Date de dernière modification (format ISO) */
+//     modified: string;
+// };
 
 /**
  * Interface définissant la structure de la pagination
  */
-type Pagination = {
-    /** Page actuelle */
-    page: number;
-    /** Nombre d'éléments par page */
-    per_page: number;
-    /** Nombre total d'éléments */
-    total: number;
-    /** Nombre total de pages */
-    total_pages: number;
-};
+// type Pagination = {
+//     /** Page actuelle */
+//     page: number;
+//     /** Nombre d'éléments par page */
+//     per_page: number;
+//     /** Nombre total d'éléments */
+//     total: number;
+//     /** Nombre total de pages */
+//     total_pages: number;
+// };
 
 /**
  * Interface définissant les propriétés reçues de Laravel/Inertia
@@ -113,21 +113,6 @@ export default function Labs() {
     const { labs, pagination, error } = usePage<Props>().props;
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(true);
-    const [debugInfo, setDebugInfo] = useState<{
-        labsType: string;
-        labsIsArray: boolean;
-        labsLength: number | string;
-        pagination: Pagination | null;
-        error: string | undefined;
-        timestamp: string;
-    }>({
-        labsType: 'unknown',
-        labsIsArray: false,
-        labsLength: 0,
-        pagination: null,
-        error: undefined,
-        timestamp: new Date().toISOString()
-    });
 
     // Ensure labs is always an array - handle both array and object cases
     const safeLabs = useMemo(() => {
@@ -148,15 +133,6 @@ export default function Labs() {
     }, [labs]);
 
     useEffect(() => {
-        // Debug information
-        setDebugInfo({
-            labsType: typeof labs,
-            labsIsArray: Array.isArray(labs),
-            labsLength: Array.isArray(labs) ? labs.length : 'N/A',
-            pagination,
-            error,
-            timestamp: new Date().toISOString()
-        });
 
         // Simulate loading for better UX, but shorter duration
         const timer = setTimeout(() => setIsLoading(false), 300);
@@ -394,31 +370,6 @@ export default function Labs() {
                         </div>
                     </motion.div>
                 )}
-
-                {/* Debug Information Panel */}
-                <motion.div
-                    variants={cardVariants}
-                    className="p-4 rounded-xl bg-muted/30 border border-border/50"
-                >
-                    <details className="group">
-                        <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                            <Info className="h-4 w-4" />
-                            Informations de Débogage (Cliquer pour développer)
-                        </summary>
-                        <div className="mt-4 space-y-2 text-xs font-mono">
-                            <div><strong>Labs Type:</strong> {debugInfo.labsType}</div>
-                            <div><strong>Is Array:</strong> {debugInfo.labsIsArray ? 'Yes' : 'No'}</div>
-                            <div><strong>Labs Length:</strong> {String(debugInfo.labsLength)}</div>
-                            <div><strong>Pagination:</strong> {debugInfo.pagination ? JSON.stringify(debugInfo.pagination, null, 2) : 'null'}</div>
-                            <div><strong>Error:</strong> {debugInfo.error || 'None'}</div>
-                            <div><strong>Timestamp:</strong> {debugInfo.timestamp}</div>
-                            <div><strong>Sample Lab Data:</strong></div>
-                            <pre className="bg-muted p-2 rounded text-xs overflow-auto max-h-32">
-                                {safeLabs.length > 0 ? JSON.stringify(safeLabs[0], null, 2) : 'No lab data available'}
-                            </pre>
-                        </div>
-                    </details>
-                </motion.div>
 
                 {/* Stats Overview */}
                 <motion.div variants={cardVariants} className="flex gap-6 text-center">

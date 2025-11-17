@@ -42,6 +42,24 @@ export interface User {
     [key: string]: unknown; // This allows for additional properties...
 }
 
+export interface Lab  {
+    /** Identifiant unique du laboratoire */
+    id: string;
+    /** État actuel du lab (DEFINED_ON_CORE, STOPPED, etc.) */
+    state: string;
+    /** Titre/nom du laboratoire */
+    lab_title: string;
+    /** Nombre de nœuds/équipements réseau */
+    node_count: string|number;
+    /** Description détaillée du laboratoire */
+    lab_description: string;
+    /** Date de création du lab (format ISO) */
+    created: string;
+    /** Date de dernière modification (format ISO) */
+    modified: string;
+};
+
+
 export interface LabAnnotation {
     id: string;
     type: 'text' | 'rectangle' | 'ellipse' | 'line';
@@ -66,4 +84,15 @@ export interface LabAnnotation {
     // Line annotation properties
     line_start?: string | null;
     line_end?: string | null;
+}
+
+export interface Pagination {
+    /** Page actuelle */
+    page: number;
+    /** Nombre d'éléments par page */
+    per_page: number;
+    /** Nombre total d'éléments */
+    total: number;
+    /** Nombre total de pages */
+    total_pages: number;
 }

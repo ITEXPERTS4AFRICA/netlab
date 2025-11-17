@@ -17,9 +17,9 @@ class ReservationController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        $reservations = Reservation::with('lab','rate')
+        $reservations = Reservation::with('lab', 'rate')
             ->when(! $request->query('all'), fn($q) => $q->where('user_id', $user->id))
-            ->orderBy('start_at','desc')
+            ->orderBy('start_at', 'desc')
             ->paginate(20);
 
         return response()->json($reservations);
@@ -43,12 +43,12 @@ class ReservationController extends Controller
 
         $conflict = Reservation::where('lab_id', $lab->id)
             ->where('status', '!=', 'cancelled')
-            ->where(function($q) use ($start,$end){
+            ->where(function ($q) use ($start, $end) {
                 $q->whereBetween('start_at', [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')])
-                  ->orWhereBetween('end_at', [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')])
-                  ->orWhere(function($q2) use ($start,$end){
-                      $q2->where('start_at','<',$start->format('Y-m-d H:i:s'))->where('end_at','>',$end->format('Y-m-d H:i:s'));
-                  });
+                    ->orWhereBetween('end_at', [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')])
+                    ->orWhere(function ($q2) use ($start, $end) {
+                        $q2->where('start_at', '<', $start->format('Y-m-d H:i:s'))->where('end_at', '>', $end->format('Y-m-d H:i:s'));
+                    });
             })->exists();
 
         if ($conflict) {
@@ -70,7 +70,7 @@ class ReservationController extends Controller
     public function show(Reservation $reservation)
     {
         $this->authorize('view', $reservation);
-        return response()->json($reservation->load('lab','rate','usageRecord'));
+        return response()->json($reservation->load('lab', 'rate', 'usageRecord'));
     }
 
     public function active($labId)
@@ -92,10 +92,10 @@ class ReservationController extends Controller
     {
         $this->authorize('delete', $reservation);
         $reservation->delete();
-        return response()->json(null,204);
+        return response()->json(null, 204);
     }
 
-    public function createReservation(Request $request , CiscoApiService $annotationService)
+    public function createReservation(Request $request, CiscoApiService $annotationService)
     {
         $request->validate([
             'lab_id' => 'required|exists:labs,cml_id',
@@ -115,7 +115,7 @@ class ReservationController extends Controller
         }
 
         // Vérifier l'état réel du lab via l'API CML
-        $labStatus = $apiService->getLabState($token, $lab->cml_id);
+        $labStatus = $apiService->getLabsState($token, $lab->cml_id);
 
         if (isset($labStatus['error'])) {
             return back()->withErrors(['error' => 'Unable to verify lab status: ' . $labStatus['error']]);
@@ -139,12 +139,12 @@ class ReservationController extends Controller
 
         $conflict = Reservation::where('lab_id', $lab->id)
             ->where('status', '!=', 'cancelled')
-            ->where(function($q) use ($start, $end){
+            ->where(function ($q) use ($start, $end) {
                 $q->whereBetween('start_at', [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')])
-                  ->orWhereBetween('end_at', [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')])
-                  ->orWhere(function($q2) use ($start, $end){
-                      $q2->where('start_at','<',$start->format('Y-m-d H:i:s'))->where('end_at','>',$end->format('Y-m-d H:i:s'));
-                  });
+                    ->orWhereBetween('end_at', [$start->format('Y-m-d H:i:s'), $end->format('Y-m-d H:i:s')])
+                    ->orWhere(function ($q2) use ($start, $end) {
+                        $q2->where('start_at', '<', $start->format('Y-m-d H:i:s'))->where('end_at', '>', $end->format('Y-m-d H:i:s'));
+                    });
             })->exists();
 
         if ($conflict) {
@@ -165,7 +165,7 @@ class ReservationController extends Controller
 
         // 📝 Exploiter LabAnnotationService pour enrichir l'expérience
 
-        $annotations = $annotationService->getLabsAnnotation($token, $lab->cml_id);
+        $annotations = $annotationService->getTopology($token, $lab->cml_id);
 
         // Créer la réservation
         $reservation = Reservation::create([
@@ -177,7 +177,7 @@ class ReservationController extends Controller
             'auto_started' => $needsAutoStart,
             'annotations_count' => is_array($annotations) ? count($annotations) : 0,
         ]);
-        
+
 
         if ($needsAutoStart) {
             $reservation->update(['status' => 'active']);

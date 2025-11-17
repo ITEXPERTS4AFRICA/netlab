@@ -23,7 +23,7 @@ class DashboardController extends Controller
         $user = Auth::user();
         $token = session('cml_token');
 
-        $lab_id = $this->apiService->getLabs($token);
+        $lab_id = $this->apiService->getLabsList($token);
 
         // Get lab statistics from database (local cache)
         // Check if the API response contains an error
@@ -53,7 +53,7 @@ class DashboardController extends Controller
             ->where('end_at', '>', now())
             ->where('status', '!=', 'cancelled')
             ->get();
-        
+
 
         // Get CML data with caching and error handling
         $cmlLabsData = [];
@@ -66,7 +66,7 @@ class DashboardController extends Controller
             $cmlLabsData = Cache::remember($cacheKeyLabs, now()->addMinutes(5), function () use ($token) {
                 try {
                     if ($this->apiService->setToken($token)) {
-                        $labs = $this->apiService->getLabs($token);
+                        $labs = $this->apiService->getLabsList($token);
                         return is_array($labs) ? array_slice($labs, 0, 10) : [];
                     }
                     return [];
@@ -126,8 +126,8 @@ class DashboardController extends Controller
             ->first()
             ->avg_duration ?? 0;
 
-      
-     
+
+
 
         return Inertia::render('dashboard', [
             'stats' => [

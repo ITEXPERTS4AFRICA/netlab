@@ -15,7 +15,7 @@ class LabRuntimeController extends Controller
     {
         $token = session('cml_token');
 
-        $lab_id = $cisco->getLabs($token);
+        $lab_id = $cisco->getLabsList($token);
 
         // call start
         $labs = $cisco->getLab($token, $lab_id);
@@ -63,5 +63,3 @@ class LabRuntimeController extends Controller
         return response()->json(['stopped' => true, 'usage_record' => $usage]);
     }
 }
-
-

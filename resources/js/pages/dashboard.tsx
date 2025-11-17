@@ -36,6 +36,7 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+
 type CmlLab = {
     id: string | number;
     title?: string;
@@ -129,6 +130,8 @@ export default function Dashboard() {
         }
     };
 
+
+    // animation for container
     const containerVariants = {
         hidden: { opacity: 0 },
         visible: {
@@ -139,6 +142,7 @@ export default function Dashboard() {
         }
     };
 
+    // animation for each item
     const itemVariants: Variants = {
         hidden: { opacity: 0, y: 20 },
         visible: {
@@ -153,6 +157,7 @@ export default function Dashboard() {
         }
     };
 
+    // Data for stats
     const statsData = [
         {
             title: "Total Labs",
@@ -322,7 +327,7 @@ export default function Dashboard() {
 
                 )}
 
-                
+
                 {userActiveReservations.length > 0 && (
 
 
@@ -617,10 +622,12 @@ export default function Dashboard() {
                                 <Play className="h-5 w-5" />
                                 CML System Status
                             </CardTitle>
+                            
                             <CardDescription>
                                 Latest status from Cisco Modeling Labs
                             </CardDescription>
                         </CardHeader>
+
                         <CardContent>
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                                 {cmlLabs.slice(0, 6).map((lab, index) => (

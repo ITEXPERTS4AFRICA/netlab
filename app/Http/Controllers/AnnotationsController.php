@@ -33,7 +33,7 @@ class AnnotationsController extends Controller
             return response()->json(['error' => 'Authentication required'], 401);
         }
 
-        $annotations = $this->annotationService->getLabsAnnotation($token, $lab_id);
+        $annotations = $this->annotationService->getTopology($token, $lab_id);
 
         if (isset($annotations['error'])) {
             Log::warning('Failed to fetch annotations via API', [
@@ -70,7 +70,7 @@ class AnnotationsController extends Controller
 
         // For now, we'll fetch all annotations and find the specific one
         // In a real implementation, you might want a dedicated API endpoint
-        $annotations = $this->annotationService->getLabsAnnotation($token, $lab_id);
+        $annotations = $this->annotationService->getTopology($token, $lab_id);
 
         if (isset($annotations['error'])) {
             Log::warning('Failed to fetch annotations for show via API', [
@@ -111,10 +111,25 @@ class AnnotationsController extends Controller
         }
 
         $data = $request->only([
-            'type', 'rotation', 'border_color', 'border_style', 'color',
-            'thickness', 'x1', 'y1', 'x2', 'y2', 'z_index',
-            'text_content', 'text_bold', 'text_font', 'text_italic',
-            'text_size', 'text_unit', 'line_start', 'line_end',
+            'type',
+            'rotation',
+            'border_color',
+            'border_style',
+            'color',
+            'thickness',
+            'x1',
+            'y1',
+            'x2',
+            'y2',
+            'z_index',
+            'text_content',
+            'text_bold',
+            'text_font',
+            'text_italic',
+            'text_size',
+            'text_unit',
+            'line_start',
+            'line_end',
             'border_radius'
         ]);
 
@@ -157,10 +172,25 @@ class AnnotationsController extends Controller
         }
 
         $data = $request->only([
-            'type', 'rotation', 'border_color', 'border_style', 'color',
-            'thickness', 'x1', 'y1', 'x2', 'y2', 'z_index',
-            'text_content', 'text_bold', 'text_font', 'text_italic',
-            'text_size', 'text_unit', 'line_start', 'line_end',
+            'type',
+            'rotation',
+            'border_color',
+            'border_style',
+            'color',
+            'thickness',
+            'x1',
+            'y1',
+            'x2',
+            'y2',
+            'z_index',
+            'text_content',
+            'text_bold',
+            'text_font',
+            'text_italic',
+            'text_size',
+            'text_unit',
+            'line_start',
+            'line_end',
             'border_radius'
         ]);
 
@@ -229,7 +259,7 @@ class AnnotationsController extends Controller
             return response()->json(['error' => 'No CML token'], 401);
         }
 
-        $schema = $this->annotationService->getLabSchema($token, $lab_id);
+        $schema = $this->annotationService->getTopology($token, $lab_id);
 
         if (isset($schema['error'])) {
             Log::warning('Failed to fetch lab schema via API', [

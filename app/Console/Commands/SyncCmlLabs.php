@@ -20,7 +20,7 @@ class SyncCmlLabs extends Command
         }
 
         $this->info('Fetching labs from CML...');
-        $res = $cisco->getLabs($token);
+        $res = $cisco->getLabsList($token);
         if (! is_array($res) || isset($res['error'])) {
             $this->error('Failed to fetch labs: ' . json_encode($res));
             return 2;
@@ -54,5 +54,3 @@ class SyncCmlLabs extends Command
         return 0;
     }
 }
-
-
