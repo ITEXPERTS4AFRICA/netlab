@@ -63,7 +63,8 @@ class ConsoleService extends BaseCiscoApiService
         
         // Essayer d'obtenir la clé console principale
         $consoleKey = $this->getNodeConsoleKey($labId, $nodeId);
-        if (!isset($consoleKey['error']) && !empty($consoleKey)) {
+        // Ignorer les erreurs 404 (console non disponible) - c'est normal pour certains nodes
+        if (!isset($consoleKey['error']) && !empty($consoleKey) && (!isset($consoleKey['status']) || $consoleKey['status'] !== 404)) {
             // Si c'est une string (UUID), créer un objet console
             if (is_string($consoleKey)) {
                 $consoles[] = [
@@ -82,7 +83,8 @@ class ConsoleService extends BaseCiscoApiService
         
         // Essayer d'obtenir la clé VNC si disponible
         $vncKey = $this->getNodeVncKey($labId, $nodeId);
-        if (!isset($vncKey['error']) && !empty($vncKey)) {
+        // Ignorer les erreurs 404 (VNC non disponible) - c'est normal pour certains nodes
+        if (!isset($vncKey['error']) && !empty($vncKey) && (!isset($vncKey['status']) || $vncKey['status'] !== 404)) {
             if (is_string($vncKey)) {
                 $consoles[] = [
                     'id' => $vncKey,
@@ -98,9 +100,22 @@ class ConsoleService extends BaseCiscoApiService
             }
         }
         
-        // Si aucune console n'a été trouvée, retourner un tableau vide plutôt qu'une erreur
-        // car certains nodes peuvent ne pas avoir de console disponible
-        return $consoles;
+        // Retourner la structure attendue par le frontend
+        $hasConsole = !empty(array_filter($consoles, function($c) {
+            return ($c['console_type'] ?? '') === 'console';
+        }));
+        $hasVnc = !empty(array_filter($consoles, function($c) {
+            return ($c['console_type'] ?? '') === 'vnc';
+        }));
+        
+        return [
+            'consoles' => $consoles,
+            'available_types' => [
+                'console' => $hasConsole,
+                'vnc' => $hasVnc,
+                'serial' => false, // Pas encore implémenté
+            ],
+        ];
     }
 
     /**
@@ -168,7 +183,7 @@ class ConsoleService extends BaseCiscoApiService
             'options' => $options,
             'data' => $data,
             'base_url' => $this->baseUrl,
-            'has_token' => !empty($this->token),
+            'has_token' => !empty($this->getToken()),
         ]);
 
         $result = $this->post('/api/v0/console/session', $data);

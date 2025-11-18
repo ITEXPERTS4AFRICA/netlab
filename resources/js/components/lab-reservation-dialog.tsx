@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useForm } from '@inertiajs/react';
 import {
   Dialog,
@@ -63,14 +63,28 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
     const endHour = 22; // 10 PM
     const slotDuration = 4; // 4 hours
 
+    // Utiliser une seed basée sur la date pour avoir des valeurs cohérentes
+    const dateSeed = date.toDateString();
+    let seed = 0;
+    for (let i = 0; i < dateSeed.length; i++) {
+      seed = ((seed << 5) - seed) + dateSeed.charCodeAt(i);
+      seed = seed & seed; // Convert to 32bit integer
+    }
+
+    // Fonction pseudo-aléatoire basée sur la seed
+    const seededRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+
     for (let hour = startHour; hour < endHour; hour += slotDuration) {
       const startTime = `${hour.toString().padStart(2, '0')}:00`;
       const endHourSlot = Math.min(hour + slotDuration, endHour);
       const endTime = `${endHourSlot.toString().padStart(2, '0')}:00`;
 
-      // Simulate some slots as unavailable or full for demo
-      const isAvailable = Math.random() > 0.3; // 70% available
-      const currentUsers = isAvailable ? Math.floor(Math.random() * 2) : 0; // 0-1 users (lab is either free or occupied)
+      // Utiliser le random seedé pour avoir des valeurs cohérentes par date
+      const isAvailable = seededRandom() > 0.3; // 70% available
+      const currentUsers = isAvailable ? Math.floor(seededRandom() * 2) : 0; // 0-1 users (lab is either free or occupied)
       const maxUsers = 1; // Each lab slot is occupied by one user only
 
       slots.push({
@@ -86,7 +100,10 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
     return slots;
   };
 
-  const timeSlots = generateTimeSlots(selectedDate, lab.id);
+  // Mémoriser les time slots pour éviter les re-rendus infinis
+  const timeSlots = useMemo(() => {
+    return generateTimeSlots(selectedDate, lab.id);
+  }, [selectedDate, lab.id]);
 
   const handleSlotSelect = (slot: TimeSlot) => {
     setSelectedSlot(slot);
@@ -113,21 +130,35 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
     });
   };
 
-  // Calculer le prix estimé
-  const calculateEstimatedPrice = (): number => {
+  // Calculer le prix estimé (aligné avec le backend) - mémorisé pour éviter les recalculs
+  const estimatedPrice = useMemo(() => {
     if (!lab.price_cents || lab.price_cents === 0) return 0;
-    if (!selectedSlot) return 0;
 
-    // Calculer la durée en heures
-    const start = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.startTime}:00`);
-    const end = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.endTime}:00`);
-    const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    let durationHours = 0;
 
-    // Prix par heure (ou prix fixe si durée < 1h)
-    return Math.max(lab.price_cents, Math.ceil(durationHours) * lab.price_cents);
-  };
+    if (isInstant) {
+      // Réservation instantanée : 4 heures
+      durationHours = 4;
+    } else if (selectedSlot) {
+      // Calculer la durée en heures depuis le créneau sélectionné
+      const start = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.startTime}:00`);
+      const end = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.endTime}:00`);
+      durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    } else if (data.start_at && data.end_at) {
+      // Utiliser les dates du formulaire si disponibles
+      const start = new Date(data.start_at);
+      const end = new Date(data.end_at);
+      durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    } else {
+      // Pas de créneau sélectionné, retourner 0
+      return 0;
+    }
 
-  const estimatedPrice = calculateEstimatedPrice();
+    // Aligné avec le backend : ceil(durationHours) * pricePerHour avec minimum 1 heure
+    // Le backend fait : max(1, ceil($totalHours)) * $pricePerHour
+    const hours = Math.max(1, Math.ceil(durationHours));
+    return hours * lab.price_cents;
+  }, [lab.price_cents, isInstant, selectedSlot, selectedDate, data.start_at, data.end_at]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,7 +181,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       const end = new Date(startTime.getTime() + 4 * 60 * 60 * 1000); // +4 heures
       startAt = startTime.toISOString();
       endAt = end.toISOString();
-      
+
       console.log('Instant reservation times:', {
         startAt,
         endAt,
@@ -168,7 +199,6 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
         // Si le créneau est passé, utiliser demain
         const tomorrow = new Date(now);
         tomorrow.setDate(tomorrow.getDate() + 1);
-        const slotDate = tomorrow.toISOString().split('T')[0];
         const [startHours, startMinutes] = selectedSlot?.startTime.split(':') || ['09', '00'];
         const [endHours, endMinutes] = selectedSlot?.endTime.split(':') || ['13', '00'];
 
@@ -218,14 +248,14 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
         end_at: endAt,
         instant: isInstant || false,
       };
-      
+
       console.log('Sending reservation request:', {
         ...requestData,
         is_instant: isInstant,
         lab_id_type: typeof lab.id,
         lab_id_length: lab.id?.length,
       });
-      
+
       // Utiliser cml_id pour trouver le lab
       const response = await fetch(`/api/labs/reserve`, {
         method: 'POST',
@@ -563,14 +593,19 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
           </div>
 
           {/* Affichage du prix */}
-          {estimatedPrice > 0 && (
+          {lab.price_cents && lab.price_cents > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border">
               <div className="flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-primary" />
-                <span className="font-medium">Prix estimé</span>
+                <span className="font-medium">
+                  {estimatedPrice > 0 ? 'Prix estimé' : 'Prix par heure'}
+                </span>
               </div>
               <span className="text-lg font-bold text-primary">
-                {(estimatedPrice / 100).toLocaleString('fr-FR')} {lab.currency || 'XOF'}
+                {estimatedPrice > 0
+                  ? `${(estimatedPrice / 100).toLocaleString('fr-FR')} ${lab.currency || 'XOF'}`
+                  : `${(lab.price_cents / 100).toLocaleString('fr-FR')} ${lab.currency || 'XOF'}/h`
+                }
               </span>
             </div>
           )}

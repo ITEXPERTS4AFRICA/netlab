@@ -178,7 +178,7 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
             setSelectedNode(clickedNode);
             setIsDragging(false);
         } else {
-            setIsDragging(true);
+        setIsDragging(true);
             setDragStart({ x: mouseX - pan.x, y: mouseY - pan.y });
         }
     };
@@ -193,10 +193,10 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        setPan({
+            setPan({
             x: mouseX - dragStart.x,
             y: mouseY - dragStart.y,
-        });
+            });
     };
 
     const handleMouseUp = () => {

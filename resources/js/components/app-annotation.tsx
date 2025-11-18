@@ -624,32 +624,32 @@ const AnnotationLab: React.FC<AnnotationLabProps> = ({
 
         if (isEditing) {
             return (
-                <div
+                    <div
                     key={`draggable-${annotation.id}`}
-                    ref={(el) => { dragRefs.current[annotation.id] = el; }}
-                    className="absolute group cursor-pointer"
+                        ref={(el) => { dragRefs.current[annotation.id] = el; }}
+                        className="absolute group cursor-pointer"
                     style={{
                         left: `${transformedX1}px`,
                         top: `${transformedY1}px`,
                         cursor: draggingAnnotation === annotation.id ? 'grabbing' : 'move',
                     }}
                     onMouseDown={handleMouseDown}
-                    onClick={(e) => handleAnnotationClick(annotation, e)}
-                >
-                    {/* Delete button for annotations in edit mode */}
-                    <Button
-                        variant="destructive"
-                        size="sm"
-                        className="absolute -top-2 -right-2 w-6 h-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            deleteAnnotation(annotation.id);
-                        }}
+                        onClick={(e) => handleAnnotationClick(annotation, e)}
                     >
-                        <Trash2 className="w-3 h-3" />
-                    </Button>
-                    {annotationContent}
-                </div>
+                        {/* Delete button for annotations in edit mode */}
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            className="absolute -top-2 -right-2 w-6 h-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                deleteAnnotation(annotation.id);
+                            }}
+                        >
+                            <Trash2 className="w-3 h-3" />
+                        </Button>
+                        {annotationContent}
+                    </div>
             );
         }
 

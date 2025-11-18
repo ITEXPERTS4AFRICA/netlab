@@ -77,14 +77,18 @@ const CONNECTION_META: Record<ConnectionState, { label: string; variant: 'outlin
 const MAX_LOG_LINES = 500;
 
 export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Props) {
-    // Trouver le premier node valide avec un id
-    const getFirstValidNodeId = useCallback(() => {
+    // Trouver le premier node valide avec un id - utiliser useMemo pour éviter les re-calculs
+    const firstValidNodeId = useMemo(() => {
         if (!nodes || nodes.length === 0) return '';
         const firstNode = nodes.find(node => node.id && node.id.trim() !== '');
         return firstNode?.id ?? '';
     }, [nodes]);
 
-    const [selectedNodeId, setSelectedNodeId] = useState<string>(getFirstValidNodeId);
+    const [selectedNodeId, setSelectedNodeId] = useState<string>(() => {
+        if (!nodes || nodes.length === 0) return '';
+        const firstNode = nodes.find(node => node.id && node.id.trim() !== '');
+        return firstNode?.id ?? '';
+    });
     const [availableTypes, setAvailableTypes] = useState<AvailableConsoleTypes>({});
     const [consoles, setConsoles] = useState<ConsoleInfo[]>([]);
     const [loadingConsoles, setLoadingConsoles] = useState(false);
@@ -99,20 +103,26 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
     
     // Utiliser le hook useConsole pour les appels API typés
     const consoleApi = useConsole();
-    const getNodeConsolesFn = useCallback(
-        (labId: string, nodeId: string) => consoleApi.getNodeConsoles(labId, nodeId),
-        [consoleApi]
-    );
+    
+    // Utiliser useRef pour garder des références stables aux méthodes de consoleApi
+    // Mettre à jour les références directement dans le corps du composant (pas dans useEffect)
+    const getNodeConsolesRef = useRef(consoleApi.getNodeConsoles);
+    const createSessionRef = useRef(consoleApi.createSession);
+    const closeSessionRef = useRef(consoleApi.closeSession);
+    const getConsoleLogRef = useRef(consoleApi.getConsoleLog);
+    
+    getNodeConsolesRef.current = consoleApi.getNodeConsoles;
+    createSessionRef.current = consoleApi.createSession;
+    closeSessionRef.current = consoleApi.closeSession;
+    getConsoleLogRef.current = consoleApi.getConsoleLog;
 
-    // Mettre à jour selectedNodeId quand nodes change
+    // Mettre à jour selectedNodeId quand nodes change (seulement si selectedNodeId est vide)
     useEffect(() => {
-        if (!selectedNodeId && nodes && nodes.length > 0) {
-            const firstValid = getFirstValidNodeId();
-            if (firstValid && firstValid !== selectedNodeId) {
-                setSelectedNodeId(firstValid);
-            }
+        if (!selectedNodeId && firstValidNodeId && firstValidNodeId !== selectedNodeId) {
+            setSelectedNodeId(firstValidNodeId);
         }
-    }, [nodes, selectedNodeId, getFirstValidNodeId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [firstValidNodeId]); // Ne pas inclure selectedNodeId pour éviter les boucles
 
     const normalizedSessions = useMemo<ConsoleSession[]>(() => {
         if (!initialSessions) return [];
@@ -159,10 +169,14 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             setLoadingConsoles(true);
             setError(null);
             try {
-                const data = await getNodeConsolesFn(cmlLabId, selectedNodeId);
+                const data = await getNodeConsolesRef.current(cmlLabId, selectedNodeId);
                 if (data && !controller.signal.aborted && isMounted) {
                     setConsoles(Array.isArray(data.consoles) ? data.consoles : []);
                     setAvailableTypes(data.available_types || {});
+                } else if (!data && !controller.signal.aborted && isMounted) {
+                    // Si data est null, c'est qu'il y a eu une erreur (gérée par useConsole)
+                    setConsoles([]);
+                    setAvailableTypes({});
                 }
             } catch (err) {
                 if (controller.signal.aborted || !isMounted) return;
@@ -183,7 +197,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             isMounted = false;
             controller.abort();
         };
-    }, [cmlLabId, selectedNodeId, getNodeConsolesFn]);
+    }, [cmlLabId, selectedNodeId]);
 
     const closeSession = useCallback(async ({ skipApi = false, reason }: { skipApi?: boolean; reason?: string } = {}) => {
         const activeSession = sessionRef.current;
@@ -204,8 +218,8 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         setConnectionState('closing');
         teardownWebsocket({ silent: true });
 
-        if (!skipApi && consoleApi) {
-            const success = await consoleApi.closeSession(activeSession.sessionId);
+        if (!skipApi && closeSessionRef.current) {
+            const success = await closeSessionRef.current(activeSession.sessionId);
             if (!success) {
                 console.warn('Console session close failed');
             }
@@ -214,7 +228,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         sessionRef.current = null;
         setSession(null);
         setConnectionState('closed');
-    }, [appendLog, teardownWebsocket, consoleApi]);
+    }, [appendLog, teardownWebsocket]);
 
     useEffect(() => {
         return () => {
@@ -344,10 +358,10 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         setLogLines([`[Console] Connexion en cours pour le nœud ${selectedNodeId}`]);
 
         try {
-            const data = await consoleApi.createSession({
-                lab_id: cmlLabId,
-                node_id: selectedNodeId,
-                type,
+            const data = await createSessionRef.current({
+                    lab_id: cmlLabId,
+                    node_id: selectedNodeId,
+                    type,
             });
 
             if (!data) {
@@ -414,7 +428,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         } finally {
             setLoadingSession(false);
         }
-    }, [appendLog, cmlLabId, closeSession, selectedNodeId, consoleApi]);
+    }, [appendLog, cmlLabId, closeSession, selectedNodeId]);
 
     const handleCloseSession = useCallback(() => {
         void closeSession({ reason: 'Session fermée manuellement' });
@@ -432,16 +446,16 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
 
         // Si on a un WebSocket ouvert, l'utiliser
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
-            try {
-                wsRef.current.send(payload);
-                appendLog(`> ${trimmed}`);
-                setCommand('');
-            } catch (err) {
-                console.error(err);
-                toast.error('Échec d\'envoi de la commande.');
-                setConnectionState('error');
-            }
+        const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
+        try {
+            wsRef.current.send(payload);
+            appendLog(`> ${trimmed}`);
+            setCommand('');
+        } catch (err) {
+            console.error(err);
+            toast.error('Échec d\'envoi de la commande.');
+            setConnectionState('error');
+        }
             return;
         }
 
@@ -457,7 +471,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
 
         appendLog('[Console] Récupération du journal…');
         try {
-            const data = await consoleApi.getConsoleLog(cmlLabId, selectedNodeId, consoleId);
+            const data = await getConsoleLogRef.current(cmlLabId, selectedNodeId, consoleId);
 
             if (!data) {
                 throw new Error('Impossible de récupérer le log');
@@ -475,7 +489,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             console.error(err);
             toast.error('Impossible de récupérer le journal de console.');
         }
-    }, [appendLog, cmlLabId, selectedNodeId, consoleApi]);
+    }, [appendLog, cmlLabId, selectedNodeId]);
 
     const connectionBadge = useMemo(() => CONNECTION_META[connectionState], [connectionState]);
     // Une session est "ouverte" si elle existe et que la connexion est ouverte ou en cours de connexion
@@ -507,30 +521,30 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                             Aucun nœud disponible. Le lab doit être démarré pour voir les nœuds.
                         </div>
                     ) : (
-                        <Select
-                            value={selectedNodeId}
+                    <Select
+                        value={selectedNodeId}
                             onValueChange={value => {
                                 if (value && value !== selectedNodeId) {
                                     setSelectedNodeId(value);
                                 }
                             }}
-                            disabled={loadingConsoles || loadingSession}
-                        >
+                        disabled={loadingConsoles || loadingSession}
+                    >
                             <SelectTrigger className="w-full lg:w-auto">
-                                <SelectValue placeholder="Sélectionner un nœud" />
-                            </SelectTrigger>
-                            <SelectContent>
+                            <SelectValue placeholder="Sélectionner un nœud" />
+                        </SelectTrigger>
+                        <SelectContent>
                                 {nodes.map(node => {
                                     const nodeId = node.id || '';
                                     if (!nodeId) return null;
                                     return (
                                         <SelectItem key={nodeId} value={nodeId}>
                                             {node.label ?? node.name ?? nodeId}
-                                        </SelectItem>
+                                </SelectItem>
                                     );
                                 })}
-                            </SelectContent>
-                        </Select>
+                        </SelectContent>
+                    </Select>
                     )}
 
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -599,7 +613,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                                 // Recharger les consoles pour le node sélectionné
                                 setLoadingConsoles(true);
                                 setError(null);
-                                consoleApi.getNodeConsoles(cmlLabId, selectedNodeId)
+                                getNodeConsolesRef.current(cmlLabId, selectedNodeId)
                                     .then(data => {
                                         if (data) {
                                             setConsoles(Array.isArray(data.consoles) ? data.consoles : []);
@@ -666,14 +680,14 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                     ) : logLines.length > 0 ? (
                         <div className="overflow-y-auto p-3 font-mono text-xs text-emerald-200">
                             {logLines.map((line, index) => (
-                                <pre key={index} className="whitespace-pre-wrap">
-                                    {line}
-                                </pre>
+                            <pre key={index} className="whitespace-pre-wrap">
+                                {line}
+                            </pre>
                             ))}
                         </div>
                     ) : (
                         <div className="flex h-full items-center justify-center p-3">
-                            <p className="text-muted-foreground">La sortie console apparaîtra ici.</p>
+                        <p className="text-muted-foreground">La sortie console apparaîtra ici.</p>
                         </div>
                     )}
                 </div>
@@ -685,23 +699,23 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                         Utilisez la console ci-dessus pour entrer vos commandes directement.
                     </p>
                 ) : (
-                    <div className="flex w-full items-center gap-2">
-                        <Input
-                            placeholder="Entrer une commande (ex. show ip interface brief)"
-                            value={command}
-                            onChange={event => setCommand(event.target.value)}
-                            onKeyDown={event => {
-                                if (event.key === 'Enter' && !event.shiftKey) {
-                                    event.preventDefault();
-                                    handleSendCommand();
-                                }
-                            }}
-                            disabled={!isSessionOpen}
-                        />
-                        <Button onClick={handleSendCommand} disabled={!isSessionOpen || !command.trim()}>
-                            Envoyer
-                        </Button>
-                    </div>
+                <div className="flex w-full items-center gap-2">
+                    <Input
+                        placeholder="Entrer une commande (ex. show ip interface brief)"
+                        value={command}
+                        onChange={event => setCommand(event.target.value)}
+                        onKeyDown={event => {
+                            if (event.key === 'Enter' && !event.shiftKey) {
+                                event.preventDefault();
+                                handleSendCommand();
+                            }
+                        }}
+                        disabled={!isSessionOpen}
+                    />
+                    <Button onClick={handleSendCommand} disabled={!isSessionOpen || !command.trim()}>
+                        Envoyer
+                    </Button>
+                </div>
                 )}
 
                 {normalizedSessions.length > 0 && (

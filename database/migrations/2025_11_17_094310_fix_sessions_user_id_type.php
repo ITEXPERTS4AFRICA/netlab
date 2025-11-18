@@ -44,13 +44,13 @@ return new class extends Migration
             ");
         } else {
             // MySQL
-            $columnExists = DB::selectOne("
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
-                WHERE table_name = 'sessions' 
-                AND column_name = 'user_id'
+        $columnExists = DB::selectOne("
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'sessions' 
+            AND column_name = 'user_id'
                 AND table_schema = DATABASE()
-            ");
+        ");
         }
 
         if ($columnExists) {

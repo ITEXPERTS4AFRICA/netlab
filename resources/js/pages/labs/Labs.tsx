@@ -646,7 +646,7 @@ export default function Labs() {
                                                     <svg className="h-5 w-5 text-[hsl(var(--chart-6))]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                                                     </svg>
-                                                </div>
+                                                    </div>
                                                 <div className="text-center">
                                                     <div className="text-xl font-bold text-[hsl(var(--chart-6))]">{lab.interface_count !== undefined && lab.interface_count !== null ? lab.interface_count : 'N/A'}</div>
                                                     <div className="text-xs text-muted-foreground font-medium">Interfaces</div>

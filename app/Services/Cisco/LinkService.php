@@ -121,7 +121,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function downloadPcap(string $linkCaptureKey)
     {
-        $response = \Illuminate\Support\Facades\Http::withToken($this->token)
+        $response = \Illuminate\Support\Facades\Http::withToken($this->getToken())
             ->withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/octet-stream'])
             ->get("{$this->baseUrl}/api/v0/pcap/{$linkCaptureKey}");
@@ -142,7 +142,7 @@ class LinkService extends BaseCiscoApiService
      */
     public function downloadPcapPacket(string $linkCaptureKey, string $packetId)
     {
-        $response = \Illuminate\Support\Facades\Http::withToken($this->token)
+        $response = \Illuminate\Support\Facades\Http::withToken($this->getToken())
             ->withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/octet-stream'])
             ->get("{$this->baseUrl}/api/v0/pcap/{$linkCaptureKey}/packet/{$packetId}");

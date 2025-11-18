@@ -58,12 +58,25 @@ class CinetPayService
         // CinetPay attend le montant directement en XOF (pas en centimes)
         // Le montant est déjà en centimes dans $paymentData['amount']
         // Convertir les centimes en XOF
-        $amount = $paymentData['amount'];
-        if ($amount >= 100) {
-            // Convertir les centimes en XOF (diviser par 100)
-            $amount = $amount / 100;
-        }
+        $amountInCents = $paymentData['amount'];
+
+        // Log pour vérifier le montant reçu
+        Log::info('CinetPayService: Montant reçu', [
+            'amount_in_cents' => $amountInCents,
+            'amount_type' => gettype($amountInCents),
+        ]);
+
+        // Convertir les centimes en XOF (diviser par 100)
+        // Le montant est toujours en centimes depuis ReservationController
+        $amount = $amountInCents / 100;
         $amount = (int) round($amount); // Arrondir et s'assurer que c'est un entier
+
+        // Log pour vérifier la conversion
+        Log::info('CinetPayService: Montant converti', [
+            'amount_in_cents' => $amountInCents,
+            'amount_in_xof' => $amount,
+            'currency' => $paymentData['currency'] ?? 'XOF',
+        ]);
 
         // Générer un transaction_id si non fourni
         $transactionId = $paymentData['transaction_id'] ?? \CinetPay::generateTransId();

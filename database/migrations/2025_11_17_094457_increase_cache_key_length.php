@@ -22,8 +22,8 @@ return new class extends Migration
         
         // Pour PostgreSQL
         if ($driver === 'pgsql') {
-            DB::statement('ALTER TABLE cache ALTER COLUMN key TYPE varchar(512)');
-            DB::statement('ALTER TABLE cache_locks ALTER COLUMN key TYPE varchar(512)');
+        DB::statement('ALTER TABLE cache ALTER COLUMN key TYPE varchar(512)');
+        DB::statement('ALTER TABLE cache_locks ALTER COLUMN key TYPE varchar(512)');
         } 
         // Pour MySQL
         elseif ($driver === 'mysql') {
@@ -46,8 +46,8 @@ return new class extends Migration
         
         // Pour PostgreSQL
         if ($driver === 'pgsql') {
-            DB::statement('ALTER TABLE cache ALTER COLUMN key TYPE varchar(255)');
-            DB::statement('ALTER TABLE cache_locks ALTER COLUMN key TYPE varchar(255)');
+        DB::statement('ALTER TABLE cache ALTER COLUMN key TYPE varchar(255)');
+        DB::statement('ALTER TABLE cache_locks ALTER COLUMN key TYPE varchar(255)');
         }
         // Pour MySQL
         elseif ($driver === 'mysql') {

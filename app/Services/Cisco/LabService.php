@@ -90,7 +90,7 @@ class LabService extends BaseCiscoApiService
      */
     public function getPyatsTestbed(string $id)
     {
-        $response = \Illuminate\Support\Facades\Http::withToken($this->token)
+        $response = \Illuminate\Support\Facades\Http::withToken($this->getToken())
             ->withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/yaml'])
             ->get("{$this->baseUrl}/api/v0/labs/{$id}/pyats_testbed");
@@ -127,7 +127,7 @@ class LabService extends BaseCiscoApiService
      */
     public function downloadLab(string $id)
     {
-        $response = \Illuminate\Support\Facades\Http::withToken($this->token)
+        $response = \Illuminate\Support\Facades\Http::withToken($this->getToken())
             ->withOptions(['verify' => false])
             ->withHeaders(['Accept' => 'application/yaml'])
             ->get("{$this->baseUrl}/api/v0/labs/{$id}/download");

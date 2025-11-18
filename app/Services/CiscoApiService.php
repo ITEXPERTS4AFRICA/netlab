@@ -39,7 +39,7 @@ class CiscoApiService
     public function __construct()
     {
         $baseUrl = CmlConfigHelper::getBaseUrl();
-        
+
         $this->auth = new AuthService();
         $this->labs = new LabService();
         $this->nodes = new NodeService();
@@ -72,7 +72,7 @@ class CiscoApiService
 
         // Charger le token depuis la session
         $this->token = session('cml_token');
-        
+
         // S'assurer qu'un token valide est disponible
         $this->ensureValidToken();
     }
@@ -143,23 +143,37 @@ class CiscoApiService
         }
     }
 
+    /**
+     * Définir le token CML (centralisé)
+     * Le token est stocké dans la session et tous les services le récupèrent automatiquement
+     */
     public function setToken(string $token): void
     {
         $this->token = $token;
-        $this->auth->setToken($token);
-        $this->labs->setToken($token);
-        $this->nodes->setToken($token);
-        $this->links->setToken($token);
-        $this->system->setToken($token);
-        $this->licensing->setToken($token);
-        $this->images->setToken($token);
-        $this->interfaces->setToken($token);
-        $this->resourcePools->setToken($token);
-        $this->telemetry->setToken($token);
-        $this->groups->setToken($token);
-        $this->import->setToken($token);
-        $this->console->setToken($token);
+        // Stocker le token dans la session - tous les services le récupèrent automatiquement
         session()->put('cml_token', $token);
+    }
+
+    /**
+     * Activer le mode exceptions pour tous les services
+     * Utile pour forcer les exceptions au lieu de retourner des arrays avec 'error'
+     */
+    public function enableExceptions(bool $enable = true): self
+    {
+        $this->auth->throwExceptions($enable);
+        $this->labs->throwExceptions($enable);
+        $this->nodes->throwExceptions($enable);
+        $this->links->throwExceptions($enable);
+        $this->system->throwExceptions($enable);
+        $this->images->throwExceptions($enable);
+        $this->licensing->throwExceptions($enable);
+        $this->resourcePools->throwExceptions($enable);
+        $this->console->throwExceptions($enable);
+        $this->groups->throwExceptions($enable);
+        $this->telemetry->throwExceptions($enable);
+        $this->import->throwExceptions($enable);
+        $this->interfaces->throwExceptions($enable);
+        return $this;
     }
 
     public function auth_extended(string $username, string $password): array

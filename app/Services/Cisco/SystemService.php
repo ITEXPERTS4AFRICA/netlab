@@ -249,7 +249,7 @@ class SystemService extends BaseCiscoApiService
      */
     public function getSystemArchive()
     {
-        $response = \Illuminate\Support\Facades\Http::withToken($this->token)
+        $response = \Illuminate\Support\Facades\Http::withToken($this->getToken())
             ->withOptions(['verify' => false])
             ->get("{$this->baseUrl}/api/v0/system_archive");
 

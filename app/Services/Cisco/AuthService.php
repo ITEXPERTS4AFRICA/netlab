@@ -27,7 +27,6 @@ class AuthService extends BaseCiscoApiService
                 $data = $response->json();
                 if (isset($data['token'])) {
                     session()->put('cml_token', $data['token']);
-                    $this->token = $data['token'];
                 }
                 return $data;
             }
@@ -47,8 +46,6 @@ class AuthService extends BaseCiscoApiService
                 'error' => $e->getMessage(),
             ]);
             return ['error' => 'Exception: ' . $e->getMessage()];
-        } finally {
-            $this->token = session('cml_token');
         }
     }
 
@@ -57,7 +54,7 @@ class AuthService extends BaseCiscoApiService
      */
     public function logout($token = null): mixed
     {
-        $tokenToUse = $token ?? $this->token;
+        $tokenToUse = $token ?? $this->getToken();
 
         $response = Http::withToken($tokenToUse)
             ->withOptions(['verify' => false])
@@ -72,22 +69,22 @@ class AuthService extends BaseCiscoApiService
      */
     public function revokeToken(): void
     {
-        if (!$this->token) {
+        $token = $this->getToken();
+        if (!$token) {
             return;
         }
 
         try {
             $url = "{$this->baseUrl}/api/v0/revoke";
-            Http::withToken($this->token)
+            Http::withToken($token)
                 ->withOptions(['verify' => false])
                 ->post($url);
         } catch (\Exception $e) {
             // ignore - revoke best effort
         }
 
-        // Nettoyer la session locale
+        // Nettoyer la session
         session()->forget('cml_token');
-        $this->token = null;
     }
 
     /**
@@ -130,7 +127,6 @@ class AuthService extends BaseCiscoApiService
                 $data = $response->json();
                 if (isset($data)) {
                     session()->put('cml_token', $data);
-                    $this->token = $data;
                 }
                 return ['token' => $data];
             }

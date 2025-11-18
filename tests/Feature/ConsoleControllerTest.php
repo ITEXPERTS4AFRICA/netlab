@@ -140,7 +140,7 @@ class ConsoleControllerTest extends TestCase
         $this->app->singleton(CiscoApiService::class, function () {
             return new class extends CiscoApiService {
                 public function __construct()
-                {
+    {
                     $this->console = new class extends ConsoleService {
                         public function getNodeConsoles(string $labId, string $nodeId): array
                         {

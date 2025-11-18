@@ -15,7 +15,7 @@ class BatchService extends BaseCiscoApiService
         $responses = Http::pool(fn (Pool $pool) =>
             collect($nodeIds)->map(fn ($nodeId) =>
                 $pool->as($nodeId)
-                    ->withToken($this->token)
+                    ->withToken($this->getToken())
                     ->withOptions(['verify' => false])
                     ->put("{$this->baseUrl}/api/v0/labs/{$labId}/nodes/{$nodeId}/state/start")
             )->all()
@@ -42,7 +42,7 @@ class BatchService extends BaseCiscoApiService
         $responses = Http::pool(fn (Pool $pool) =>
             collect($nodeIds)->map(fn ($nodeId) =>
                 $pool->as($nodeId)
-                    ->withToken($this->token)
+                    ->withToken($this->getToken())
                     ->withOptions(['verify' => false])
                     ->put("{$this->baseUrl}/api/v0/labs/{$labId}/nodes/{$nodeId}/state/stop")
             )->all()
@@ -68,7 +68,7 @@ class BatchService extends BaseCiscoApiService
         $responses = Http::pool(fn (Pool $pool) =>
             collect($labsData)->map(fn ($data, $index) =>
                 $pool->as($index)
-                    ->withToken($this->token)
+                    ->withToken($this->getToken())
                     ->withOptions(['verify' => false])
                     ->post("{$this->baseUrl}/api/v0/labs", $data)
             )->all()
@@ -94,7 +94,7 @@ class BatchService extends BaseCiscoApiService
         $responses = Http::pool(fn (Pool $pool) =>
             collect($labIds)->map(fn ($labId) =>
                 $pool->as($labId)
-                    ->withToken($this->token)
+                    ->withToken($this->getToken())
                     ->withOptions(['verify' => false])
                     ->put("{$this->baseUrl}/api/v0/labs/{$labId}/start")
             )->all()
@@ -122,7 +122,7 @@ class BatchService extends BaseCiscoApiService
         $responses = Http::pool(fn (Pool $pool) =>
             collect($labIds)->map(fn ($labId) =>
                 $pool->as($labId)
-                    ->withToken($this->token)
+                    ->withToken($this->getToken())
                     ->withOptions(['verify' => false])
                     ->put("{$this->baseUrl}/api/v0/labs/{$labId}/stop")
             )->all()
@@ -150,7 +150,7 @@ class BatchService extends BaseCiscoApiService
         $responses = Http::pool(fn (Pool $pool) =>
             collect($updates)->map(fn ($data, $nodeId) =>
                 $pool->as($nodeId)
-                    ->withToken($this->token)
+                    ->withToken($this->getToken())
                     ->withOptions(['verify' => false])
                     ->patch("{$this->baseUrl}/api/v0/labs/{$labId}/nodes/{$nodeId}", $data)
             )->all()
@@ -176,7 +176,7 @@ class BatchService extends BaseCiscoApiService
         $responses = Http::pool(fn (Pool $pool) =>
             collect($labIds)->map(fn ($labId) =>
                 $pool->as($labId)
-                    ->withToken($this->token)
+                    ->withToken($this->getToken())
                     ->withOptions(['verify' => false])
                     ->delete("{$this->baseUrl}/api/v0/labs/{$labId}")
             )->all()
@@ -206,7 +206,7 @@ class BatchService extends BaseCiscoApiService
         $responses = Http::pool(fn (Pool $pool) =>
             collect($nodeIds)->map(fn ($nodeId) =>
                 $pool->as($nodeId)
-                    ->withToken($this->token)
+                    ->withToken($this->getToken())
                     ->withOptions(['verify' => false])
                     ->get("{$this->baseUrl}/api/v0/labs/{$labId}/nodes/{$nodeId}/state")
             )->all()
@@ -230,7 +230,7 @@ class BatchService extends BaseCiscoApiService
         $responses = Http::pool(fn (Pool $pool) =>
             collect($labIds)->map(fn ($labId) =>
                 $pool->as($labId)
-                    ->withToken($this->token)
+                    ->withToken($this->getToken())
                     ->withOptions(['verify' => false])
                     ->get("{$this->baseUrl}/api/v0/labs/{$labId}")
             )->all()

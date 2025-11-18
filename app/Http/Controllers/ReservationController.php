@@ -141,7 +141,7 @@ class ReservationController extends Controller
             'now' => $now->format('Y-m-d H:i:s'),
             'start_diff_seconds' => $start->getTimestamp() - $now->getTimestamp(),
         ]);
-        
+
         // Pour les réservations instantanées, ajuster start_at à maintenant si nécessaire
         if ($isInstant) {
             // Pour les réservations instantanées, on accepte start_at dans le passé (jusqu'à 5 minutes)

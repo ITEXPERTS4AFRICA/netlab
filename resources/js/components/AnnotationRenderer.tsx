@@ -219,8 +219,8 @@ export const AnnotationRenderer: React.FC<AnnotationRendererProps> = ({
         }}
         onMouseDown={handleMouseDown}
       >
-        {annotationContent}
-      </div>
+          {annotationContent}
+        </div>
     );
   }
 

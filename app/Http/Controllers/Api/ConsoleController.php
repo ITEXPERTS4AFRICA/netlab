@@ -34,71 +34,89 @@ class ConsoleController extends Controller
             ], 401);
         }
 
-        $consoles = $cisco->console->getNodeConsoles($labId, $nodeId);
+        try {
+            $consoles = $cisco->console->getNodeConsoles($labId, $nodeId);
 
-        \Log::info('Console: Réponse getNodeConsoles', [
-            'lab_id' => $labId,
-            'node_id' => $nodeId,
-            'has_error' => isset($consoles['error']),
-            'response_type' => gettype($consoles),
-            'is_array' => is_array($consoles),
-            'response_keys' => is_array($consoles) ? array_keys($consoles) : null,
-        ]);
-
-        if (isset($consoles['error'])) {
-            \Log::warning('Console: Erreur lors de la récupération des consoles', [
+            \Log::info('Console: Réponse getNodeConsoles', [
                 'lab_id' => $labId,
                 'node_id' => $nodeId,
-                'error' => $consoles['error'],
-                'status' => $consoles['status'] ?? null,
-            ]);
-            return response()->json($consoles, $consoles['status'] ?? 500);
-        }
-        
-        // Normaliser la réponse : l'API peut retourner un tableau directement ou un objet avec une clé
-        if (!is_array($consoles)) {
-            \Log::warning('Console: Réponse invalide (pas un tableau)', [
-                'lab_id' => $labId,
-                'node_id' => $nodeId,
+                'has_error' => isset($consoles['error']),
                 'response_type' => gettype($consoles),
+                'is_array' => is_array($consoles),
+                'response_keys' => is_array($consoles) ? array_keys($consoles) : null,
             ]);
-            $consoles = [];
-        } elseif (isset($consoles['consoles']) && is_array($consoles['consoles'])) {
-            // Si la réponse est un objet avec une clé 'consoles', extraire le tableau
-            $consoles = $consoles['consoles'];
-        } elseif (!isset($consoles[0]) && !empty($consoles)) {
-            // Si c'est un objet unique, le mettre dans un tableau
-            $consoles = [$consoles];
-        }
 
-        $types = $cisco->console->getAvailableConsoleTypes($labId, $nodeId);
+            if (isset($consoles['error'])) {
+                \Log::warning('Console: Erreur lors de la récupération des consoles', [
+                    'lab_id' => $labId,
+                    'node_id' => $nodeId,
+                    'error' => $consoles['error'],
+                    'status' => $consoles['status'] ?? null,
+                    'endpoint' => "/api/v0/labs/{$labId}/nodes/{$nodeId}/consoles",
+                ]);
+                return response()->json($consoles, $consoles['status'] ?? 500);
+            }
+            
+            // La méthode getNodeConsoles retourne déjà la structure attendue avec 'consoles' et 'available_types'
+            if (!is_array($consoles)) {
+                \Log::warning('Console: Réponse invalide (pas un tableau)', [
+                    'lab_id' => $labId,
+                    'node_id' => $nodeId,
+                    'response_type' => gettype($consoles),
+                ]);
+                $consoles = [
+                    'consoles' => [],
+                    'available_types' => [
+                        'serial' => false,
+                        'vnc' => false,
+                        'console' => true,
+                    ],
+                ];
+            } elseif (!isset($consoles['consoles']) || !isset($consoles['available_types'])) {
+                // Si la structure n'est pas correcte, normaliser
+                $consolesArray = isset($consoles['consoles']) ? $consoles['consoles'] : (is_array($consoles) && isset($consoles[0]) ? $consoles : []);
+                $types = isset($consoles['available_types']) ? $consoles['available_types'] : [
+                    'serial' => false,
+                    'vnc' => false,
+                    'console' => true,
+                ];
+                $consoles = [
+                    'consoles' => $consolesArray,
+                    'available_types' => $types,
+                ];
+            }
 
-        if (isset($types['error'])) {
-            \Log::warning('Console: Erreur lors de la récupération des types', [
+            \Log::info('Console: Réponse finale', [
                 'lab_id' => $labId,
                 'node_id' => $nodeId,
-                'error' => $types['error'],
+                'consoles_count' => count($consoles['consoles'] ?? []),
+                'available_types' => $consoles['available_types'] ?? [],
             ]);
-            // Ne pas échouer si les types ne peuvent pas être récupérés
-            // Utiliser les types par défaut
-            $types = [
-                'serial' => false,
-                'vnc' => false,
-                'console' => true, // Toujours disponible
-            ];
+
+            return response()->json([
+                'consoles' => $consoles['consoles'] ?? [],
+                'available_types' => $consoles['available_types'] ?? [
+                    'serial' => false,
+                    'vnc' => false,
+                    'console' => true,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Console: Exception lors de la récupération des consoles', [
+                'lab_id' => $labId,
+                'node_id' => $nodeId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            
+            return response()->json([
+                'error' => 'Erreur lors de la récupération des consoles: ' . $e->getMessage(),
+                'status' => 500,
+                'endpoint' => "/api/v0/labs/{$labId}/nodes/{$nodeId}/consoles",
+            ], 500);
         }
-
-        \Log::info('Console: Réponse finale', [
-            'lab_id' => $labId,
-            'node_id' => $nodeId,
-            'consoles_count' => count($consoles),
-            'available_types' => $types,
-        ]);
-
-        return response()->json([
-            'consoles' => $consoles,
-            'available_types' => $types,
-        ]);
     }
 
     /**
@@ -180,8 +198,18 @@ class ConsoleController extends Controller
             ], $keyResponse['status'] ?? 500);
         }
 
-        // Extraire la clé console (peut être une string ou un array avec 'id')
-        $consoleKey = is_string($keyResponse) ? $keyResponse : ($keyResponse['id'] ?? $keyResponse['key'] ?? null);
+        // Extraire la clé console (peut être une string ou un array avec 'id', 'key', ou 'data')
+        $consoleKey = null;
+        if (is_string($keyResponse)) {
+            $consoleKey = $keyResponse;
+        } elseif (is_array($keyResponse)) {
+            // L'API CML peut retourner la clé dans différents champs
+            $consoleKey = $keyResponse['id'] 
+                ?? $keyResponse['key'] 
+                ?? $keyResponse['data'] 
+                ?? $keyResponse['console_key']
+                ?? null;
+        }
         
         if (!$consoleKey) {
             \Log::error('Console: Clé console introuvable dans la réponse', [
@@ -189,11 +217,17 @@ class ConsoleController extends Controller
                 'node_id' => $payload['node_id'],
                 'type' => $consoleType,
                 'response' => $keyResponse,
+                'response_type' => gettype($keyResponse),
+                'response_keys' => is_array($keyResponse) ? array_keys($keyResponse) : null,
             ]);
             
             return response()->json([
                 'error' => 'Clé console introuvable. Le node peut ne pas avoir de console disponible.',
                 'status' => 404,
+                'detail' => [
+                    'response' => $keyResponse,
+                    'response_type' => gettype($keyResponse),
+                ],
             ], 404);
         }
 
