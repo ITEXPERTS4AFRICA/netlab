@@ -55,13 +55,15 @@ class CinetPayService
      */
     public function initiatePayment(array $paymentData): array
     {
-        // Convertir les centimes en XOF (CinetPay attend le montant directement en XOF)
+        // CinetPay attend le montant directement en XOF (pas en centimes)
+        // Le montant est déjà en centimes dans $paymentData['amount']
+        // Convertir les centimes en XOF
         $amount = $paymentData['amount'];
-        if ($paymentData['currency'] === 'XOF' && $amount > 100) {
-            // Si le montant est > 100, c'est probablement en centimes, convertir en XOF
+        if ($amount >= 100) {
+            // Convertir les centimes en XOF (diviser par 100)
             $amount = $amount / 100;
         }
-        $amount = (int) $amount; // S'assurer que c'est un entier
+        $amount = (int) round($amount); // Arrondir et s'assurer que c'est un entier
 
         // Générer un transaction_id si non fourni
         $transactionId = $paymentData['transaction_id'] ?? \CinetPay::generateTransId();

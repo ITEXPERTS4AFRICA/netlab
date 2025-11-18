@@ -12,11 +12,24 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Augmenter la taille de la colonne key dans la table cache
-        DB::statement('ALTER TABLE cache ALTER COLUMN key TYPE varchar(512)');
-
-        // Augmenter aussi pour cache_locks si nécessaire
-        DB::statement('ALTER TABLE cache_locks ALTER COLUMN key TYPE varchar(512)');
+        $driver = DB::getDriverName();
+        
+        // SQLite ne supporte pas ALTER COLUMN pour modifier le type
+        // SQLite est flexible avec les types, donc on peut ignorer cette migration
+        if ($driver === 'sqlite') {
+            return;
+        }
+        
+        // Pour PostgreSQL
+        if ($driver === 'pgsql') {
+            DB::statement('ALTER TABLE cache ALTER COLUMN key TYPE varchar(512)');
+            DB::statement('ALTER TABLE cache_locks ALTER COLUMN key TYPE varchar(512)');
+        } 
+        // Pour MySQL
+        elseif ($driver === 'mysql') {
+            DB::statement('ALTER TABLE cache MODIFY COLUMN `key` VARCHAR(512)');
+            DB::statement('ALTER TABLE cache_locks MODIFY COLUMN `key` VARCHAR(512)');
+        }
     }
 
     /**
@@ -24,8 +37,22 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Revenir à 255 caractères (peut échouer si des clés plus longues existent)
-        DB::statement('ALTER TABLE cache ALTER COLUMN key TYPE varchar(255)');
-        DB::statement('ALTER TABLE cache_locks ALTER COLUMN key TYPE varchar(255)');
+        $driver = DB::getDriverName();
+        
+        // SQLite ne supporte pas ALTER COLUMN
+        if ($driver === 'sqlite') {
+            return;
+        }
+        
+        // Pour PostgreSQL
+        if ($driver === 'pgsql') {
+            DB::statement('ALTER TABLE cache ALTER COLUMN key TYPE varchar(255)');
+            DB::statement('ALTER TABLE cache_locks ALTER COLUMN key TYPE varchar(255)');
+        }
+        // Pour MySQL
+        elseif ($driver === 'mysql') {
+            DB::statement('ALTER TABLE cache MODIFY COLUMN `key` VARCHAR(255)');
+            DB::statement('ALTER TABLE cache_locks MODIFY COLUMN `key` VARCHAR(255)');
+        }
     }
 };

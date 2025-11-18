@@ -18,7 +18,7 @@ import {
     Activity
 } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { router } from '@inertiajs/react';
 import { formatDuration } from '@/lib/utils';
 
@@ -62,7 +62,7 @@ type Props = {
 };
 
 export default function MyReservedLabs() {
-    const { reservedLabs, error } = usePage<Props>().props;
+    const { reservedLabs = [], error } = usePage<Props>().props;
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -70,8 +70,26 @@ export default function MyReservedLabs() {
         return () => clearTimeout(timer);
     }, []);
 
+    // Mémoriser les statistiques pour éviter les recalculs à chaque rendu
+    const stats = useMemo(() => {
+        const safeLabs = reservedLabs.filter(lab => lab && lab.time_info);
+        return {
+            total: safeLabs.length,
+            canAccess: safeLabs.filter(lab => lab.time_info?.status === 'active' && lab.time_info?.can_access).length,
+            pending: safeLabs.filter(lab => lab.time_info?.status === 'pending').length,
+            starting: safeLabs.filter(lab => lab.time_info?.status === 'active' && !lab.time_info?.can_access).length,
+        };
+    }, [reservedLabs]);
+
     const getStatusBadge = (lab: ReservedLab) => {
         const { time_info } = lab;
+        if (!time_info) {
+            return (
+                <Badge variant="outline">
+                    Unknown
+                </Badge>
+            );
+        }
 
         switch (time_info.status) {
             case 'active':
@@ -115,6 +133,9 @@ export default function MyReservedLabs() {
 
     const getTimeDisplay = (lab: ReservedLab) => {
         const { time_info } = lab;
+        if (!time_info) {
+            return null;
+        }
 
         if (time_info.status === 'active' && time_info.time_remaining_minutes !== undefined) {
             const hours = Math.floor(time_info.time_remaining_minutes / 60);
@@ -230,25 +251,19 @@ export default function MyReservedLabs() {
                             transition={{ duration: 0.5, delay: 0.4 }}
                         >
                             <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
-                                <div className="text-2xl font-bold text-primary">{reservedLabs.length}</div>
+                                <div className="text-2xl font-bold text-primary">{stats.total}</div>
                                 <div className="text-sm text-muted-foreground">Total Reserved</div>
                             </div>
                             <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20">
-                                <div className="text-2xl font-bold text-green-600">
-                                    {reservedLabs.filter(lab => lab.time_info.status === 'active' && lab.time_info.can_access).length}
-                                </div>
+                                <div className="text-2xl font-bold text-green-600">{stats.canAccess}</div>
                                 <div className="text-sm text-muted-foreground">Can Access Now</div>
                             </div>
                             <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                                <div className="text-2xl font-bold text-blue-600">
-                                    {reservedLabs.filter(lab => lab.time_info.status === 'pending').length}
-                                </div>
+                                <div className="text-2xl font-bold text-blue-600">{stats.pending}</div>
                                 <div className="text-sm text-muted-foreground">Pending</div>
                             </div>
                             <div className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/20">
-                                <div className="text-2xl font-bold text-orange-600">
-                                    {reservedLabs.filter(lab => lab.time_info.status === 'active' && !lab.time_info.can_access).length}
-                                </div>
+                                <div className="text-2xl font-bold text-orange-600">{stats.starting}</div>
                                 <div className="text-sm text-muted-foreground">Starting</div>
                             </div>
                         </motion.div>
@@ -318,17 +333,21 @@ export default function MyReservedLabs() {
                         className="grid gap-6 md:grid-cols-2 xl:grid-cols-3"
                         variants={containerVariants}
                     >
-                        {reservedLabs.map((lab, index) => (
-                            <motion.div key={lab.reservation_id} variants={cardVariants}>
+                        {reservedLabs.map((lab, index) => {
+                            if (!lab || !lab.time_info) {
+                                return null;
+                            }
+                            return (
+                                <motion.div key={lab.reservation_id || `lab-${index}`} variants={cardVariants}>
                                 <Card className="group relative overflow-hidden border-0 bg-gradient-to-br from-card via-card/95 to-card/80 hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500">
                                     {/* Status gradient stripe */}
                                     <motion.div
                                         className={`absolute top-0 left-0 right-0 h-1 ${
-                                            lab.time_info.status === 'active' && lab.time_info.can_access
+                                            lab.time_info?.status === 'active' && lab.time_info?.can_access
                                                 ? 'bg-gradient-to-r from-[hsl(var(--chart-3))] to-[hsl(var(--chart-3))/70]'
-                                                : lab.time_info.status === 'pending'
+                                                : lab.time_info?.status === 'pending'
                                                 ? 'bg-gradient-to-r from-[hsl(var(--chart-4))] to-[hsl(var(--chart-4))/70]'
-                                                : lab.time_info.status === 'expired'
+                                                : lab.time_info?.status === 'expired'
                                                 ? 'bg-gradient-to-r from-destructive to-destructive/70'
                                                 : 'bg-gradient-to-r from-[hsl(var(--chart-2))] to-[hsl(var(--chart-2))/70]'
                                         }`}
@@ -349,19 +368,30 @@ export default function MyReservedLabs() {
                                                 {getStatusBadge(lab)}
                                             </div>
 
-                                            {/* Status indicator */}
-                                            <motion.div
-                                                className={`p-3 rounded-xl ${
-                                                    lab.time_info.status === 'active' && lab.time_info.can_access
-                                                        ? 'bg-[hsl(var(--chart-3)/10)] border border-[hsl(var(--chart-3)/20)]'
+                                            {/* Status indicator - Clickable to access lab */}
+                                            <motion.button
+                                                onClick={() => {
+                                                    if (lab.time_info.status !== 'expired') {
+                                                        router.visit(`/labs/${lab.lab_id}/workspace`, {
+                                                            method: 'get',
+                                                            preserveScroll: true,
+                                                        });
+                                                    }
+                                                }}
+                                                disabled={lab.time_info.status === 'expired'}
+                                                className={`p-3 rounded-xl transition-all duration-200 ${
+                                                    lab.time_info.status === 'expired'
+                                                        ? 'bg-destructive/10 border border-destructive/20 cursor-not-allowed opacity-50'
+                                                        : lab.time_info.status === 'active' && lab.time_info.can_access
+                                                        ? 'bg-[hsl(var(--chart-3)/10)] border border-[hsl(var(--chart-3)/20)] hover:bg-[hsl(var(--chart-3)/20)] cursor-pointer'
                                                         : lab.time_info.status === 'pending'
-                                                        ? 'bg-[hsl(var(--chart-4)/10)] border border-[hsl(var(--chart-4)/20)]'
-                                                        : lab.time_info.status === 'expired'
-                                                        ? 'bg-destructive/10 border border-destructive/20'
-                                                        : 'bg-[hsl(var(--chart-2)/10)] border border-[hsl(var(--chart-2)/20)]'
+                                                        ? 'bg-[hsl(var(--chart-4)/10)] border border-[hsl(var(--chart-4)/20)] hover:bg-[hsl(var(--chart-4)/20)] cursor-pointer'
+                                                        : 'bg-[hsl(var(--chart-2)/10)] border border-[hsl(var(--chart-2)/20)] hover:bg-[hsl(var(--chart-2)/20)] cursor-pointer'
                                                 }`}
-                                                whileHover={{ scale: 1.05 }}
+                                                whileHover={lab.time_info.status !== 'expired' ? { scale: 1.1 } : {}}
+                                                whileTap={lab.time_info.status !== 'expired' ? { scale: 0.95 } : {}}
                                                 transition={{ duration: 0.2 }}
+                                                title={lab.time_info.status === 'expired' ? 'Reservation expirée' : 'Accéder au lab'}
                                             >
                                                 {lab.time_info.status === 'active' && lab.time_info.can_access ? (
                                                     <CheckCircle className="h-6 w-6 text-[hsl(var(--chart-3))]" />
@@ -372,7 +402,7 @@ export default function MyReservedLabs() {
                                                 ) : (
                                                     <Play className="h-6 w-6 text-[hsl(var(--chart-2))]" />
                                                 )}
-                                            </motion.div>
+                                            </motion.button>
                                         </div>
                                     </CardHeader>
 
@@ -431,13 +461,22 @@ export default function MyReservedLabs() {
                                             </motion.div>
                                         </div>
 
-                                        {/* Access Button */}
+                                        {/* Access Button - Always visible except for expired */}
                                         <motion.div
                                             whileHover={{ scale: 1.02 }}
                                             whileTap={{ scale: 0.98 }}
                                             className="pt-2"
                                         >
-                                            {lab.time_info.can_access ? (
+                                            {lab.time_info.status === 'expired' ? (
+                                                <Button
+                                                    disabled
+                                                    variant="destructive"
+                                                    className="w-full h-12 cursor-not-allowed"
+                                                >
+                                                    <AlertCircle className="h-5 w-5 mr-2" />
+                                                    Reservation Expired
+                                                </Button>
+                                            ) : lab.time_info.can_access ? (
                                                 <Button
                                                     onClick={() => router.visit(`/labs/${lab.lab_id}/workspace`, {
                                                         method: 'get',
@@ -451,35 +490,35 @@ export default function MyReservedLabs() {
                                                 </Button>
                                             ) : lab.time_info.status === 'pending' ? (
                                                 <Button
-                                                    disabled
-                                                    className="w-full h-12 bg-muted hover:bg-muted/80 text-muted-foreground cursor-not-allowed"
+                                                    onClick={() => router.visit(`/labs/${lab.lab_id}/workspace`, {
+                                                        method: 'get',
+                                                        preserveScroll: true,
+                                                    })}
+                                                    className="w-full h-12 bg-[hsl(var(--chart-4))] hover:bg-[hsl(var(--chart-4))/90] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300"
                                                 >
                                                     <Clock className="h-5 w-5 mr-2" />
-                                                    Reservation Pending
-                                                </Button>
-                                            ) : lab.time_info.status === 'expired' ? (
-                                                <Button
-                                                    disabled
-                                                    variant="destructive"
-                                                    className="w-full h-12 cursor-not-allowed"
-                                                >
-                                                    <AlertCircle className="h-5 w-5 mr-2" />
-                                                    Reservation Expired
+                                                    View Lab (Pending)
+                                                    <ArrowRight className="h-5 w-5 ml-2" />
                                                 </Button>
                                             ) : (
                                                 <Button
-                                                    disabled
-                                                    className="w-full h-12 bg-[hsl(var(--chart-2))] hover:bg-[hsl(var(--chart-2))/80] text-white cursor-not-allowed"
+                                                    onClick={() => router.visit(`/labs/${lab.lab_id}/workspace`, {
+                                                        method: 'get',
+                                                        preserveScroll: true,
+                                                    })}
+                                                    className="w-full h-12 bg-[hsl(var(--chart-2))] hover:bg-[hsl(var(--chart-2))/90] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300"
                                                 >
                                                     <Play className="h-5 w-5 mr-2" />
-                                                    Lab Starting...
+                                                    Access Lab (Starting)
+                                                    <ArrowRight className="h-5 w-5 ml-2" />
                                                 </Button>
                                             )}
                                         </motion.div>
                                     </CardContent>
                                 </Card>
-                            </motion.div>
-                        ))}
+                                </motion.div>
+                            );
+                        })}
                     </motion.div>
                 )}
             </motion.div>

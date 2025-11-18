@@ -1,11 +1,12 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, usePage, router } from '@inertiajs/react';
 import { Card, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import AnnotationLab from '@/components/AnnotationLab';
+import LabTopology from '@/components/LabTopology';
 import {
     ArrowLeft,
     Play,
@@ -23,7 +24,6 @@ import {
 } from 'lucide-react';
 import LabConsolePanel, { type ConsoleSession, type ConsoleSessionsResponse } from '@/components/lab-console-panel';
 import { useEffect, useMemo, useState } from 'react';
-import { router } from '@inertiajs/react';
 import { toast } from 'sonner';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -51,6 +51,8 @@ type Lab = {
     created: string;
     modified: string;
     owner: string;
+    owner_username?: string | null;
+    owner_fullname?: string | null;
     link_count: number;
     effective_permissions: string[];
 };
@@ -70,27 +72,53 @@ type LabNode = {
     node_definition?: string;
 };
 
+type LabLink = {
+    id: string;
+    n1?: string;
+    n2?: string;
+    i1?: string;
+    i2?: string;
+    state?: string;
+    [key: string]: unknown;
+};
+
 type Props = {
     lab: Lab;
     reservation: Reservation | null;
     nodes: LabNode[] | Record<string, LabNode>;
+    links?: LabLink[];
+    topology?: unknown;
+    tile?: unknown;
     consoleSessions: ConsoleSession[] | ConsoleSessionsResponse | null;
 };
 
 export default function Workspace() {
-    const { lab, reservation, nodes, consoleSessions } = usePage<Props>().props;
+    const { lab, reservation, nodes, links = [], topology, consoleSessions } = usePage<Props>().props;
     const [editMode, setEditMode] = useState(false);
     const [timeLeft, setTimeLeft] = useState<number>(0);
 
     const nodeList = useMemo<LabNode[]>(() => {
         if (Array.isArray(nodes)) {
-            return nodes;
+            // Filtrer les nodes valides avec un id
+            return nodes.filter(node => node && node.id && typeof node.id === 'string' && node.id.trim() !== '');
         }
         if (nodes && typeof nodes === 'object') {
-            return Object.values(nodes);
+            const values = Object.values(nodes);
+            return values.filter(node => node && typeof node === 'object' && node.id && typeof node.id === 'string' && node.id.trim() !== '') as LabNode[];
         }
         return [];
     }, [nodes]);
+
+    // Log pour déboguer
+    useEffect(() => {
+        if (nodeList.length === 0 && lab.state === 'RUNNING') {
+            console.warn('Aucun node disponible alors que le lab est RUNNING', {
+                nodes,
+                labState: lab.state,
+                nodeCount: lab.node_count,
+            });
+        }
+    }, [nodeList, nodes, lab.state, lab.node_count]);
 
     useEffect(() => {
         if (!reservation) return;
@@ -123,27 +151,101 @@ export default function Workspace() {
         return `${hrs.toString().padStart(2, '0')}h${mins.toString().padStart(2, '0')}m${secs.toString().padStart(2, '0')}s`;
     };
 
-    const handleStartLab = () => {
-        if (confirm('Are you sure you want to start this lab?')) {
-            router.post(`/api/labs/${lab.id}/start`, {}, {
-                preserveScroll: true,
-                onSuccess: () => {
-                    // Reload the page to get updated lab state
-                    window.location.reload();
-                }
+    const handleStartLab = async () => {
+        if (!confirm('Are you sure you want to start this lab?')) {
+            return;
+        }
+
+        try {
+            const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+            if (!csrfToken) {
+                toast.error('Token CSRF introuvable');
+                return;
+            }
+
+            const response = await fetch(`/api/labs/${lab.id}/start`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
             });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                // Extraire le message d'erreur de manière plus intelligente
+                let errorMessage = errorData?.error ?? errorData?.message ?? `Erreur ${response.status}`;
+                
+                // Si c'est un objet avec une description, l'utiliser
+                if (typeof errorData?.body === 'string') {
+                    errorMessage = errorData.body;
+                } else if (errorData?.detail?.description) {
+                    errorMessage = errorData.detail.description;
+                } else if (errorData?.body?.description) {
+                    errorMessage = errorData.body.description;
+                }
+                
+                console.error('Erreur démarrage lab:', {
+                    status: response.status,
+                    error: errorMessage,
+                    fullBody: errorData,
+                });
+                
+                throw new Error(errorMessage);
+            }
+
+            await response.json();
+            toast.success('Lab démarré avec succès');
+            
+            // Recharger la page pour obtenir l'état mis à jour du lab
+            // Utiliser router.reload() au lieu de window.location.reload() pour éviter les problèmes Inertia
+            router.reload({ only: ['lab', 'nodes', 'links', 'topology', 'consoleSessions'] });
+        } catch (error) {
+            console.error('Error starting lab:', error);
+            toast.error(error instanceof Error ? error.message : 'Erreur lors du démarrage du lab');
         }
     };
 
-    const handleStopLab = () => {
-        if (confirm('Are you sure you want to stop this lab? This will disconnect all active sessions.')) {
-            router.post(`/api/labs/${lab.id}/stop`, {}, {
-                preserveScroll: true,
-                onSuccess: () => {
-                    // Reload the page to get updated lab state
-                    window.location.reload();
-                }
+    const handleStopLab = async () => {
+        if (!confirm('Are you sure you want to stop this lab? This will disconnect all active sessions.')) {
+            return;
+        }
+
+        try {
+            const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+            if (!csrfToken) {
+                toast.error('Token CSRF introuvable');
+                return;
+            }
+
+            const response = await fetch(`/api/labs/${lab.id}/stop`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
             });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData?.error || `Erreur ${response.status}`);
+            }
+
+            await response.json();
+            toast.success('Lab arrêté avec succès');
+            
+            // Recharger la page pour obtenir l'état mis à jour du lab
+            // Utiliser router.reload() au lieu de window.location.reload() pour éviter les problèmes Inertia
+            router.reload({ only: ['lab', 'nodes', 'links', 'topology', 'consoleSessions'] });
+        } catch (error) {
+            console.error('Error stopping lab:', error);
+            toast.error(error instanceof Error ? error.message : 'Erreur lors de l\'arrêt du lab');
         }
     };
 
@@ -288,7 +390,9 @@ export default function Workspace() {
                                     <Share2 className="w-5 h-5 text-green-600 dark:text-green-400" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-medium text-gray-900 dark:text-white">{lab.owner}</p>
+                                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                        {lab.owner_fullname || lab.owner_username || lab.owner}
+                                    </p>
                                     <p className="text-xs text-gray-600 dark:text-gray-400">owner</p>
                                 </div>
                             </div>
@@ -324,15 +428,29 @@ export default function Workspace() {
                 {/* Workspace Area */}
                 <div className="flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
                     <div className="relative flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                        {/* Annotations Canvas */}
-                        <div className="absolute inset-0">
-                            <AnnotationLab
-                                labId={lab.id}
-                                editMode={editMode}
-                                onEditModeChange={setEditMode}
-                                className="h-full w-full"
-                            />
-                        </div>
+                        {/* Topology Graph - Show when lab is running */}
+                        {lab.state === 'RUNNING' || lab.state === 'STARTED' ? (
+                            <div className="absolute inset-0">
+                                <LabTopology
+                                    nodes={nodeList}
+                                    links={Array.isArray(links) ? links : []}
+                                    topology={topology as { nodes?: LabNode[]; links?: LabLink[] } | null}
+                                    className="h-full w-full"
+                                />
+                            </div>
+                        ) : null}
+                        
+                        {/* Annotations Canvas - Show when not in edit mode or when lab is not running */}
+                        {(!editMode || lab.state !== 'RUNNING') && (
+                            <div className="absolute inset-0">
+                                <AnnotationLab
+                                    labId={lab.id}
+                                    editMode={editMode}
+                                    onEditModeChange={setEditMode}
+                                    className="h-full w-full"
+                                />
+                            </div>
+                        )}
 
                         {/* Edit Mode Overlay */}
                         {editMode && (

@@ -14,10 +14,18 @@ class NodeService extends BaseCiscoApiService
 
     /**
      * Obtenir les nodes d'un lab
+     * 
+     * @param string $labId L'ID du lab
+     * @param bool $withData Si true, retourne les détails complets des nodes au lieu de juste les UUIDs
      */
-    public function getLabNodes(string $labId): array
+    public function getLabNodes(string $labId, bool $withData = true): array
     {
-        return $this->get("/api/v0/labs/{$labId}/nodes");
+        $endpoint = "/api/v0/labs/{$labId}/nodes";
+        if ($withData) {
+            // Ajouter le paramètre data=true pour obtenir les détails complets
+            $endpoint .= "?data=true";
+        }
+        return $this->get($endpoint);
     }
 
     /**

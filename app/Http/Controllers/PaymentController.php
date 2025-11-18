@@ -249,11 +249,21 @@ class PaymentController extends Controller
         $this->checkStatus($payment);
 
         if ($payment->isCompleted()) {
-            return redirect()->route('reservations.show', $payment->reservation_id)
+            // Rediriger vers le workspace du lab si la réservation existe
+            if ($payment->reservation && $payment->reservation->lab) {
+                return redirect()->route('labs.workspace', ['lab' => $payment->reservation->lab->id])
+                    ->with('success', 'Paiement effectué avec succès');
+            }
+            return redirect()->route('dashboard')
                 ->with('success', 'Paiement effectué avec succès');
         }
 
-        return redirect()->route('reservations.show', $payment->reservation_id)
+        // Rediriger vers le dashboard en cas d'erreur
+        if ($payment->reservation && $payment->reservation->lab) {
+            return redirect()->route('labs.workspace', ['lab' => $payment->reservation->lab->id])
+                ->with('error', 'Le paiement n\'a pas pu être validé');
+        }
+        return redirect()->route('dashboard')
             ->with('error', 'Le paiement n\'a pas pu être validé');
     }
 

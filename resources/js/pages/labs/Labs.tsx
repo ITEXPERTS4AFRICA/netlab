@@ -1,16 +1,17 @@
-import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
-import { Head, usePage } from '@inertiajs/react';
-import { Card, CardTitle, CardContent, CardHeader, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { PaginationApp } from '@/components/app-pagination';
-import LabReservationDialog from '@/components/lab-reservation-dialog';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import AnnotationLab from '@/components/AnnotationLab';
-import { Input } from '@/components/ui/input';
+import AppLayout from '@/layouts/app-layout'
+import { type BreadcrumbItem } from '@/types'
+import { Head, usePage } from '@inertiajs/react'
+import { Card, CardTitle, CardContent, CardHeader, CardDescription } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { PaginationApp } from '@/components/app-pagination'
+import LabReservationDialog from '@/components/lab-reservation-dialog'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogTrigger } from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import AnnotationLab from '@/components/AnnotationLab'
+import { Input } from '@/components/ui/input'
+
 import {
     AlertCircle,
     CheckCircle,
@@ -26,64 +27,66 @@ import {
     Star,
     DollarSign,
     TrendingUp
-} from 'lucide-react';
-import { motion, Variants } from 'framer-motion';
-import { useState, useMemo, useEffect } from 'react';
+} from 'lucide-react'
+import { motion, type Variants } from 'framer-motion'
+import { useState, useMemo, useEffect } from 'react'
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'Labs',
-        href: '/labs',
+        href: '/labs'
     }
-];
+]
 
 type Lab = {
-    id: string;
-    db_id?: number;
-    state: string;
-    lab_title: string;
-    node_count: string|number;
-    lab_description: string;
-    short_description?: string;
-    created: string;
-    modified: string;
+    id: string
+    db_id?: number
+    state: string
+    lab_title: string
+    node_count: string | number
+    link_count?: number
+    interface_count?: number
+    lab_description: string
+    short_description?: string
+    created: string
+    modified: string
     // Métadonnées enrichies
-    price_cents?: number;
-    currency?: string;
-    difficulty_level?: string;
-    estimated_duration_minutes?: number;
-    is_featured?: boolean;
-    rating?: number;
-    rating_count?: number;
-    view_count?: number;
-    reservation_count?: number;
-    active_reservations_count?: number;
-};
+    price_cents?: number
+    currency?: string
+    difficulty_level?: string
+    estimated_duration_minutes?: number
+    is_featured?: boolean
+    rating?: number
+    rating_count?: number
+    view_count?: number
+    reservation_count?: number
+    active_reservations_count?: number
+}
 
 type Pagination = {
-    page: number;
-    per_page: number;
-    total: number;
-    total_pages: number;
-};
+    page: number
+    per_page: number
+    total: number
+    total_pages: number
+}
 
 type Props = {
-    labs: Lab[];
-    pagination: Pagination;
-    error?: string;
-};
+    labs: Lab[]
+    pagination: Pagination
+    error?: string
+}
 
 export default function Labs() {
-    const { labs, pagination, error } = usePage<Props>().props;
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isLoading, setIsLoading] = useState(true);
+    const { labs, pagination, error } = usePage<Props>().props
+    const [searchQuery, setSearchQuery] = useState('')
+    const [isLoading, setIsLoading] = useState(true)
     const [debugInfo, setDebugInfo] = useState<{
-        labsType: string;
-        labsIsArray: boolean;
-        labsLength: number | string;
-        pagination: Pagination | null;
-        error: string | undefined;
-        timestamp: string;
+        labsType: string
+        labsIsArray: boolean
+        labsLength: number | string
+        pagination: Pagination | null
+        error: string | undefined
+        timestamp: string
     }>({
         labsType: 'unknown',
         labsIsArray: false,
@@ -91,28 +94,21 @@ export default function Labs() {
         pagination: null,
         error: undefined,
         timestamp: new Date().toISOString()
-    });
+    })
 
-    // Ensure labs is always an array - handle both array and object cases
-    const safeLabs = useMemo(() => {
-        let labsArray: Lab[] = [];
-
-        if (Array.isArray(labs)) {
-            labsArray = labs;
-        } else if (labs && typeof labs === 'object') {
-            // Handle case where labs is an object with numeric keys
-            labsArray = Object.values(labs).filter((lab): lab is Lab => {
-                return lab !== null && typeof lab === 'object' && 'id' in lab && 'lab_title' in lab;
-            });
-        } else {
-            labsArray = [];
+    // Normalise labs toujours en Array
+    const safeLabs = useMemo<Lab[]>(() => {
+        if (Array.isArray(labs)) return labs
+        if (labs && typeof labs === 'object') {
+            // Permet objets indexés
+            return Object.values(labs).filter(
+                lab => lab && typeof lab === 'object' && 'id' in lab && 'lab_title' in lab
+            ) as Lab[]
         }
-
-        return labsArray;
-    }, [labs]);
+        return []
+    }, [labs])
 
     useEffect(() => {
-        // Debug information
         setDebugInfo({
             labsType: typeof labs,
             labsIsArray: Array.isArray(labs),
@@ -120,34 +116,29 @@ export default function Labs() {
             pagination,
             error,
             timestamp: new Date().toISOString()
-        });
-
-        // Simulate loading for better UX, but shorter duration
-        const timer = setTimeout(() => setIsLoading(false), 300);
-        return () => clearTimeout(timer);
-    }, [labs, pagination, error]);
+        })
+        const timer = setTimeout(() => setIsLoading(false), 300)
+        return () => clearTimeout(timer)
+    }, [labs, pagination, error])
 
     const filteredLabs = useMemo(() => {
-        let filtered = safeLabs;
+        let filtered = safeLabs
 
-        // Apply search filter
         if (searchQuery.trim()) {
-            const query = searchQuery.toLowerCase();
+            const query = searchQuery.toLowerCase()
             filtered = safeLabs.filter(lab =>
                 lab.lab_title?.toLowerCase().includes(query) ||
                 lab.lab_description?.toLowerCase().includes(query)
-            );
+            )
         }
-
-        // Apply status filter for quick filters
-        if (searchQuery === 'running') {
-            filtered = filtered.filter(lab => lab.state === 'DEFINED_ON_CORE');
+        if (searchQuery === 'running' || searchQuery === 'RUNNING') {
+            filtered = filtered.filter(lab => lab.state === 'DEFINED_ON_CORE')
         } else if (searchQuery === 'stopped') {
-            filtered = filtered.filter(lab => lab.state === 'STOPPED');
+            filtered = filtered.filter(lab => lab.state === 'STOPPED')
         }
 
-        return filtered;
-    }, [safeLabs, searchQuery]);
+        return filtered
+    }, [safeLabs, searchQuery])
 
     const getStatusBadge = (state: string) => {
         switch (state) {
@@ -157,32 +148,32 @@ export default function Labs() {
                         <CheckCircle className="h-3 w-3 mr-1" />
                         RUNNING
                     </Badge>
-                );
+                )
             case 'STOPPED':
                 return (
                     <Badge variant="destructive" className="border-0">
                         <AlertTriangle className="h-3 w-3 mr-1" />
                         Stopped
                     </Badge>
-                );
+                )
             case 'STOPPING':
                 return (
                     <Badge variant="secondary" className="bg-[hsl(var(--chart-2))] hover:bg-[hsl(var(--chart-2))/80] text-white border-0">
                         <Clock className="h-3 w-3 mr-1" />
                         {state.charAt(0).toUpperCase() + state.slice(1).toLowerCase()}
                     </Badge>
-                );
+                )
             default:
                 return (
                     <Badge variant="outline">
                         <Info className="h-3 w-3 mr-1" />
                         {state}
                     </Badge>
-                );
+                )
         }
-    };
+    }
 
-    const containerVariants = {
+    const containerVariants: Variants = {
         hidden: { opacity: 0 },
         visible: {
             opacity: 1,
@@ -190,7 +181,7 @@ export default function Labs() {
                 staggerChildren: 0.08
             }
         }
-    };
+    }
 
     const cardVariants: Variants = {
         hidden: { opacity: 0, y: 20 },
@@ -210,7 +201,7 @@ export default function Labs() {
                 type: "tween"
             }
         }
-    };
+    }
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -221,12 +212,12 @@ export default function Labs() {
                 animate="visible"
                 variants={containerVariants}
             >
+
                 {/* Header Section */}
                 <motion.div
                     variants={cardVariants}
                     className="relative"
                 >
-                    {/* Background decoration */}
                     <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-accent/5 rounded-2xl blur-3xl" />
 
                     <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 p-8 rounded-2xl bg-card/80 backdrop-blur-sm border border-border/50 shadow-lg">
@@ -250,7 +241,6 @@ export default function Labs() {
                                     </div>
                                 </div>
                             </div>
-
                             <motion.p
                                 className="text-muted-foreground text-lg max-w-2xl leading-relaxed"
                                 initial={{ opacity: 0 }}
@@ -260,7 +250,6 @@ export default function Labs() {
                                 Découvrez et réservez des Cisco Modeling Labs pour vos expériences réseau.
                                 Accédez aux topologies en temps réel, aux annotations interactives et aux environnements d'apprentissage pratiques.
                             </motion.p>
-
                             {/* Quick stats in header */}
                             <motion.div
                                 className="flex items-center gap-6 pt-2"
@@ -294,7 +283,7 @@ export default function Labs() {
                                     type="search"
                                     placeholder="Rechercher des labs par titre, description..."
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={e => setSearchQuery(e.target.value)}
                                     className="pl-12 pr-4 h-12 w-80 text-base border-2 border-input bg-background/80 backdrop-blur-sm focus:bg-background focus:border-primary/50 transition-all duration-200 rounded-xl shadow-sm"
                                 />
                                 {searchQuery && (
@@ -308,7 +297,6 @@ export default function Labs() {
                                     </Button>
                                 )}
                             </div>
-
                             {/* Quick filters */}
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm text-muted-foreground">Filtrer :</span>
@@ -322,7 +310,7 @@ export default function Labs() {
                                         Tous les Labs
                                     </Button>
                                     <Button
-                                        variant={searchQuery === 'running' ? 'default' : 'outline'}
+                                        variant={['running', 'RUNNING'].includes(searchQuery) ? 'default' : 'outline'}
                                         size="sm"
                                         className="h-8 px-3 text-xs"
                                         onClick={() => setSearchQuery('RUNNING')}
@@ -370,15 +358,34 @@ export default function Labs() {
                             Informations de Débogage (Cliquer pour développer)
                         </summary>
                         <div className="mt-4 space-y-2 text-xs font-mono">
-                            <div><strong>Labs Type:</strong> {debugInfo.labsType}</div>
-                            <div><strong>Is Array:</strong> {debugInfo.labsIsArray ? 'Yes' : 'No'}</div>
-                            <div><strong>Labs Length:</strong> {String(debugInfo.labsLength)}</div>
-                            <div><strong>Pagination:</strong> {debugInfo.pagination ? JSON.stringify(debugInfo.pagination, null, 2) : 'null'}</div>
-                            <div><strong>Error:</strong> {debugInfo.error || 'None'}</div>
-                            <div><strong>Timestamp:</strong> {debugInfo.timestamp}</div>
-                            <div><strong>Sample Lab Data:</strong></div>
+                            <div>
+                                <strong>Labs Type:</strong> {debugInfo.labsType}
+                            </div>
+                            <div>
+                                <strong>Is Array:</strong> {debugInfo.labsIsArray ? 'Yes' : 'No'}
+                            </div>
+                            <div>
+                                <strong>Labs Length:</strong> {String(debugInfo.labsLength)}
+                            </div>
+                            <div>
+                                <strong>Pagination:</strong>{' '}
+                                {debugInfo.pagination
+                                    ? JSON.stringify(debugInfo.pagination, null, 2)
+                                    : 'null'}
+                            </div>
+                            <div>
+                                <strong>Error:</strong> {debugInfo.error || 'None'}
+                            </div>
+                            <div>
+                                <strong>Timestamp:</strong> {debugInfo.timestamp}
+                            </div>
+                            <div>
+                                <strong>Sample Lab Data:</strong>
+                            </div>
                             <pre className="bg-muted p-2 rounded text-xs overflow-auto max-h-32">
-                                {safeLabs.length > 0 ? JSON.stringify(safeLabs[0], null, 2) : 'No lab data available'}
+                                {safeLabs.length > 0
+                                    ? JSON.stringify(safeLabs[0], null, 2)
+                                    : 'No lab data available'}
                             </pre>
                         </div>
                     </details>
@@ -391,24 +398,36 @@ export default function Labs() {
                         whileHover={{ scale: 1.02 }}
                         transition={{ duration: 0.2 }}
                     >
-                        <div className="text-3xl font-bold text-[hsl(var(--chart-1))]">{safeLabs.length}</div>
-                        <div className="text-sm text-muted-foreground mt-1">Total des Labs</div>
+                        <div className="text-3xl font-bold text-[hsl(var(--chart-1))]">
+                            {safeLabs.length}
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                            Total des Labs
+                        </div>
                     </motion.div>
                     <motion.div
                         className="flex-1 p-6 rounded-xl bg-gradient-to-br from-[hsl(var(--chart-3)/5)] to-[hsl(var(--chart-3)/10)] border border-[hsl(var(--chart-3)/20)]"
                         whileHover={{ scale: 1.02 }}
                         transition={{ duration: 0.2 }}
                     >
-                        <div className="text-3xl font-bold text-[hsl(var(--chart-3))]">{safeLabs.filter(l => l.state ==='DEFINED_ON_CORE').length}</div>
-                        <div className="text-sm text-muted-foreground mt-1">DEFINED_ON_CORE</div>
+                        <div className="text-3xl font-bold text-[hsl(var(--chart-3))]">
+                            {safeLabs.filter(l => l.state === 'DEFINED_ON_CORE').length}
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                            DEFINED_ON_CORE
+                        </div>
                     </motion.div>
                     <motion.div
                         className="flex-1 p-6 rounded-xl bg-gradient-to-br from-[hsl(var(--chart-2)/5)] to-[hsl(var(--chart-2)/10)] border border-[hsl(var(--chart-2)/20)]"
                         whileHover={{ scale: 1.02 }}
                         transition={{ duration: 0.2 }}
                     >
-                        <div className="text-3xl font-bold text-[hsl(var(--chart-2))]">{pagination.total}</div>
-                        <div className="text-sm text-muted-foreground mt-1">Disponible</div>
+                        <div className="text-3xl font-bold text-[hsl(var(--chart-2))]">
+                            {pagination.total}
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                            Disponible
+                        </div>
                     </motion.div>
                 </motion.div>
 
@@ -501,14 +520,14 @@ export default function Labs() {
                                             <div className="flex-1 min-w-0 pr-2">
                                                 <div className="flex items-center gap-2 mb-2">
                                                     <CardTitle className="text-xl font-bold line-clamp-2 group-hover:text-primary transition-colors duration-300">
-                                                        {lab.lab_title}
-                                                    </CardTitle>
+                                                    {lab.lab_title}
+                                                </CardTitle>
                                                     {lab.is_featured && (
                                                         <Star className="h-5 w-5 text-yellow-400 fill-yellow-400 flex-shrink-0" />
                                                     )}
                                                 </div>
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                    {getStatusBadge(lab.state)}
+                                                {getStatusBadge(lab.state)}
                                                     {lab.difficulty_level && (
                                                         <Badge variant="outline" className="text-xs">
                                                             {lab.difficulty_level}
@@ -554,8 +573,9 @@ export default function Labs() {
                                             </p>
                                         )}
 
-                                        {/* Prix et Durée */}
-                                        <div className="flex items-center gap-4 text-sm">
+                                        {/* Prix, Temps et Difficulté */}
+                                        <div className="flex flex-wrap items-center gap-3 text-sm">
+                                            {/* Prix */}
                                             {lab.price_cents && lab.price_cents > 0 ? (
                                                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
                                                     <DollarSign className="h-4 w-4 text-primary" />
@@ -568,12 +588,20 @@ export default function Labs() {
                                                     Gratuit
                                                 </Badge>
                                             )}
+                                            {/* Durée */}
                                             {lab.estimated_duration_minutes && (
-                                                <div className="flex items-center gap-2 text-muted-foreground">
-                                                    <Clock className="h-4 w-4" />
-                                                    <span>{lab.estimated_duration_minutes} min</span>
+                                                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20">
+                                                    <Clock className="h-4 w-4 text-blue-600" />
+                                                    <span className="font-medium text-blue-600">{lab.estimated_duration_minutes} min</span>
                                                 </div>
                                             )}
+                                            {/* Difficulté */}
+                                            {lab.difficulty_level && (
+                                                <Badge variant="outline" className="text-xs px-3 py-1.5">
+                                                    {lab.difficulty_level}
+                                                </Badge>
+                                            )}
+                                            {/* Vues */}
                                             {lab.view_count > 0 && (
                                                 <div className="flex items-center gap-2 text-muted-foreground">
                                                     <TrendingUp className="h-4 w-4" />
@@ -582,32 +610,46 @@ export default function Labs() {
                                             )}
                                         </div>
 
-                                        {/* Stats Grid */}
-                                        <div className="grid grid-cols-2 gap-4">
+                                        {/* Stats Grid - Nodes, Links, Interfaces */}
+                                        <div className="grid grid-cols-3 gap-3">
                                             <motion.div
-                                                className="flex items-center gap-3 p-4 rounded-xl bg-muted/30 border border-border/50"
-                                                whileHover={{ scale: 1.02 }}
+                                                className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gradient-to-br from-[hsl(var(--chart-4)/10)] to-[hsl(var(--chart-4)/5)] border border-[hsl(var(--chart-4)/20)]"
+                                                whileHover={{ scale: 1.05 }}
                                             >
                                                 <Network className="h-5 w-5 text-[hsl(var(--chart-4))]" />
-                                                <div>
-                                                    <div className="text-lg font-semibold">{lab.node_count}</div>
-                                                    <div className="text-xs text-muted-foreground">appareils</div>
+                                                <div className="text-center">
+                                                    <div className="text-xl font-bold text-[hsl(var(--chart-4))]">{lab.node_count || 0}</div>
+                                                    <div className="text-xs text-muted-foreground font-medium">Nœuds</div>
                                                 </div>
                                             </motion.div>
 
                                             <motion.div
-                                                className="flex items-center gap-3 p-4 rounded-xl bg-muted/30 border border-border/50"
-                                                whileHover={{ scale: 1.02 }}
+                                                className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gradient-to-br from-[hsl(var(--chart-5)/10)] to-[hsl(var(--chart-5)/5)] border border-[hsl(var(--chart-5)/20)]"
+                                                whileHover={{ scale: 1.05 }}
                                             >
-                                                <Clock className="h-5 w-5 text-[hsl(var(--chart-5))]" />
-                                                <div>
-                                                    <div className="text-sm font-medium">
-                                                        {new Date(lab.modified).toLocaleDateString('fr-FR', {
-                                                            month: 'short',
-                                                            day: 'numeric'
-                                                        })}
-                                                    </div>
-                                                    <div className="text-xs text-muted-foreground">modifié</div>
+                                                <div className="h-5 w-5 flex items-center justify-center">
+                                                    <svg className="h-5 w-5 text-[hsl(var(--chart-5))]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                    </svg>
+                                                </div>
+                                                <div className="text-center">
+                                                    <div className="text-xl font-bold text-[hsl(var(--chart-5))]">{lab.link_count || 0}</div>
+                                                    <div className="text-xs text-muted-foreground font-medium">Liens</div>
+                                                </div>
+                                            </motion.div>
+
+                                            <motion.div
+                                                className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gradient-to-br from-[hsl(var(--chart-6)/10)] to-[hsl(var(--chart-6)/5)] border border-[hsl(var(--chart-6)/20)]"
+                                                whileHover={{ scale: 1.05 }}
+                                            >
+                                                <div className="h-5 w-5 flex items-center justify-center">
+                                                    <svg className="h-5 w-5 text-[hsl(var(--chart-6))]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                                    </svg>
+                                                </div>
+                                                <div className="text-center">
+                                                    <div className="text-xl font-bold text-[hsl(var(--chart-6))]">{lab.interface_count !== undefined && lab.interface_count !== null ? lab.interface_count : 'N/A'}</div>
+                                                    <div className="text-xs text-muted-foreground font-medium">Interfaces</div>
                                                 </div>
                                             </motion.div>
                                         </div>

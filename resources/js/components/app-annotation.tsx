@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { LabAnnotation } from '../types';
 import axios from 'axios';
-import Draggable from 'react-draggable';
 import {
     Edit3,
     Save,
@@ -100,6 +99,8 @@ const AnnotationLab: React.FC<AnnotationLabProps> = ({
     const [selectedAnnotation, setSelectedAnnotation] = useState<LabAnnotation | null>(null);
     const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
     const dragRefs = useRef<{ [key: string]: HTMLElement | null }>({});
+    const [draggingAnnotation, setDraggingAnnotation] = useState<string | null>(null);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0, annotationX: 0, annotationY: 0 });
 
     // Fetch annotations and lab schema
     useEffect(() => {
@@ -226,6 +227,31 @@ const AnnotationLab: React.FC<AnnotationLabProps> = ({
     const cancelChanges = useCallback(() => {
         setEditingAnnotations(JSON.parse(JSON.stringify(annotations)));
     }, [annotations]);
+
+    // Gestion du drag global
+    useEffect(() => {
+        if (!draggingAnnotation) return;
+
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!draggingAnnotation || !editMode) return;
+            e.preventDefault();
+            const deltaX = (e.clientX - dragStart.x);
+            const deltaY = (e.clientY - dragStart.y);
+            handleAnnotationDrag(draggingAnnotation, deltaX, deltaY);
+        };
+
+        const handleMouseUp = () => {
+            setDraggingAnnotation(null);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [draggingAnnotation, dragStart, editMode, handleAnnotationDrag]);
 
     // Create new annotation
     // const createAnnotation = useCallback(async (type: 'text' | 'rectangle' | 'ellipse' | 'line', x: number, y: number) => {
@@ -583,33 +609,47 @@ const AnnotationLab: React.FC<AnnotationLabProps> = ({
             </div>
         );
 
+        const handleMouseDown = (e: React.MouseEvent) => {
+            if (!isEditing) return;
+            e.preventDefault();
+            e.stopPropagation();
+            setDraggingAnnotation(annotation.id);
+            setDragStart({
+                x: e.clientX,
+                y: e.clientY,
+                annotationX: transformedX1,
+                annotationY: transformedY1,
+            });
+        };
+
         if (isEditing) {
             return (
-                <Draggable
+                <div
                     key={`draggable-${annotation.id}`}
-                    position={{ x: transformedX1, y: transformedY1 }}
-                    onDrag={(e, data) => handleAnnotationDrag(annotation.id, data.deltaX, data.deltaY)}
+                    ref={(el) => { dragRefs.current[annotation.id] = el; }}
+                    className="absolute group cursor-pointer"
+                    style={{
+                        left: `${transformedX1}px`,
+                        top: `${transformedY1}px`,
+                        cursor: draggingAnnotation === annotation.id ? 'grabbing' : 'move',
+                    }}
+                    onMouseDown={handleMouseDown}
+                    onClick={(e) => handleAnnotationClick(annotation, e)}
                 >
-                    <div
-                        ref={(el) => { dragRefs.current[annotation.id] = el; }}
-                        className="absolute group cursor-pointer"
-                        onClick={(e) => handleAnnotationClick(annotation, e)}
+                    {/* Delete button for annotations in edit mode */}
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        className="absolute -top-2 -right-2 w-6 h-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            deleteAnnotation(annotation.id);
+                        }}
                     >
-                        {/* Delete button for annotations in edit mode */}
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            className="absolute -top-2 -right-2 w-6 h-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                deleteAnnotation(annotation.id);
-                            }}
-                        >
-                            <Trash2 className="w-3 h-3" />
-                        </Button>
-                        {annotationContent}
-                    </div>
-                </Draggable>
+                        <Trash2 className="w-3 h-3" />
+                    </Button>
+                    {annotationContent}
+                </div>
             );
         }
 

@@ -17,6 +17,8 @@ interface CmlConfig {
     base_url: string;
     username: string;
     password: string | null;
+    default_username: string;
+    default_password: string | null;
 }
 
 interface Props {
@@ -40,6 +42,8 @@ export default function CmlConfigIndex({ config }: Props) {
         base_url: config.base_url || '',
         username: config.username || '',
         password: config.password === '••••••••' ? '' : (config.password || ''),
+        default_username: config.default_username || 'cheick',
+        default_password: config.default_password === '••••••••' ? '' : (config.default_password || ''),
     });
 
     const submit = (e: React.FormEvent) => {
@@ -310,6 +314,65 @@ export default function CmlConfigIndex({ config }: Props) {
                                 <InputError message={errors.password} />
                             </div>
 
+                            {/* Séparateur */}
+                            <div className="border-t pt-6 mt-6">
+                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                    <Settings className="h-5 w-5" />
+                                    Credentials par défaut (Rafraîchissement automatique)
+                                </h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    Ces identifiants sont utilisés pour le rafraîchissement automatique du token CML. 
+                                    Ils permettent de maintenir la disponibilité du système même en cas de changement des credentials principaux.
+                                </p>
+                            </div>
+
+                            {/* Nom d'utilisateur par défaut */}
+                            <div className="grid gap-2">
+                                <Label htmlFor="default_username" className="flex items-center gap-2">
+                                    <User className="h-4 w-4" />
+                                    Nom d'utilisateur par défaut
+                                </Label>
+                                <Input
+                                    id="default_username"
+                                    type="text"
+                                    value={data.default_username}
+                                    onChange={(e) => setData('default_username', e.target.value)}
+                                    placeholder="cheick"
+                                    required
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Utilisé pour le rafraîchissement automatique du token CML
+                                </p>
+                                <InputError message={errors.default_username} />
+                            </div>
+
+                            {/* Mot de passe par défaut */}
+                            <div className="grid gap-2">
+                                <Label htmlFor="default_password" className="flex items-center gap-2">
+                                    <Lock className="h-4 w-4" />
+                                    Mot de passe par défaut
+                                </Label>
+                                <Input
+                                    id="default_password"
+                                    type="password"
+                                    value={data.default_password}
+                                    onChange={(e) => setData('default_password', e.target.value)}
+                                    placeholder={config.default_password === '••••••••' ? "Laissez vide pour ne pas modifier" : "••••••••"}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    {config.default_password === '••••••••' && (
+                                        <span className="flex items-center gap-1 text-amber-600">
+                                            <AlertCircle className="h-3 w-3" />
+                                            Un mot de passe par défaut est déjà configuré. Laissez vide pour ne pas le modifier, ou entrez un nouveau mot de passe.
+                                        </span>
+                                    )}
+                                    {config.default_password !== '••••••••' && (
+                                        <span>Utilisé pour le rafraîchissement automatique du token CML</span>
+                                    )}
+                                </p>
+                                <InputError message={errors.default_password} />
+                            </div>
+
                             {/* Actions */}
                             <div className="flex items-center justify-between pt-4 border-t">
                                 <Button
@@ -364,13 +427,19 @@ export default function CmlConfigIndex({ config }: Props) {
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm text-muted-foreground">
                         <p>
-                            • La configuration est sauvegardée dans le fichier <code className="bg-muted px-1 py-0.5 rounded">.env</code>
+                            • La configuration est sauvegardée dans la base de données et synchronisée avec le fichier <code className="bg-muted px-1 py-0.5 rounded">.env</code>
                         </p>
                         <p>
                             • Après modification, la configuration est automatiquement rechargée
                         </p>
                         <p>
                             • Utilisez le bouton "Tester la connexion" pour vérifier que les identifiants sont corrects
+                        </p>
+                        <p>
+                            • Les <strong>credentials par défaut</strong> sont utilisés pour le rafraîchissement automatique du token CML
+                        </p>
+                        <p>
+                            • Le système rafraîchit automatiquement le token si nécessaire en utilisant les credentials par défaut
                         </p>
                         <p>
                             • Les utilisateurs pourront voir les labs CML une fois la configuration validée

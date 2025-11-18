@@ -65,6 +65,11 @@ class LabsController extends Controller
                     }
                 }
 
+                // Calculer le nombre d'interfaces : chaque lien connecte 2 interfaces
+                // C'est une approximation du nombre d'interfaces connectées
+                $linkCount = $lab->link_count ?? 0;
+                $interfaceCount = $linkCount * 2;
+
                 return [
                     'id' => $lab->cml_id, // Utiliser cml_id pour compatibilité avec l'ancien système
                     'db_id' => $lab->id, // ID de la base de données
@@ -75,7 +80,8 @@ class LabsController extends Controller
                     'description' => $description ?? $lab->short_description ?? '', // Alias pour compatibilité
                     'short_description' => $lab->short_description,
                     'node_count' => $lab->node_count ?? 0,
-                    'link_count' => $lab->link_count ?? 0,
+                    'link_count' => $linkCount,
+                    'interface_count' => $interfaceCount,
                     'created' => $lab->created ?? $lab->created_at->format('c'),
                     'modified' => $lab->modified ?? $lab->updated_at->format('c'),
                     // Métadonnées enrichies
@@ -147,7 +153,7 @@ class LabsController extends Controller
             ->orderBy('start_at', 'desc')
             ->get();
 
-        $reservedLabs = $reservations->map(function ($reservation) use ($token,$cisco) {
+        $reservedLabs = $reservations->map(function ($reservation) use ($token, $cisco) {
             $lab = $reservation->lab;
 
             // Vérifier l'état actuel du lab via CML
@@ -155,19 +161,29 @@ class LabsController extends Controller
             $timeInfo = null;
 
             if ($lab && $token) {
-                $labState = $cisco->getLabState($token, $lab->cml_id);
-                if (!isset($labState['error'])) {
-                    // Extraire l'état du lab (peut être dans 'state' ou directement la valeur)
-                    $currentState = is_array($labState)
-                        ? ($labState['state'] ?? $labState['data']['state'] ?? null)
-                        : (is_string($labState) ? $labState : null);
+                try {
+                    $labState = $cisco->getLabState($token, $lab->cml_id);
+                    if (!isset($labState['error']) && !isset($labState['connection_error'])) {
+                        // Extraire l'état du lab (peut être dans 'state' ou directement la valeur)
+                        $currentState = is_array($labState)
+                            ? ($labState['state'] ?? $labState['data']['state'] ?? null)
+                            : (is_string($labState) ? $labState : null);
 
-                    if ($currentState) {
-                        // Mettre à jour l'état dans la base de données
-                        $lab->state = $currentState;
-                        $lab->save();
+                        if ($currentState) {
+                            // Mettre à jour l'état dans la base de données
+                            $lab->state = $currentState;
+                            $lab->save();
+                        }
+                    } else {
+                        // En cas d'erreur (connexion ou autre), utiliser l'état de la base de données
+                        $currentState = $lab->state ?? 'STOPPED';
                     }
-                } else {
+                } catch (\Exception $e) {
+                    // En cas d'exception, utiliser l'état de la base de données
+                    \Log::warning('Erreur lors de la récupération de l\'état du lab', [
+                        'lab_id' => $lab->id,
+                        'error' => $e->getMessage(),
+                    ]);
                     $currentState = $lab->state ?? 'STOPPED';
                 }
             } else {
@@ -238,7 +254,7 @@ class LabsController extends Controller
 
         // Ensure the lab exists in our database, create if not
         if (!$lab->exists) {
-            $response = $cisco->getlab($token, $lab->cml_id);
+            $response = $cisco->getLab($token, $lab->cml_id);
             if (isset($response['error'])) {
                 abort(404, 'Lab not found');
             }
@@ -256,18 +272,18 @@ class LabsController extends Controller
             ]);
         }
 
-        // Get active reservation for the user
+        // Get reservation for the user (active or pending)
         $user = Auth::user();
         $reservation = Reservation::where('user_id', $user->id)
             ->where('lab_id', $lab->id)
-            ->where('start_at', '<=', now())
-            ->where('end_at', '>', now())
+            ->where('end_at', '>', now()) // Only exclude expired reservations
             ->where('status', '!=', 'cancelled')
+            ->orderBy('start_at', 'desc')
             ->first();
 
-        // Check if user has active reservation
+        // Check if user has a reservation (active or pending)
         if (!$reservation) {
-            return redirect()->route('labs')->with('error', 'You do not have an active reservation for this lab.');
+            return redirect()->route('labs')->with('error', 'You do not have a reservation for this lab.');
         }
 
         // Get current lab state from CML (only if token is available)
@@ -282,7 +298,7 @@ class LabsController extends Controller
         // Get annotations for the lab (only if token is available)
         $annotations = [];
         if ($token) {
-            $annotations = $cisco->getLabsAnnotation($token, $lab->cml_id);
+        $annotations = $cisco->getLabsAnnotation($token, $lab->cml_id);
             if (isset($annotations['error'])) {
                 $annotations = [];
             }
@@ -291,27 +307,153 @@ class LabsController extends Controller
         // Fetch lab nodes for console management (only if token is available)
         $nodes = [];
         if ($token) {
-            $nodes = $cisco->getLabNodes($token, $lab->cml_id);
-            if (isset($nodes['error'])) {
+            $nodesData = $cisco->getLabNodes($token, $lab->cml_id);
+            
+            if (isset($nodesData['error'])) {
+                \Log::warning('Erreur lors de la récupération des nodes', [
+                    'lab_id' => $lab->cml_id,
+                    'error' => $nodesData['error'],
+                ]);
                 $nodes = [];
+            } elseif (is_array($nodesData)) {
+                // Normaliser la réponse : l'API peut retourner soit un tableau de strings (UUIDs)
+                // soit un tableau d'objets Node
+                $nodes = array_map(function($node) {
+                    if (is_string($node)) {
+                        // Si c'est juste un UUID, on ne peut pas obtenir le label sans un appel supplémentaire
+                        // On retourne l'UUID pour l'instant, mais on devrait faire un appel getNode() pour chaque UUID
+                        return [
+                            'id' => $node,
+                            'label' => $node, // Temporaire, sera remplacé si on a les détails
+                            'name' => $node,
+                        ];
+                    } elseif (is_array($node)) {
+                        // Si c'est un objet Node, normaliser les champs
+                        // L'API CML retourne 'label' pour le nom affiché du node
+                        $nodeId = $node['id'] ?? $node['node_id'] ?? '';
+                        $label = $node['label'] ?? $node['name'] ?? '';
+                        
+                        // Si pas de label, essayer d'autres champs
+                        if (empty($label)) {
+                            $label = $node['node_definition'] ?? $node['definition'] ?? $nodeId;
+                        }
+                        
+                        return [
+                            'id' => $nodeId,
+                            'label' => $label,
+                            'name' => $node['name'] ?? $label,
+                            'state' => $node['state'] ?? null,
+                            'node_definition' => $node['node_definition'] ?? $node['definition'] ?? null,
+                        ];
+                    }
+                    return null;
+                }, $nodesData);
+                
+                // Filtrer les valeurs null
+                $nodes = array_filter($nodes, fn($node) => $node !== null && !empty($node['id']));
+                $nodes = array_values($nodes); // Réindexer
+                
+                \Log::info('Nodes normalisés', [
+                    'count' => count($nodes),
+                    'sample' => $nodes[0] ?? null,
+                ]);
             }
         }
 
         // Fetch active console sessions (best effort, only if token is available)
         $consoleSessions = [];
         if ($token) {
-            $consoleSessions = $cisco->console->getConsoleSessions();
-            if (isset($consoleSessions['error'])) {
-                $consoleSessions = [];
+        $consoleSessions = $cisco->console->getConsoleSessions();
+        if (isset($consoleSessions['error'])) {
+            $consoleSessions = [];
             }
         }
 
+        // Fetch lab topology (nodes, links, interfaces) for graph display
+        $topology = null;
+        $tile = null;
+        $links = [];
+        if ($token) {
+            $cisco->setToken($token);
+            $topology = $cisco->getTopology($token, $lab->cml_id);
+            if (isset($topology['error'])) {
+                $topology = null;
+            } elseif (is_array($topology) && isset($topology['nodes']) && empty($nodes)) {
+                // Si on n'a pas réussi à récupérer les nodes via getLabNodes,
+                // essayer d'utiliser ceux de la topologie
+                $topologyNodes = $topology['nodes'] ?? [];
+                if (is_array($topologyNodes) && !empty($topologyNodes)) {
+                    $nodes = array_map(function($node) {
+                        if (is_array($node)) {
+                            return [
+                                'id' => $node['id'] ?? $node['node_id'] ?? '',
+                                'label' => $node['label'] ?? $node['name'] ?? $node['id'] ?? '',
+                                'name' => $node['name'] ?? $node['label'] ?? $node['id'] ?? '',
+                                'state' => $node['state'] ?? null,
+                                'node_definition' => $node['node_definition'] ?? $node['definition'] ?? null,
+                            ];
+                        }
+                        return null;
+                    }, $topologyNodes);
+                    $nodes = array_filter($nodes, fn($node) => $node !== null && !empty($node['id']));
+                    $nodes = array_values($nodes);
+                }
+            }
+            
+            // Also fetch tile for additional lab info
+            $tile = $cisco->labs->getLabTile($lab->cml_id);
+            if (isset($tile['error'])) {
+                $tile = null;
+            }
+            
+            // Fetch links for topology graph
+            $linksData = $cisco->getLabLinks($lab->cml_id);
+            if (!isset($linksData['error']) && is_array($linksData)) {
+                $links = $linksData;
+            }
+        }
+
+        // Récupérer les informations complètes du lab depuis CML pour obtenir owner_username et owner_fullname
+        $labInfo = null;
+        if ($token) {
+            $cisco->setToken($token);
+            $labInfo = $cisco->getLab($lab->cml_id);
+            if (isset($labInfo['error'])) {
+                \Log::warning('Impossible de récupérer les infos complètes du lab', [
+                    'lab_id' => $lab->cml_id,
+                    'error' => $labInfo['error'],
+                ]);
+            }
+        }
+
+        // Préparer les données du lab avec owner_username et owner_fullname
+        $labData = [
+            'id' => $lab->cml_id,
+            'db_id' => $lab->id,
+            'cml_id' => $lab->cml_id,
+            'state' => $lab->state,
+            'lab_title' => $lab->lab_title,
+            'node_count' => $lab->node_count,
+            'lab_description' => $lab->lab_description,
+            'created' => $lab->created,
+            'modified' => $lab->modified,
+            'owner' => $lab->owner,
+            'link_count' => $lab->link_count,
+            'effective_permissions' => $lab->effective_permissions,
+            // Ajouter owner_username et owner_fullname depuis l'API CML si disponibles
+            'owner_username' => $labInfo['owner_username'] ?? null,
+            'owner_fullname' => $labInfo['owner_fullname'] ?? null,
+        ];
+
         return Inertia::render('labs/Workspace', [
-            'lab' => $lab,
+            'lab' => $labData,
             'reservation' => $reservation,
             'annotations' => $annotations,
             'nodes' => $nodes,
+            'links' => $links,
             'consoleSessions' => $consoleSessions,
+            'topology' => $topology,
+            'tile' => $tile,
         ]);
     }
 

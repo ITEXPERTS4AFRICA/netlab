@@ -145,13 +145,22 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
     if (isInstant) {
       // Réservation instantanée : maintenant + 4 heures
       const now = new Date();
-      const end = new Date(now.getTime() + 4 * 60 * 60 * 1000); // +4 heures
-      startAt = now.toISOString();
+      // Ajouter 1 seconde pour éviter les problèmes de timing
+      const startTime = new Date(now.getTime() + 1000);
+      const end = new Date(startTime.getTime() + 4 * 60 * 60 * 1000); // +4 heures
+      startAt = startTime.toISOString();
       endAt = end.toISOString();
+      
+      console.log('Instant reservation times:', {
+        startAt,
+        endAt,
+        now: now.toISOString(),
+        duration_hours: 4,
+      });
     } else if (data.start_at && data.end_at) {
       // Utiliser les dates du formulaire
-      const startDateTime = new Date(data.start_at);
-      const endDateTime = new Date(data.end_at);
+    const startDateTime = new Date(data.start_at);
+    const endDateTime = new Date(data.end_at);
 
       // S'assurer que les dates sont dans le futur
       const now = new Date();
@@ -203,6 +212,20 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
 
     // Utiliser l'API REST au lieu de Inertia pour gérer le paiement
     try {
+      const requestData = {
+        lab_id: lab.id, // cml_id (UUID)
+        start_at: startAt,
+        end_at: endAt,
+        instant: isInstant || false,
+      };
+      
+      console.log('Sending reservation request:', {
+        ...requestData,
+        is_instant: isInstant,
+        lab_id_type: typeof lab.id,
+        lab_id_length: lab.id?.length,
+      });
+      
       // Utiliser cml_id pour trouver le lab
       const response = await fetch(`/api/labs/reserve`, {
         method: 'POST',
@@ -213,12 +236,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
           'X-Requested-With': 'XMLHttpRequest',
         },
         credentials: 'same-origin', // Inclure les cookies de session pour l'authentification
-        body: JSON.stringify({
-          lab_id: lab.id, // cml_id (UUID)
-          start_at: startAt,
-          end_at: endAt,
-          instant: isInstant || false,
-        }),
+        body: JSON.stringify(requestData),
       });
 
       let result;
@@ -320,12 +338,12 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
 
       // Sinon, rediriger vers les réservations (lab gratuit ou paiement non requis)
       console.log('✅ Pas de paiement requis, redirection vers /labs/my-reserved');
-      setOpen(false);
-      reset();
-      router.visit('/labs/my-reserved', {
-        method: 'get',
-        preserveScroll: true,
-      });
+        setOpen(false);
+        reset();
+        router.visit('/labs/my-reserved', {
+          method: 'get',
+          preserveScroll: true,
+        });
     } catch (error) {
       console.error('Reservation error:', error);
       // Afficher l'erreur dans le formulaire
@@ -559,14 +577,14 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
 
           {/* Time Slot Picker */}
           {!isInstant && (
-            <TimeSlotPicker
-              selectedDate={selectedDate}
-              slots={timeSlots}
-              onSlotSelect={handleSlotSelect}
-              selectedSlot={selectedSlot}
-              maxSlotsPerUser={3}
-              userCurrentSlots={1}
-            />
+          <TimeSlotPicker
+            selectedDate={selectedDate}
+            slots={timeSlots}
+            onSlotSelect={handleSlotSelect}
+            selectedSlot={selectedSlot}
+            maxSlotsPerUser={3}
+            userCurrentSlots={1}
+          />
           )}
 
           {isInstant && selectedSlot && (

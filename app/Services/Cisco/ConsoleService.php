@@ -54,10 +54,53 @@ class ConsoleService extends BaseCiscoApiService
 
     /**
      * Obtenir toutes les consoles d'un node
+     * Note: L'API CML n'a pas d'endpoint direct pour lister les consoles.
+     * On construit la liste à partir des clés console disponibles.
      */
     public function getNodeConsoles(string $labId, string $nodeId): array
     {
-        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}/consoles");
+        $consoles = [];
+        
+        // Essayer d'obtenir la clé console principale
+        $consoleKey = $this->getNodeConsoleKey($labId, $nodeId);
+        if (!isset($consoleKey['error']) && !empty($consoleKey)) {
+            // Si c'est une string (UUID), créer un objet console
+            if (is_string($consoleKey)) {
+                $consoles[] = [
+                    'id' => $consoleKey,
+                    'console_id' => $consoleKey,
+                    'console_type' => 'console',
+                    'protocol' => 'console',
+                ];
+            } elseif (is_array($consoleKey) && isset($consoleKey['id'])) {
+                $consoles[] = array_merge([
+                    'console_type' => 'console',
+                    'protocol' => 'console',
+                ], $consoleKey);
+            }
+        }
+        
+        // Essayer d'obtenir la clé VNC si disponible
+        $vncKey = $this->getNodeVncKey($labId, $nodeId);
+        if (!isset($vncKey['error']) && !empty($vncKey)) {
+            if (is_string($vncKey)) {
+                $consoles[] = [
+                    'id' => $vncKey,
+                    'console_id' => $vncKey,
+                    'console_type' => 'vnc',
+                    'protocol' => 'vnc',
+                ];
+            } elseif (is_array($vncKey) && isset($vncKey['id'])) {
+                $consoles[] = array_merge([
+                    'console_type' => 'vnc',
+                    'protocol' => 'vnc',
+                ], $vncKey);
+            }
+        }
+        
+        // Si aucune console n'a été trouvée, retourner un tableau vide plutôt qu'une erreur
+        // car certains nodes peuvent ne pas avoir de console disponible
+        return $consoles;
     }
 
     /**
@@ -119,7 +162,26 @@ class ConsoleService extends BaseCiscoApiService
             'node_id' => $nodeId
         ], $options);
 
-        return $this->post('/api/v0/console/session', $data);
+        \Log::info('Console: Tentative de création de session', [
+            'lab_id' => $labId,
+            'node_id' => $nodeId,
+            'options' => $options,
+            'data' => $data,
+            'base_url' => $this->baseUrl,
+            'has_token' => !empty($this->token),
+        ]);
+
+        $result = $this->post('/api/v0/console/session', $data);
+
+        \Log::info('Console: Résultat de création de session', [
+            'lab_id' => $labId,
+            'node_id' => $nodeId,
+            'has_error' => isset($result['error']),
+            'status' => $result['status'] ?? null,
+            'result_keys' => array_keys($result),
+        ]);
+
+        return $result;
     }
 
     /**
@@ -140,9 +202,18 @@ class ConsoleService extends BaseCiscoApiService
     {
         $node = $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}");
 
+        // Si erreur lors de la récupération du node, retourner les types par défaut
+        if (isset($node['error'])) {
+            return [
+                'serial' => false,
+                'vnc' => false,
+                'console' => true // Toujours disponible
+            ];
+        }
+
         return [
             'serial' => isset($node['configuration']['serial_devices']) && count($node['configuration']['serial_devices']) > 0,
-            'vnc' => isset($node['vnc_key']) || $node['node_definition'] === 'desktop',
+            'vnc' => isset($node['vnc_key']) || ($node['node_definition'] ?? '') === 'desktop',
             'console' => true // Toujours disponible
         ];
     }
