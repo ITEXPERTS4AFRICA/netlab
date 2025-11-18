@@ -71,6 +71,27 @@ class CinetPayService
         $amount = $amountInCents / 100;
         $amount = (int) round($amount); // Arrondir et s'assurer que c'est un entier
 
+        // CinetPay requiert un montant minimum de 100 XOF
+        // Vérifier le montant minimum avant de continuer
+        $minAmountXOF = 100; // Montant minimum requis par CinetPay
+        $minAmountCents = $minAmountXOF * 100; // 10000 centimes
+
+        if ($amount < $minAmountXOF) {
+            Log::warning('CinetPayService: Montant trop faible', [
+                'amount_in_cents' => $amountInCents,
+                'amount_in_xof' => $amount,
+                'min_amount_xof' => $minAmountXOF,
+                'min_amount_cents' => $minAmountCents,
+            ]);
+
+            return [
+                'success' => false,
+                'error' => "Le montant minimum requis est de {$minAmountXOF} XOF (soit {$minAmountCents} centimes). Le montant actuel est de {$amount} XOF.",
+                'code' => '641',
+                'description' => 'ERROR_AMOUNT_TOO_LOW',
+            ];
+        }
+
         // Log pour vérifier la conversion
         Log::info('CinetPayService: Montant converti', [
             'amount_in_cents' => $amountInCents,
@@ -133,15 +154,38 @@ class CinetPayService
                 ],
             ];
         } catch (\Exception $e) {
+            $errorMessage = $e->getMessage();
+            $errorCode = 'SDK_ERROR';
+            $errorDescription = null;
+
+            // Extraire le code d'erreur et le message depuis l'exception CinetPay
+            // Format: "Une erreur est survenue, Code: 641, Message: ERROR_AMOUNT_TOO_LOW"
+            if (preg_match('/Code:\s*(\d+)/', $errorMessage, $codeMatches)) {
+                $errorCode = $codeMatches[1];
+            }
+            if (preg_match('/Message:\s*(.+?)(?:$|,)/', $errorMessage, $messageMatches)) {
+                $errorDescription = trim($messageMatches[1]);
+            }
+
+            // Message d'erreur personnalisé pour l'erreur 641
+            if ($errorCode === '641' || $errorDescription === 'ERROR_AMOUNT_TOO_LOW') {
+                $errorMessage = "Le montant minimum requis est de {$minAmountXOF} XOF (soit {$minAmountCents} centimes). Le montant actuel est de {$amount} XOF.";
+            }
+
             Log::error('CinetPay payment initiation error via SDK', [
-                'error' => $e->getMessage(),
+                'error' => $errorMessage,
+                'code' => $errorCode,
+                'description' => $errorDescription,
                 'transaction_id' => $transactionId,
+                'amount_in_cents' => $amountInCents,
+                'amount_in_xof' => $amount,
             ]);
 
             return [
                 'success' => false,
-                'error' => 'Erreur lors de l\'initialisation du paiement: ' . $e->getMessage(),
-                'code' => 'SDK_ERROR',
+                'error' => 'Erreur lors de l\'initialisation du paiement: ' . $errorMessage,
+                'code' => $errorCode,
+                'description' => $errorDescription,
             ];
         }
     }

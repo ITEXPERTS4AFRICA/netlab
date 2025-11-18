@@ -172,9 +172,13 @@ export const AnnotationLab: React.FC<AnnotationLabProps> = ({
       className={`relative w-full h-96 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-lg border overflow-hidden ${className}`}
       onMouseMove={handleMouseMove}
     >
-      {/* Grille et repères */}
-      <Grid coordinateSystem={coordinateSystem} visible={showGrid} />
-      <Landmarks coordinateSystem={coordinateSystem} />
+      {/* Grille et repères - Only show when in edit mode to avoid overlap with topology grid */}
+      {editMode && (
+        <>
+          <Grid coordinateSystem={coordinateSystem} visible={showGrid} />
+          <Landmarks coordinateSystem={coordinateSystem} />
+        </>
+      )}
 
       {/* Annotations */}
       <div className="absolute inset-0">
@@ -191,16 +195,18 @@ export const AnnotationLab: React.FC<AnnotationLabProps> = ({
         ))}
       </div>
 
-      {/* Interface utilisateur */}
-      <AnnotationToolbar
-        showGrid={showGrid}
-        showRuler={showRuler}
-        onToggleGrid={() => setShowGrid(!showGrid)}
-        onToggleRuler={() => setShowRuler(!showRuler)}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
-        onCreateAnnotation={handleCreateAnnotation}
-      />
+      {/* Interface utilisateur - Only show in edit mode and when lab is not running */}
+      {editMode && (
+        <AnnotationToolbar
+          showGrid={showGrid}
+          showRuler={showRuler}
+          onToggleGrid={() => setShowGrid(!showGrid)}
+          onToggleRuler={() => setShowRuler(!showRuler)}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onCreateAnnotation={handleCreateAnnotation}
+        />
+      )}
 
       <RulerComponent position={currentPosition} visible={showRuler} />
 

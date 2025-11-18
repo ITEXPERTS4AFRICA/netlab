@@ -35,7 +35,7 @@ class ConsoleController extends Controller
         }
 
         try {
-            $consoles = $cisco->console->getNodeConsoles($labId, $nodeId);
+        $consoles = $cisco->console->getNodeConsoles($labId, $nodeId);
 
             \Log::info('Console: Réponse getNodeConsoles', [
                 'lab_id' => $labId,
@@ -53,10 +53,10 @@ class ConsoleController extends Controller
                     'error' => $consoles['error'],
                     'status' => $consoles['status'] ?? null,
                     'endpoint' => "/api/v0/labs/{$labId}/nodes/{$nodeId}/consoles",
-                ]);
-                return response()->json($consoles, $consoles['status'] ?? 500);
-            }
-            
+            ]);
+            return response()->json($consoles, $consoles['status'] ?? 500);
+        }
+
             // La méthode getNodeConsoles retourne déjà la structure attendue avec 'consoles' et 'available_types'
             if (!is_array($consoles)) {
                 \Log::warning('Console: Réponse invalide (pas un tableau)', [
@@ -110,8 +110,8 @@ class ConsoleController extends Controller
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
-            
-            return response()->json([
+
+        return response()->json([
                 'error' => 'Erreur lors de la récupération des consoles: ' . $e->getMessage(),
                 'status' => 500,
                 'endpoint' => "/api/v0/labs/{$labId}/nodes/{$nodeId}/consoles",

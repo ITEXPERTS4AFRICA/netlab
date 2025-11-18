@@ -90,8 +90,18 @@ class PaymentController extends Controller
         $result = $this->cinetPayService->initiatePayment($paymentData);
 
         if (!$result['success']) {
+            Log::error('CinetPay payment initiation failed in PaymentController', [
+                'error' => $result['error'] ?? 'Unknown error',
+                'code' => $result['code'] ?? 'UNKNOWN',
+                'description' => $result['description'] ?? null,
+                'reservation_id' => $reservation->id,
+                'amount_in_cents' => $amount,
+            ]);
+
             return response()->json([
                 'error' => $result['error'] ?? 'Erreur lors de l\'initialisation du paiement',
+                'code' => $result['code'] ?? 'UNKNOWN',
+                'description' => $result['description'] ?? null,
             ], 500);
         }
 

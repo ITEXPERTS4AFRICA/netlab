@@ -472,7 +472,14 @@ class LabController extends Controller
             'description' => ['nullable', 'string'],
             'order' => ['nullable', 'integer'],
             'is_active' => ['boolean'],
+            'url' => ['nullable', 'url'], // Pour les liens, on accepte 'url' qui sera mappé à 'file_url'
         ]);
+
+        // Si c'est une mise à jour d'URL pour un lien, mapper 'url' vers 'file_url'
+        if (isset($validated['url']) && $media->type === 'link') {
+            $validated['file_url'] = $validated['url'];
+            unset($validated['url']);
+        }
 
         $media->update($validated);
 

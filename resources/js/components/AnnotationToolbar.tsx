@@ -28,7 +28,7 @@ export const AnnotationToolbar: React.FC<AnnotationToolbarProps> = ({
   onCreateAnnotation,
 }) => {
   return (
-    <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
+    <div className="absolute top-4 left-4 z-30 flex flex-col gap-2 pointer-events-auto">
       <Card className="bg-background/90 backdrop-blur-sm border shadow-lg">
         <CardContent className="p-3">
           <div className="flex flex-col gap-2">

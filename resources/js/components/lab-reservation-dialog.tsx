@@ -141,8 +141,8 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       durationHours = 4;
     } else if (selectedSlot) {
       // Calculer la durée en heures depuis le créneau sélectionné
-      const start = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.startTime}:00`);
-      const end = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.endTime}:00`);
+    const start = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.startTime}:00`);
+    const end = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.endTime}:00`);
       durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
     } else if (data.start_at && data.end_at) {
       // Utiliser les dates du formulaire si disponibles

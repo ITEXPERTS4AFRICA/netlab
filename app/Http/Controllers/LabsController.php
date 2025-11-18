@@ -290,8 +290,37 @@ class LabsController extends Controller
         if ($token) {
             $labState = $cisco->getLabState($token, $lab->cml_id);
             if (!isset($labState['error'])) {
-                $lab->state = $labState['state'] ?? $lab->state;
-                $lab->save();
+                // Extraire l'état : peut être dans 'state', 'data', ou directement la valeur
+                $extractedState = null;
+                if (is_array($labState)) {
+                    // Essayer différentes structures possibles
+                    if (isset($labState['state'])) {
+                        $extractedState = $labState['state'];
+                    } elseif (isset($labState['data'])) {
+                        // Si data est un string (ex: {"data":"defined_on_core"})
+                        if (is_string($labState['data'])) {
+                            $extractedState = $labState['data'];
+                        } 
+                        // Si data est un array avec 'state' (ex: {"data":{"state":"defined_on_core"}})
+                        elseif (is_array($labState['data']) && isset($labState['data']['state'])) {
+                            $extractedState = $labState['data']['state'];
+                        }
+                    }
+                } elseif (is_string($labState)) {
+                    $extractedState = $labState;
+                }
+                
+                // Si on a extrait un état valide, le normaliser
+                if ($extractedState) {
+                    // Normaliser les formats comme {"data":"defined_on_core"} -> "DEFINED_ON_CORE"
+                    if (is_string($extractedState)) {
+                        $extractedState = strtoupper(trim($extractedState));
+                    } elseif (is_array($extractedState) && isset($extractedState['data'])) {
+                        $extractedState = strtoupper(trim((string)$extractedState['data']));
+                    }
+                    $lab->state = $extractedState;
+                    $lab->save();
+                }
             }
         }
 
@@ -314,7 +343,7 @@ class LabsController extends Controller
                     'lab_id' => $lab->cml_id,
                     'error' => $nodesData['error'],
                 ]);
-                $nodes = [];
+            $nodes = [];
             } elseif (is_array($nodesData)) {
                 // Normaliser la réponse : l'API peut retourner soit un tableau de strings (UUIDs)
                 // soit un tableau d'objets Node
@@ -370,20 +399,40 @@ class LabsController extends Controller
         }
 
         // Fetch lab topology (nodes, links, interfaces) for graph display
+        // Charger la topologie si le lab est RUNNING ou STARTED
         $topology = null;
         $tile = null;
         $links = [];
-        if ($token) {
+        
+        // Normaliser l'état pour la vérification (peut être en majuscules après notre normalisation)
+        $normalizedState = strtoupper(trim($lab->state ?? ''));
+        
+        if ($token && ($normalizedState === 'RUNNING' || $normalizedState === 'STARTED')) {
             $cisco->setToken($token);
+            
+            // Récupérer la topologie
             $topology = $cisco->getTopology($token, $lab->cml_id);
+            
+            \Log::info('Topologie récupérée', [
+                'lab_id' => $lab->cml_id,
+                'has_error' => isset($topology['error']),
+                'has_nodes' => isset($topology['nodes']) && is_array($topology['nodes']),
+                'nodes_count' => isset($topology['nodes']) && is_array($topology['nodes']) ? count($topology['nodes']) : 0,
+                'has_links' => isset($topology['links']) && is_array($topology['links']),
+                'links_count' => isset($topology['links']) && is_array($topology['links']) ? count($topology['links']) : 0,
+            ]);
+            
             if (isset($topology['error'])) {
+                \Log::warning('Erreur récupération topologie', [
+                    'lab_id' => $lab->cml_id,
+                    'error' => $topology['error'],
+                ]);
                 $topology = null;
-            } elseif (is_array($topology) && isset($topology['nodes']) && empty($nodes)) {
-                // Si on n'a pas réussi à récupérer les nodes via getLabNodes,
-                // essayer d'utiliser ceux de la topologie
+            } elseif (is_array($topology)) {
+                // Toujours utiliser les nodes de la topologie si disponibles (plus complets)
                 $topologyNodes = $topology['nodes'] ?? [];
                 if (is_array($topologyNodes) && !empty($topologyNodes)) {
-                    $nodes = array_map(function($node) {
+                    $topologyNodesNormalized = array_map(function($node) {
                         if (is_array($node)) {
                             return [
                                 'id' => $node['id'] ?? $node['node_id'] ?? '',
@@ -391,12 +440,40 @@ class LabsController extends Controller
                                 'name' => $node['name'] ?? $node['label'] ?? $node['id'] ?? '',
                                 'state' => $node['state'] ?? null,
                                 'node_definition' => $node['node_definition'] ?? $node['definition'] ?? null,
+                                'x' => $node['x'] ?? null,
+                                'y' => $node['y'] ?? null,
                             ];
                         }
                         return null;
                     }, $topologyNodes);
-                    $nodes = array_filter($nodes, fn($node) => $node !== null && !empty($node['id']));
-                    $nodes = array_values($nodes);
+                    $topologyNodesNormalized = array_filter($topologyNodesNormalized, fn($node) => $node !== null && !empty($node['id']));
+                    $topologyNodesNormalized = array_values($topologyNodesNormalized);
+                    
+                    // Utiliser les nodes de la topologie s'ils sont disponibles, sinon garder ceux récupérés précédemment
+                    if (!empty($topologyNodesNormalized)) {
+                        $nodes = $topologyNodesNormalized;
+                        \Log::info('Nodes normalisés depuis topologie', [
+                            'count' => count($nodes),
+                        ]);
+                    }
+                }
+                
+                // Normaliser les links de la topologie si disponibles
+                $topologyLinks = $topology['links'] ?? [];
+                if (is_array($topologyLinks) && !empty($topologyLinks)) {
+                    $topology['links'] = array_map(function($link) {
+                        if (is_array($link)) {
+                            return [
+                                'id' => $link['id'] ?? $link['link_id'] ?? uniqid('link_'),
+                                'n1' => $link['n1'] ?? $link['node1'] ?? $link['src'] ?? null,
+                                'n2' => $link['n2'] ?? $link['node2'] ?? $link['dst'] ?? null,
+                                'i1' => $link['i1'] ?? $link['interface1'] ?? $link['src_interface'] ?? null,
+                                'i2' => $link['i2'] ?? $link['interface2'] ?? $link['dst_interface'] ?? null,
+                                'state' => $link['state'] ?? null,
+                            ];
+                        }
+                        return $link;
+                    }, $topologyLinks);
                 }
             }
             
@@ -406,11 +483,44 @@ class LabsController extends Controller
                 $tile = null;
             }
             
-            // Fetch links for topology graph
-            $linksData = $cisco->getLabLinks($lab->cml_id);
-            if (!isset($linksData['error']) && is_array($linksData)) {
-                $links = $linksData;
+            // Fetch links for topology graph (utiliser les links de la topologie si disponibles, sinon récupérer séparément)
+            if (!isset($topology['links']) || empty($topology['links'])) {
+                $linksData = $cisco->getLabLinks($lab->cml_id);
+                if (!isset($linksData['error']) && is_array($linksData)) {
+                    // Normaliser les links récupérés
+                    $links = array_map(function($link) {
+                        if (is_array($link)) {
+                            return [
+                                'id' => $link['id'] ?? $link['link_id'] ?? uniqid('link_'),
+                                'n1' => $link['n1'] ?? $link['node1'] ?? $link['src'] ?? null,
+                                'n2' => $link['n2'] ?? $link['node2'] ?? $link['dst'] ?? null,
+                                'i1' => $link['i1'] ?? $link['interface1'] ?? $link['src_interface'] ?? null,
+                                'i2' => $link['i2'] ?? $link['interface2'] ?? $link['dst_interface'] ?? null,
+                                'state' => $link['state'] ?? null,
+                            ];
+                        }
+                        return $link;
+                    }, $linksData);
+                }
+            } else {
+                // Utiliser les links de la topologie
+                $links = $topology['links'] ?? [];
             }
+            
+            \Log::info('Données topologie finales', [
+                'lab_id' => $lab->cml_id,
+                'nodes_count' => count($nodes),
+                'links_count' => count($links),
+                'topology_has_nodes' => isset($topology['nodes']) && is_array($topology['nodes']),
+                'topology_has_links' => isset($topology['links']) && is_array($topology['links']),
+            ]);
+        } else {
+            \Log::info('Topologie non chargée', [
+                'lab_id' => $lab->cml_id,
+                'has_token' => !empty($token),
+                'state' => $lab->state,
+                'normalized_state' => $normalizedState,
+            ]);
         }
 
         // Récupérer les informations complètes du lab depuis CML pour obtenir owner_username et owner_fullname

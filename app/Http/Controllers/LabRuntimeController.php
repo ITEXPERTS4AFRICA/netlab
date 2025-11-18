@@ -98,9 +98,14 @@ class LabRuntimeController extends Controller
             ], $startResp['status'] ?? 500);
         }
 
+        // Mettre à jour l'état du lab dans la base de données
+        $labModel->state = 'RUNNING';
+        $labModel->save();
+
         \Log::info('Lab démarré avec succès', [
             'lab_id' => $labModel->id,
             'cml_id' => $labModel->cml_id,
+            'state_updated' => true,
         ]);
 
         $user = Auth::user();
@@ -118,7 +123,15 @@ class LabRuntimeController extends Controller
         }
 
         // Sinon, retourner du JSON pour les appels API
-        return response()->json(['started' => true, 'usage_record' => $usage]);
+        return response()->json([
+            'started' => true,
+            'usage_record' => $usage,
+            'lab' => [
+                'id' => $labModel->id,
+                'cml_id' => $labModel->cml_id,
+                'state' => $labModel->state,
+            ],
+        ]);
     }
 
     public function stop(Request $request, string|int $lab, CiscoApiService $cisco)
@@ -172,6 +185,16 @@ class LabRuntimeController extends Controller
         // cost calculation left to billing step
         $usage->save();
 
+        // Mettre à jour l'état du lab dans la base de données
+        $labModel->state = 'STOPPED';
+        $labModel->save();
+
+        \Log::info('Lab arrêté avec succès', [
+            'lab_id' => $labModel->id,
+            'cml_id' => $labModel->cml_id,
+            'state_updated' => true,
+        ]);
+
         // Si c'est une requête Inertia, rediriger vers la page workspace
         if ($request->header('X-Inertia')) {
             return redirect()->route('labs.workspace', ['lab' => $labModel->id])
@@ -179,7 +202,15 @@ class LabRuntimeController extends Controller
         }
 
         // Sinon, retourner du JSON pour les appels API
-        return response()->json(['stopped' => true, 'usage_record' => $usage]);
+        return response()->json([
+            'stopped' => true,
+            'usage_record' => $usage,
+            'lab' => [
+                'id' => $labModel->id,
+                'cml_id' => $labModel->cml_id,
+                'state' => $labModel->state,
+            ],
+        ]);
     }
 
     /**

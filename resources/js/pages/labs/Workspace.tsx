@@ -197,8 +197,11 @@ export default function Workspace() {
                 throw new Error(errorMessage);
             }
 
-            await response.json();
-            toast.success('Lab démarré avec succès');
+            const result = await response.json();
+            toast.success('Lab démarré avec succès. Chargement de la topologie...');
+            
+            // Attendre un peu pour que le lab démarre complètement avant de recharger
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             // Recharger la page pour obtenir l'état mis à jour du lab
             // Utiliser router.reload() au lieu de window.location.reload() pour éviter les problèmes Inertia
@@ -280,33 +283,61 @@ export default function Workspace() {
 
                             {/* Status Badge */}
                             <Badge
-                                variant={
-                                    lab.state === 'RUNNING' ? 'default' :
-                                    lab.state === 'STOPPED' ? 'destructive' :
-                                    lab.state === 'STARTING' ? 'secondary' :
-                                    lab.state === 'STOPPING' ? 'secondary' :
-                                    'outline'
-                                }
-                                className={`flex items-center gap-1.5 px-3 py-1 text-sm ${
-                                    lab.state === 'RUNNING'
-                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
-                                        : lab.state === 'STOPPED'
-                                        ? 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
-                                        : lab.state === 'STARTING' || lab.state === 'STOPPING'
-                                        ? 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
-                                        : 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-900/30 dark:text-gray-300 dark:border-gray-800'
-                                }`}
+                                variant={(() => {
+                                    const normalizedState = typeof lab.state === 'string' 
+                                        ? lab.state.toUpperCase() 
+                                        : (typeof lab.state === 'object' && lab.state !== null
+                                            ? ((lab.state as any).data?.toUpperCase() || (lab.state as any).state?.toUpperCase() || 'UNKNOWN')
+                                            : 'UNKNOWN');
+                                    return normalizedState === 'RUNNING' || normalizedState === 'STARTED' ? 'default' :
+                                           normalizedState === 'STOPPED' ? 'destructive' :
+                                           normalizedState === 'STARTING' || normalizedState === 'STOPPING' ? 'secondary' :
+                                           'outline';
+                                })()}
+                                className={`flex items-center gap-1.5 px-3 py-1 text-sm ${(() => {
+                                    const normalizedState = typeof lab.state === 'string' 
+                                        ? lab.state.toUpperCase() 
+                                        : (typeof lab.state === 'object' && lab.state !== null
+                                            ? ((lab.state as any).data?.toUpperCase() || (lab.state as any).state?.toUpperCase() || 'UNKNOWN')
+                                            : 'UNKNOWN');
+                                    if (normalizedState === 'RUNNING' || normalizedState === 'STARTED') {
+                                        return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800';
+                                    } else if (normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') {
+                                        return normalizedState === 'DEFINED_ON_CORE' 
+                                            ? 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800'
+                                            : 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800';
+                                    } else if (normalizedState === 'STARTING' || normalizedState === 'STOPPING') {
+                                        return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800';
+                                    } else {
+                                        return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-900/30 dark:text-gray-300 dark:border-gray-800';
+                                    }
+                                })()}`}
                             >
-                                {lab.state === 'RUNNING' ? (
-                                    <CheckCircle className="h-4 w-4" />
-                                ) : lab.state === 'STOPPED' ? (
-                                    <AlertTriangle className="h-4 w-4" />
-                                ) : lab.state === 'STARTING' || lab.state === 'STOPPING' ? (
-                                    <Clock className="h-4 w-4" />
-                                ) : (
-                                    <Info className="h-4 w-4" />
-                                )}
-                                {lab.state.charAt(0).toUpperCase() + lab.state.slice(1).toLowerCase()}
+                                {(() => {
+                                    // Normaliser l'état pour l'affichage
+                                    let normalizedState: string;
+                                    if (typeof lab.state === 'string') {
+                                        normalizedState = lab.state;
+                                    } else if (typeof lab.state === 'object' && lab.state !== null) {
+                                        normalizedState = (lab.state as any).data || (lab.state as any).state || JSON.stringify(lab.state);
+                                    } else {
+                                        normalizedState = String(lab.state || 'UNKNOWN');
+                                    }
+                                    
+                                    const upperState = normalizedState.toUpperCase();
+                                    
+                                    if (upperState === 'RUNNING' || upperState === 'STARTED') {
+                                        return <><CheckCircle className="h-4 w-4" /> Running</>;
+                                    } else if (upperState === 'STOPPED') {
+                                        return <><AlertTriangle className="h-4 w-4" /> Stopped</>;
+                                    } else if (upperState === 'STARTING' || upperState === 'STOPPING') {
+                                        return <><Clock className="h-4 w-4" /> {normalizedState.charAt(0).toUpperCase() + normalizedState.slice(1).toLowerCase()}</>;
+                                    } else if (upperState === 'DEFINED_ON_CORE') {
+                                        return <><Info className="h-4 w-4" /> Defined on Core</>;
+                                    } else {
+                                        return <><Info className="h-4 w-4" /> {typeof normalizedState === 'string' ? (normalizedState.charAt(0).toUpperCase() + normalizedState.slice(1).toLowerCase()) : 'Unknown'}</>;
+                                    }
+                                })()}
                             </Badge>
                         </div>
                     </div>
@@ -325,28 +356,43 @@ export default function Workspace() {
                             {editMode ? 'View Mode' : 'Edit Annotations'}
                         </Button>
 
-                        {lab.state === 'STOPPED' && (
-                            <Button
-                                onClick={handleStartLab}
-                                size="sm"
-                                className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-                            >
-                                <Play className="h-4 w-4" />
-                                Start Lab
-                            </Button>
-                        )}
-
-                        {lab.state === 'RUNNING' && (
-                            <Button
-                                onClick={handleStopLab}
-                                variant="destructive"
-                                size="sm"
-                                className="flex items-center gap-2"
-                            >
-                                <Square className="h-4 w-4" />
-                                Stop Lab
-                            </Button>
-                        )}
+                        {(() => {
+                            // Normaliser l'état pour vérifier les conditions
+                            const normalizedState = typeof lab.state === 'string' 
+                                ? lab.state.toUpperCase() 
+                                : (typeof lab.state === 'object' && lab.state !== null
+                                    ? (lab.state.data?.toUpperCase() || lab.state.state?.toUpperCase() || 'UNKNOWN')
+                                    : 'UNKNOWN');
+                            
+                            if (normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') {
+                                return (
+                                    <Button
+                                        onClick={handleStartLab}
+                                        size="sm"
+                                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                                    >
+                                        <Play className="h-4 w-4" />
+                                        Start Lab
+                                    </Button>
+                                );
+                            }
+                            
+                            if (normalizedState === 'RUNNING' || normalizedState === 'STARTED') {
+                                return (
+                                    <Button
+                                        onClick={handleStopLab}
+                                        variant="destructive"
+                                        size="sm"
+                                        className="flex items-center gap-2"
+                                    >
+                                        <Square className="h-4 w-4" />
+                                        Stop Lab
+                                    </Button>
+                                );
+                            }
+                            
+                            return null;
+                        })()}
 
                         <Button
                             onClick={openInCML}
@@ -428,9 +474,28 @@ export default function Workspace() {
                 {/* Workspace Area */}
                 <div className="flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
                     <div className="relative flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                        {/* Topology Graph - Show when lab is running */}
-                        {lab.state === 'RUNNING' || lab.state === 'STARTED' ? (
-                            <div className="absolute inset-0">
+                        {/* Topology Graph - Show when lab is running - Must be on top */}
+                        {(() => {
+                            const normalizedState = typeof lab.state === 'string' 
+                                ? lab.state.toUpperCase() 
+                                : (typeof lab.state === 'object' && lab.state !== null
+                                    ? ((lab.state as any).data?.toUpperCase() || (lab.state as any).state?.toUpperCase() || 'UNKNOWN')
+                                    : 'UNKNOWN');
+                            
+                            const shouldShow = normalizedState === 'RUNNING' || normalizedState === 'STARTED';
+                            
+                            console.log('Workspace: Rendu topologie', {
+                                normalizedState,
+                                shouldShow,
+                                nodeListCount: nodeList.length,
+                                linksCount: Array.isArray(links) ? links.length : 0,
+                                topologyType: typeof topology,
+                                hasTopologyNodes: !!(topology && typeof topology === 'object' && (topology as any).nodes),
+                            });
+                            
+                            return shouldShow;
+                        })() ? (
+                            <div className="absolute inset-0 z-20" style={{ minHeight: '400px', minWidth: '400px' }}>
                                 <LabTopology
                                     nodes={nodeList}
                                     links={Array.isArray(links) ? links : []}
@@ -438,11 +503,25 @@ export default function Workspace() {
                                     className="h-full w-full"
                                 />
                             </div>
-                        ) : null}
+                        ) : (
+                            <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-900 text-white">
+                                <div className="text-center">
+                                    <p>Lab state: {typeof lab.state === 'string' ? lab.state : JSON.stringify(lab.state)}</p>
+                                    <p>Topology will appear when lab is RUNNING or STARTED</p>
+                                </div>
+                            </div>
+                        )}
                         
-                        {/* Annotations Canvas - Show when not in edit mode or when lab is not running */}
-                        {(!editMode || lab.state !== 'RUNNING') && (
-                            <div className="absolute inset-0">
+                        {/* Annotations Canvas - Show only when lab is NOT running to avoid grid overlap */}
+                        {(() => {
+                            const normalizedState = typeof lab.state === 'string' 
+                                ? lab.state.toUpperCase() 
+                                : (typeof lab.state === 'object' && lab.state !== null
+                                    ? (lab.state.data?.toUpperCase() || lab.state.state?.toUpperCase() || 'UNKNOWN')
+                                    : 'UNKNOWN');
+                            return normalizedState !== 'RUNNING' && normalizedState !== 'STARTED';
+                        })() && (
+                            <div className="absolute inset-0 z-10">
                                 <AnnotationLab
                                     labId={lab.id}
                                     editMode={editMode}
@@ -452,9 +531,9 @@ export default function Workspace() {
                             </div>
                         )}
 
-                        {/* Edit Mode Overlay */}
+                        {/* Edit Mode Overlay - Positioned to avoid overlap with topology info panel */}
                         {editMode && (
-                            <div className="absolute right-4 top-4 z-10 rounded-lg border border-gray-200 bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                            <div className="absolute right-4 top-16 z-40 rounded-lg border border-gray-200 bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-800">
                                 <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                                     <Edit className="h-4 w-4 text-blue-600" />
                                     <span>Edit Mode Active</span>
@@ -466,35 +545,54 @@ export default function Workspace() {
                         )}
 
                         {/* Lab State Overlay */}
-                        {!editMode && lab.state !== 'RUNNING' && (
-                            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black bg-opacity-50">
-                                <div className="mx-4 max-w-md rounded-lg bg-white p-6 text-center shadow-xl dark:bg-gray-800">
-                                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
-                                        {lab.state === 'STOPPED' ? (
-                                            <AlertTriangle className="h-8 w-8 text-gray-600 dark:text-gray-400" />
-                                        ) : lab.state === 'STARTING' || lab.state === 'STOPPING' ? (
-                                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-                                        ) : (
-                                            <Info className="h-8 w-8 text-gray-600 dark:text-gray-400" />
-                                        )}
+                        {(() => {
+                            // Normaliser l'état pour vérifier les conditions
+                            const normalizedState = typeof lab.state === 'string' 
+                                ? lab.state.toUpperCase() 
+                                : (typeof lab.state === 'object' && lab.state !== null
+                                    ? (lab.state.data?.toUpperCase() || lab.state.state?.toUpperCase() || 'UNKNOWN')
+                                    : 'UNKNOWN');
+                            
+                            if (!editMode && normalizedState !== 'RUNNING' && normalizedState !== 'STARTED') {
+                                const stateDisplay = normalizedState === 'DEFINED_ON_CORE' 
+                                    ? 'Defined on Core'
+                                    : normalizedState === 'STOPPED'
+                                    ? 'Stopped'
+                                    : normalizedState.toLowerCase();
+                                
+                                return (
+                                    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50">
+                                        <div className="mx-4 max-w-md rounded-lg bg-white p-6 text-center shadow-xl dark:bg-gray-800">
+                                            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
+                                                {normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE' ? (
+                                                    <AlertTriangle className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                                                ) : normalizedState === 'STARTING' || normalizedState === 'STOPPING' ? (
+                                                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+                                                ) : (
+                                                    <Info className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                                                )}
+                                            </div>
+                                            <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+                                                Lab {stateDisplay}
+                                            </h3>
+                                            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                                                {(normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') && 
+                                                    'Le lab est actuellement arrêté ou défini sur le core. Démarrez-le pour visualiser et interagir avec les annotations.'}
+                                                {normalizedState === 'STARTING' && 'Le lab démarre. Cela peut prendre quelques minutes...'}
+                                                {normalizedState === 'STOPPING' && 'Le lab s\'arrête. Veuillez patienter...'}
+                                            </p>
+                                            {(normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') && (
+                                                <Button onClick={handleStartLab} className="bg-green-600 hover:bg-green-700">
+                                                    <Play className="mr-2 h-4 w-4" />
+                                                    Démarrer le Lab
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
-                                    <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-                                        Lab {lab.state.toLowerCase()}
-                                    </h3>
-                                    <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-                                        {lab.state === 'STOPPED' && 'The lab is currently stopped. Start it to view and interact with annotations.'}
-                                        {lab.state === 'STARTING' && 'The lab is starting up. This may take a few minutes...'}
-                                        {lab.state === 'STOPPING' && 'The lab is stopping. Please wait...'}
-                                    </p>
-                                    {lab.state === 'STOPPED' && (
-                                        <Button onClick={handleStartLab} className="bg-green-600 hover:bg-green-700">
-                                            <Play className="mr-2 h-4 w-4" />
-                                            Start Lab
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-                        )}
+                                );
+                            }
+                            return null;
+                        })()}
                     </div>
 
                     <div className="min-h-[28rem] w-full flex-shrink-0 overflow-hidden lg:w-[420px]">

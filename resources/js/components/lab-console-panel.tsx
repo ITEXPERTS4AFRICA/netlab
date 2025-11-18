@@ -494,7 +494,26 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
     const connectionBadge = useMemo(() => CONNECTION_META[connectionState], [connectionState]);
     // Une session est "ouverte" si elle existe et que la connexion est ouverte ou en cours de connexion
     // ou si la session existe sans WebSocket (mode sans WebSocket)
-    const isSessionOpen = session !== null && (connectionState === 'open' || connectionState === 'connecting' || (session.consoleUrl && connectionState !== 'error'));
+    // Pour CML, si on a une consoleUrl, on considère la session comme ouverte même sans WebSocket
+    const isSessionOpen = useMemo(() => {
+        const open = session !== null && (
+            connectionState === 'open' 
+            || connectionState === 'connecting' 
+            || (session.consoleUrl && connectionState !== 'error' && connectionState !== 'closed')
+        );
+        
+        // Debug log
+        if (session) {
+            console.log('LabConsolePanel: État de la session', {
+                hasSession: !!session,
+                hasConsoleUrl: !!session.consoleUrl,
+                connectionState,
+                isSessionOpen: open,
+            });
+        }
+        
+        return open;
+    }, [session, connectionState]);
 
     const selectedNode = useMemo(() => nodes.find(node => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId]);
 

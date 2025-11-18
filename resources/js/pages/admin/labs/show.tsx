@@ -23,9 +23,10 @@ import {
 } from '@/components/ui/select';
 import {
     FlaskConical, Edit, ArrowLeft, Star, Globe, Users, TrendingUp,
-    Clock, DollarSign, FileText, Image, Video, Link as LinkIcon, Upload, Plus
+    Clock, DollarSign, FileText, Image, Video, Link as LinkIcon, Upload, Plus,
+    Trash2, ChevronUp, ChevronDown, Save, X
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface LabDocumentationMedia {
     id: number;
@@ -73,6 +74,24 @@ export default function LabShow({ lab }: Props) {
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [fileType, setFileType] = useState<string>('');
+    const [editingMediaId, setEditingMediaId] = useState<number | null>(null);
+    const [editFormData, setEditFormData] = useState<{
+        title?: string;
+        description?: string;
+        url?: string;
+    }>({});
+    const [isDeleting, setIsDeleting] = useState<number | null>(null);
+    const [isReordering, setIsReordering] = useState(false);
+
+    // Réinitialiser l'erreur après 5 secondes
+    useEffect(() => {
+        if (uploadError) {
+            const timer = setTimeout(() => {
+                setUploadError(null);
+            }, 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [uploadError]);
 
     const formatPrice = (cents?: number, currency = 'XOF') => {
         if (!cents) return 'Gratuit';
@@ -187,6 +206,118 @@ export default function LabShow({ lab }: Props) {
         if (!open) {
             setUploadError(null);
             setFileType('');
+        }
+    };
+
+    const handleEditMedia = (media: LabDocumentationMedia) => {
+        setEditingMediaId(media.id);
+        setEditFormData({
+            title: media.title || '',
+            description: media.description || '',
+            url: media.file_url || '',
+        });
+    };
+
+    const handleCancelEdit = () => {
+        setEditingMediaId(null);
+        setEditFormData({});
+    };
+
+    const handleSaveEdit = async (mediaId: number) => {
+        try {
+            const response = await fetch(`/admin/labs/${lab.id}/media/${mediaId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify(editFormData),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || data.error || 'Erreur lors de la modification');
+            }
+
+            setEditingMediaId(null);
+            setEditFormData({});
+            router.reload({ only: ['lab'] });
+        } catch (error) {
+            setUploadError(error instanceof Error ? error.message : 'Erreur lors de la modification');
+        }
+    };
+
+    const handleDeleteMedia = async (mediaId: number) => {
+        if (!confirm('Êtes-vous sûr de vouloir supprimer ce média ?')) {
+            return;
+        }
+
+        setIsDeleting(mediaId);
+        try {
+            const response = await fetch(`/admin/labs/${lab.id}/media/${mediaId}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || data.error || 'Erreur lors de la suppression');
+            }
+
+            router.reload({ only: ['lab'] });
+        } catch (error) {
+            setUploadError(error instanceof Error ? error.message : 'Erreur lors de la suppression');
+        } finally {
+            setIsDeleting(null);
+        }
+    };
+
+    const handleMoveMedia = async (mediaId: number, direction: 'up' | 'down') => {
+        if (!lab.documentation_media) return;
+
+        const currentMedia = lab.documentation_media.find(m => m.id === mediaId);
+        if (!currentMedia) return;
+
+        const currentIndex = lab.documentation_media.findIndex(m => m.id === mediaId);
+        const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+        if (newIndex < 0 || newIndex >= lab.documentation_media.length) return;
+
+        setIsReordering(true);
+        try {
+            const reorderedMedia = [...lab.documentation_media];
+            const [removed] = reorderedMedia.splice(currentIndex, 1);
+            reorderedMedia.splice(newIndex, 0, removed);
+
+            const mediaOrder = reorderedMedia.map((m, index) => ({
+                id: m.id,
+                order: index,
+            }));
+
+            const response = await fetch(`/admin/labs/${lab.id}/media/reorder`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify({ media: mediaOrder }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || data.error || 'Erreur lors du réordonnancement');
+            }
+
+            router.reload({ only: ['lab'] });
+        } catch (error) {
+            setUploadError(error instanceof Error ? error.message : 'Erreur lors du réordonnancement');
+        } finally {
+            setIsReordering(false);
         }
     };
 
@@ -435,29 +566,150 @@ export default function LabShow({ lab }: Props) {
                                 </div>
                             </CardHeader>
                             <CardContent>
+                                {uploadError && (
+                                    <div className="mb-4 bg-destructive/10 text-destructive p-3 rounded-md text-sm">
+                                        {uploadError}
+                                    </div>
+                                )}
                                 {lab.documentation_media && lab.documentation_media.length > 0 ? (
                                     <div className="space-y-3">
-                                        {lab.documentation_media.map((media) => (
+                                        {lab.documentation_media.map((media, index) => (
                                             <div
                                                 key={media.id}
-                                                className="flex items-center gap-3 p-3 border rounded-lg"
+                                                className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                                             >
-                                                {getMediaIcon(media.type)}
-                                                <div className="flex-1">
-                                                    <h4 className="font-medium">{media.title || 'Sans titre'}</h4>
-                                                    {media.description && (
-                                                        <p className="text-sm text-muted-foreground">{media.description}</p>
+                                                <div className="mt-1">
+                                                    {getMediaIcon(media.type)}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    {editingMediaId === media.id ? (
+                                                        <div className="space-y-3">
+                                                            <div>
+                                                                <Label htmlFor={`edit-title-${media.id}`} className="text-xs">Titre</Label>
+                                                                <Input
+                                                                    id={`edit-title-${media.id}`}
+                                                                    value={editFormData.title || ''}
+                                                                    onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                                                                    className="mt-1"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <Label htmlFor={`edit-description-${media.id}`} className="text-xs">Description</Label>
+                                                                <Textarea
+                                                                    id={`edit-description-${media.id}`}
+                                                                    value={editFormData.description || ''}
+                                                                    onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                                                                    className="mt-1"
+                                                                    rows={2}
+                                                                />
+                                                            </div>
+                                                            {media.type === 'link' && (
+                                                                <div>
+                                                                    <Label htmlFor={`edit-url-${media.id}`} className="text-xs">URL</Label>
+                                                                    <Input
+                                                                        id={`edit-url-${media.id}`}
+                                                                        type="url"
+                                                                        value={editFormData.url || ''}
+                                                                        onChange={(e) => setEditFormData({ ...editFormData, url: e.target.value })}
+                                                                        className="mt-1"
+                                                                    />
+                                                                </div>
+                                                            )}
+                                                            <div className="flex gap-2">
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    onClick={() => handleSaveEdit(media.id)}
+                                                                    disabled={isUploading}
+                                                                >
+                                                                    <Save className="h-3 w-3 mr-1" />
+                                                                    Enregistrer
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={handleCancelEdit}
+                                                                    disabled={isUploading}
+                                                                >
+                                                                    <X className="h-3 w-3 mr-1" />
+                                                                    Annuler
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <h4 className="font-medium">{media.title || 'Sans titre'}</h4>
+                                                            {media.description && (
+                                                                <p className="text-sm text-muted-foreground mt-1">{media.description}</p>
+                                                            )}
+                                                            {media.file_url && (
+                                                                <a
+                                                                    href={media.file_url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-sm text-primary hover:underline mt-1 inline-block"
+                                                                >
+                                                                    {media.type === 'link' ? media.file_url : 'Voir le fichier'}
+                                                                </a>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </div>
-                                                {media.file_url && (
-                                                    <a
-                                                        href={media.file_url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-primary hover:underline"
-                                                    >
-                                                        Voir
-                                                    </a>
+                                                {editingMediaId !== media.id && (
+                                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                                        {/* Boutons de réorganisation */}
+                                                        <div className="flex flex-col gap-1">
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-6 w-6 p-0"
+                                                                onClick={() => handleMoveMedia(media.id, 'up')}
+                                                                disabled={index === 0 || isReordering}
+                                                                title="Déplacer vers le haut"
+                                                            >
+                                                                <ChevronUp className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-6 w-6 p-0"
+                                                                onClick={() => handleMoveMedia(media.id, 'down')}
+                                                                disabled={index === lab.documentation_media!.length - 1 || isReordering}
+                                                                title="Déplacer vers le bas"
+                                                            >
+                                                                <ChevronDown className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                        {/* Bouton modifier */}
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleEditMedia(media)}
+                                                            title="Modifier"
+                                                        >
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
+                                                        {/* Bouton supprimer */}
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleDeleteMedia(media.id)}
+                                                            disabled={isDeleting === media.id}
+                                                            className="text-destructive hover:text-destructive"
+                                                            title="Supprimer"
+                                                        >
+                                                            {isDeleting === media.id ? (
+                                                                <Clock className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Trash2 className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
                                                 )}
                                             </div>
                                         ))}
