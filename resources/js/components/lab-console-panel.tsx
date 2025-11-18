@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { Loader2, Power, RefreshCcw, Terminal } from 'lucide-react';
+import { useConsole, type ConsoleResponse, type ConsoleSessionResponse } from '@/hooks/useConsole';
 
 type LabNode = {
     id: string;
@@ -16,6 +17,7 @@ type LabNode = {
     node_definition?: string;
 };
 
+// Types basés sur les réponses API
 type ConsoleInfo = {
     id: string;
     console_id?: string;
@@ -24,12 +26,12 @@ type ConsoleInfo = {
     [key: string]: unknown;
 };
 
-type ConsoleSessionsResponse = {
+export type ConsoleSessionsResponse = {
     sessions?: ConsoleSession[];
     [key: string]: unknown;
 };
 
-type ConsoleSession = {
+export type ConsoleSession = {
     session_id?: string;
     node_id?: string;
     lab_id?: string;
@@ -55,7 +57,8 @@ type Props = {
 type SessionState = {
     sessionId: string;
     nodeId: string;
-    wsHref?: string;
+    consoleUrl?: string; // URL de la console CML (iframe)
+    wsHref?: string; // Déprécié - CML n'utilise pas de WebSocket
     protocol?: string;
     type?: string;
 };
@@ -73,13 +76,15 @@ const CONNECTION_META: Record<ConnectionState, { label: string; variant: 'outlin
 
 const MAX_LOG_LINES = 500;
 
-const getCsrfToken = () => {
-    const element = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
-    return element?.content;
-};
-
 export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Props) {
-    const [selectedNodeId, setSelectedNodeId] = useState<string>(() => nodes?.[0]?.id ?? '');
+    // Trouver le premier node valide avec un id
+    const getFirstValidNodeId = useCallback(() => {
+        if (!nodes || nodes.length === 0) return '';
+        const firstNode = nodes.find(node => node.id && node.id.trim() !== '');
+        return firstNode?.id ?? '';
+    }, [nodes]);
+
+    const [selectedNodeId, setSelectedNodeId] = useState<string>(getFirstValidNodeId);
     const [availableTypes, setAvailableTypes] = useState<AvailableConsoleTypes>({});
     const [consoles, setConsoles] = useState<ConsoleInfo[]>([]);
     const [loadingConsoles, setLoadingConsoles] = useState(false);
@@ -91,6 +96,23 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
     const [error, setError] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const sessionRef = useRef<SessionState | null>(null);
+    
+    // Utiliser le hook useConsole pour les appels API typés
+    const consoleApi = useConsole();
+    const getNodeConsolesFn = useCallback(
+        (labId: string, nodeId: string) => consoleApi.getNodeConsoles(labId, nodeId),
+        [consoleApi]
+    );
+
+    // Mettre à jour selectedNodeId quand nodes change
+    useEffect(() => {
+        if (!selectedNodeId && nodes && nodes.length > 0) {
+            const firstValid = getFirstValidNodeId();
+            if (firstValid && firstValid !== selectedNodeId) {
+                setSelectedNodeId(firstValid);
+            }
+        }
+    }, [nodes, selectedNodeId, getFirstValidNodeId]);
 
     const normalizedSessions = useMemo<ConsoleSession[]>(() => {
         if (!initialSessions) return [];
@@ -128,37 +150,28 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
     }, [session]);
 
     useEffect(() => {
-        if (!selectedNodeId) return;
+        if (!selectedNodeId || !cmlLabId) return;
 
         const controller = new AbortController();
+        let isMounted = true;
+        
         const fetchConsoles = async () => {
             setLoadingConsoles(true);
             setError(null);
             try {
-                const res = await fetch(`/api/labs/${cmlLabId}/nodes/${selectedNodeId}/consoles`, {
-                    method: 'GET',
-                    headers: {
-                        Accept: 'application/json',
-                    },
-                    credentials: 'same-origin',
-                    signal: controller.signal,
-                });
-
-                if (!res.ok) {
-                    throw new Error(`Erreur ${res.status}`);
+                const data = await getNodeConsolesFn(cmlLabId, selectedNodeId);
+                if (data && !controller.signal.aborted && isMounted) {
+                    setConsoles(Array.isArray(data.consoles) ? data.consoles : []);
+                    setAvailableTypes(data.available_types || {});
                 }
-
-                const data = await res.json();
-                setConsoles(Array.isArray(data?.consoles) ? data.consoles : []);
-                setAvailableTypes(typeof data?.available_types === 'object' ? data.available_types : {});
             } catch (err) {
-                if (controller.signal.aborted) return;
+                if (controller.signal.aborted || !isMounted) return;
                 console.error(err);
                 setError("Impossible de charger les consoles pour ce nœud.");
                 setConsoles([]);
                 setAvailableTypes({});
             } finally {
-                if (!controller.signal.aborted) {
+                if (!controller.signal.aborted && isMounted) {
                     setLoadingConsoles(false);
                 }
             }
@@ -167,9 +180,10 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         fetchConsoles();
 
         return () => {
+            isMounted = false;
             controller.abort();
         };
-    }, [cmlLabId, selectedNodeId]);
+    }, [cmlLabId, selectedNodeId, getNodeConsolesFn]);
 
     const closeSession = useCallback(async ({ skipApi = false, reason }: { skipApi?: boolean; reason?: string } = {}) => {
         const activeSession = sessionRef.current;
@@ -190,32 +204,17 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         setConnectionState('closing');
         teardownWebsocket({ silent: true });
 
-        if (!skipApi) {
-            const csrf = getCsrfToken();
-            if (csrf) {
-                try {
-                    const res = await fetch(`/api/console/sessions/${activeSession.sessionId}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'X-CSRF-TOKEN': csrf,
-                            Accept: 'application/json',
-                        },
-                        credentials: 'same-origin',
-                    });
-
-                    if (!res.ok) {
-                        console.warn('Console session close returned', res.status);
-                    }
-                } catch (err) {
-                    console.error('Unable to close console session', err);
-                }
+        if (!skipApi && consoleApi) {
+            const success = await consoleApi.closeSession(activeSession.sessionId);
+            if (!success) {
+                console.warn('Console session close failed');
             }
         }
 
         sessionRef.current = null;
         setSession(null);
         setConnectionState('closed');
-    }, [appendLog, teardownWebsocket]);
+    }, [appendLog, teardownWebsocket, consoleApi]);
 
     useEffect(() => {
         return () => {
@@ -239,9 +238,19 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             return;
         }
 
+        // CML utilise des URLs de console (iframe), pas de WebSocket
+        if (activeSession.consoleUrl) {
+            teardownWebsocket({ silent: true });
+            setConnectionState('open');
+            appendLog('[Console] Console disponible via iframe.');
+            return;
+        }
+        
+        // Fallback pour WebSocket (si jamais utilisé dans le futur)
         if (!activeSession.wsHref) {
             teardownWebsocket({ silent: true });
             setConnectionState('open');
+            appendLog('[Console] Session créée sans WebSocket. Les commandes seront envoyées via l\'API.');
             return;
         }
 
@@ -267,7 +276,8 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         const handleOpen = () => {
             setConnectionState('open');
             setError(null);
-            appendLog(`[Console] Session ${activeSession.sessionId} connectée.`);
+            appendLog(`[Console] Session ${activeSession.sessionId} connectée via WebSocket.`);
+            console.log('WebSocket ouvert avec succès');
         };
 
         const handleMessage = (event: MessageEvent) => {
@@ -283,8 +293,9 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         const handleError = (event: Event) => {
             console.error('WebSocket error', event);
             setConnectionState('error');
-            setError('Erreur de connexion WebSocket.');
-            appendLog('[Console] Erreur de transport');
+            setError('Erreur de connexion WebSocket. Vérifiez que le serveur CML est accessible.');
+            appendLog('[Console] Erreur de transport WebSocket');
+            toast.error('Erreur de connexion WebSocket. Les commandes peuvent ne pas fonctionner.');
         };
 
         const handleClose = (event: CloseEvent) => {
@@ -327,106 +338,118 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             return;
         }
 
-        const csrf = getCsrfToken();
-        if (!csrf) {
-            toast.error('Jeton CSRF introuvable.');
-            return;
-        }
-
         setLoadingSession(true);
         setError(null);
         await closeSession({ reason: 'Fermeture de la session existante' });
         setLogLines([`[Console] Connexion en cours pour le nœud ${selectedNodeId}`]);
 
         try {
-            const res = await fetch('/api/console/sessions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrf,
-                    Accept: 'application/json',
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify({
-                    lab_id: cmlLabId,
-                    node_id: selectedNodeId,
-                    type,
-                }),
+            const data = await consoleApi.createSession({
+                lab_id: cmlLabId,
+                node_id: selectedNodeId,
+                type,
             });
 
-            if (!res.ok) {
-                const body = await res.json().catch(() => ({}));
-                throw new Error(body?.error ?? `Erreur ${res.status}`);
+            if (!data) {
+                throw new Error('Impossible de créer la session. Aucune réponse du serveur.');
+            }
+            
+            // Vérifier si la réponse contient une erreur
+            if ('error' in data && data.error) {
+                throw new Error(data.error);
             }
 
-            const data = await res.json();
             const sessionId = data.session_id ?? data.id ?? '';
-            let wsHref = data.ws_href ?? data.ws ?? data.ws_url ?? null;
+            // CML utilise des URLs de console, pas des WebSockets
+            const consoleUrl = data.console_url ?? data.url ?? data.ws_href ?? null;
+
+            console.log('Session créée:', {
+                sessionId,
+                hasConsoleUrl: !!consoleUrl,
+                consoleUrl,
+                dataKeys: Object.keys(data),
+                fullData: data,
+            });
 
             if (!sessionId) {
                 throw new Error('Réponse invalide du serveur (session_id manquant).');
             }
 
-            if (typeof wsHref === 'string') {
-                try {
-                    const url = new URL(wsHref, window.location.origin);
-                    if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
-                        url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                    }
-                    wsHref = url.toString();
-                } catch (err) {
-                    console.warn('URL WebSocket invalide fournie par l’API', err);
-                }
+            if (!consoleUrl) {
+                throw new Error('URL de console non fournie par le serveur.');
             }
 
             const nextSession: SessionState = {
                 sessionId,
                 nodeId: data.node_id ?? selectedNodeId,
-                wsHref: typeof wsHref === 'string' ? wsHref : undefined,
+                consoleUrl: typeof consoleUrl === 'string' ? consoleUrl : undefined,
+                wsHref: undefined, // CML n'utilise pas de WebSocket
                 protocol: data.protocol,
                 type: data.type ?? type,
             };
 
             sessionRef.current = nextSession;
             setSession(nextSession);
-            setConnectionState(nextSession.wsHref ? 'connecting' : 'open');
+            setConnectionState('open'); // CML utilise des iframes, pas de connexion WebSocket
             appendLog('[Console] Session console créée.');
+            appendLog(`[Console] URL: ${consoleUrl}`);
             toast.success('Session console créée.');
         } catch (err) {
-            console.error(err);
-            setError(err instanceof Error ? err.message : 'Impossible de créer la session.');
+            console.error('Erreur lors de la création de session:', err);
+            const errorMessage = err instanceof Error ? err.message : 'Impossible de créer la session.';
+            setError(errorMessage);
             setConnectionState('error');
-            toast.error('Création de session impossible.');
+            
+            // Message d'erreur plus détaillé
+            let toastMessage = 'Création de session impossible.';
+            if (errorMessage.includes('Unable to post')) {
+                toastMessage = 'Impossible de se connecter au serveur CML. Vérifiez que le lab est démarré et que le serveur est accessible.';
+            } else if (errorMessage.includes('401') || errorMessage.includes('Token')) {
+                toastMessage = 'Token CML expiré. Veuillez vous reconnecter.';
+            } else if (errorMessage.includes('404')) {
+                toastMessage = 'Endpoint console non trouvé. Vérifiez la version de CML.';
+            }
+            
+            toast.error(toastMessage);
         } finally {
             setLoadingSession(false);
         }
-    }, [appendLog, cmlLabId, closeSession, selectedNodeId]);
+    }, [appendLog, cmlLabId, closeSession, selectedNodeId, consoleApi]);
 
     const handleCloseSession = useCallback(() => {
         void closeSession({ reason: 'Session fermée manuellement' });
     }, [closeSession]);
 
-    const handleSendCommand = useCallback(() => {
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-            toast.error('Connexion console non disponible.');
-            setConnectionState('error');
-            return;
-        }
-
+    const handleSendCommand = useCallback(async () => {
         const trimmed = command.trimEnd();
         if (!trimmed) return;
 
-        const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
-
-        try {
-            wsRef.current.send(payload);
-            appendLog(`> ${trimmed}`);
-            setCommand('');
-        } catch (err) {
-            console.error(err);
-            toast.error('Échec d\'envoi de la commande.');
-            setConnectionState('error');
+        const activeSession = sessionRef.current;
+        if (!activeSession) {
+            toast.error('Aucune session console active.');
+            return;
         }
+
+        // Si on a un WebSocket ouvert, l'utiliser
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
+            try {
+                wsRef.current.send(payload);
+                appendLog(`> ${trimmed}`);
+                setCommand('');
+            } catch (err) {
+                console.error(err);
+                toast.error('Échec d\'envoi de la commande.');
+                setConnectionState('error');
+            }
+            return;
+        }
+
+        // Sinon, essayer d'envoyer via l'API REST si disponible
+        // Pour l'instant, on affiche juste un message d'erreur
+        toast.error('Connexion WebSocket non disponible. Veuillez attendre que la connexion soit établie.');
+        appendLog(`> ${trimmed} (en attente de connexion...)`);
+        setCommand('');
     }, [appendLog, command]);
 
     const handleLoadLog = useCallback(async (consoleId: string) => {
@@ -434,32 +457,30 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
 
         appendLog('[Console] Récupération du journal…');
         try {
-            const res = await fetch(`/api/labs/${cmlLabId}/nodes/${selectedNodeId}/consoles/${consoleId}/log`, {
-                headers: { Accept: 'application/json' },
-                credentials: 'same-origin',
-            });
+            const data = await consoleApi.getConsoleLog(cmlLabId, selectedNodeId, consoleId);
 
-            if (!res.ok) {
-                throw new Error(`Erreur ${res.status}`);
+            if (!data) {
+                throw new Error('Impossible de récupérer le log');
             }
 
-            const data = await res.json();
-
-            if (Array.isArray(data?.log)) {
+            if (Array.isArray(data.log)) {
                 data.log.forEach((line: string) => appendLog(line));
-            } else if (typeof data === 'string') {
-                data.split(/\r?\n/).forEach(appendLog);
+            } else if (typeof data.log === 'string') {
+                data.log.split(/\r?\n/).forEach(appendLog);
             } else {
-                appendLog(JSON.stringify(data, null, 2));
+                const logStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+                appendLog(logStr);
             }
         } catch (err) {
             console.error(err);
             toast.error('Impossible de récupérer le journal de console.');
         }
-    }, [appendLog, cmlLabId, selectedNodeId]);
+    }, [appendLog, cmlLabId, selectedNodeId, consoleApi]);
 
     const connectionBadge = useMemo(() => CONNECTION_META[connectionState], [connectionState]);
-    const isSessionOpen = connectionState === 'open';
+    // Une session est "ouverte" si elle existe et que la connexion est ouverte ou en cours de connexion
+    // ou si la session existe sans WebSocket (mode sans WebSocket)
+    const isSessionOpen = session !== null && (connectionState === 'open' || connectionState === 'connecting' || (session.consoleUrl && connectionState !== 'error'));
 
     const selectedNode = useMemo(() => nodes.find(node => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId]);
 
@@ -481,22 +502,36 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                 </div>
 
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-                    <Select
-                        value={selectedNodeId}
-                        onValueChange={value => setSelectedNodeId(value)}
-                        disabled={loadingConsoles || loadingSession}
-                    >
-                        <SelectTrigger>
-                            <SelectValue placeholder="Sélectionner un nœud" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {nodes.map(node => (
-                                <SelectItem key={node.id} value={node.id}>
-                                    {node.label ?? node.name ?? node.id}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    {nodes.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">
+                            Aucun nœud disponible. Le lab doit être démarré pour voir les nœuds.
+                        </div>
+                    ) : (
+                        <Select
+                            value={selectedNodeId}
+                            onValueChange={value => {
+                                if (value && value !== selectedNodeId) {
+                                    setSelectedNodeId(value);
+                                }
+                            }}
+                            disabled={loadingConsoles || loadingSession}
+                        >
+                            <SelectTrigger className="w-full lg:w-auto">
+                                <SelectValue placeholder="Sélectionner un nœud" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {nodes.map(node => {
+                                    const nodeId = node.id || '';
+                                    if (!nodeId) return null;
+                                    return (
+                                        <SelectItem key={nodeId} value={nodeId}>
+                                            {node.label ?? node.name ?? nodeId}
+                                        </SelectItem>
+                                    );
+                                })}
+                            </SelectContent>
+                        </Select>
+                    )}
 
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         {selectedNode?.state && (
@@ -524,7 +559,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                         variant="outline"
                         size="sm"
                         onClick={() => handleCreateSession()}
-                        disabled={loadingSession || connectionState === 'connecting'}
+                        disabled={loadingSession || connectionState === 'connecting' || !selectedNodeId || nodes.length === 0}
                         className="gap-2"
                     >
                         {loadingSession ? <Loader2 className="h-4 w-4 animate-spin" /> : <Terminal className="h-4 w-4" />}
@@ -559,8 +594,28 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                     <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => setSelectedNodeId(value => value)}
-                        disabled={loadingConsoles}
+                        onClick={() => {
+                            if (selectedNodeId) {
+                                // Recharger les consoles pour le node sélectionné
+                                setLoadingConsoles(true);
+                                setError(null);
+                                consoleApi.getNodeConsoles(cmlLabId, selectedNodeId)
+                                    .then(data => {
+                                        if (data) {
+                                            setConsoles(Array.isArray(data.consoles) ? data.consoles : []);
+                                            setAvailableTypes(data.available_types || {});
+                                        }
+                                    })
+                                    .catch(err => {
+                                        console.error(err);
+                                        setError("Impossible de charger les consoles pour ce nœud.");
+                                    })
+                                    .finally(() => {
+                                        setLoadingConsoles(false);
+                                    });
+                            }
+                        }}
+                        disabled={loadingConsoles || !selectedNodeId}
                         className="gap-2 text-muted-foreground"
                     >
                         <RefreshCcw className="h-4 w-4" />
@@ -600,37 +655,54 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
 
                 <Separator />
 
-                <div className="flex-1 overflow-y-auto rounded-lg border border-muted bg-black/95 p-3 font-mono text-xs text-emerald-200 dark:bg-black">
-                    {logLines.length > 0 ? (
-                        logLines.map((line, index) => (
-                            <pre key={index} className="whitespace-pre-wrap">
-                                {line}
-                            </pre>
-                        ))
+                <div className="flex-1 overflow-hidden rounded-lg border border-muted bg-black/95 dark:bg-black">
+                    {session?.consoleUrl ? (
+                        <iframe
+                            src={session.consoleUrl}
+                            className="h-full w-full border-0"
+                            title="Console CML"
+                            allow="clipboard-read; clipboard-write"
+                        />
+                    ) : logLines.length > 0 ? (
+                        <div className="overflow-y-auto p-3 font-mono text-xs text-emerald-200">
+                            {logLines.map((line, index) => (
+                                <pre key={index} className="whitespace-pre-wrap">
+                                    {line}
+                                </pre>
+                            ))}
+                        </div>
                     ) : (
-                        <p className="text-muted-foreground">La sortie console apparaîtra ici.</p>
+                        <div className="flex h-full items-center justify-center p-3">
+                            <p className="text-muted-foreground">La sortie console apparaîtra ici.</p>
+                        </div>
                     )}
                 </div>
             </CardContent>
 
             <CardFooter className="flex flex-col gap-2">
-                <div className="flex w-full items-center gap-2">
-                    <Input
-                        placeholder="Entrer une commande (ex. show ip interface brief)"
-                        value={command}
-                        onChange={event => setCommand(event.target.value)}
-                        onKeyDown={event => {
-                            if (event.key === 'Enter' && !event.shiftKey) {
-                                event.preventDefault();
-                                handleSendCommand();
-                            }
-                        }}
-                        disabled={!isSessionOpen}
-                    />
-                    <Button onClick={handleSendCommand} disabled={!isSessionOpen || !command.trim()}>
-                        Envoyer
-                    </Button>
-                </div>
+                {session?.consoleUrl ? (
+                    <p className="text-xs text-muted-foreground">
+                        Utilisez la console ci-dessus pour entrer vos commandes directement.
+                    </p>
+                ) : (
+                    <div className="flex w-full items-center gap-2">
+                        <Input
+                            placeholder="Entrer une commande (ex. show ip interface brief)"
+                            value={command}
+                            onChange={event => setCommand(event.target.value)}
+                            onKeyDown={event => {
+                                if (event.key === 'Enter' && !event.shiftKey) {
+                                    event.preventDefault();
+                                    handleSendCommand();
+                                }
+                            }}
+                            disabled={!isSessionOpen}
+                        />
+                        <Button onClick={handleSendCommand} disabled={!isSessionOpen || !command.trim()}>
+                            Envoyer
+                        </Button>
+                    </div>
+                )}
 
                 {normalizedSessions.length > 0 && (
                     <div className="w-full text-xs text-muted-foreground">

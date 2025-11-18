@@ -13,7 +13,7 @@ class AuthService extends BaseCiscoApiService
     {
         try {
             $url = "{$this->baseUrl}/api/v0/auth_extended";
-            $response = Http::withOptions(['verify' => false])
+            $response = Http::withOptions(['verify' => false, 'timeout' => 10])
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
@@ -37,7 +37,15 @@ class AuthService extends BaseCiscoApiService
             }
 
             return ['error' => 'Authentification incorrecte', 'status' => $response->status()];
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            \Log::warning('Erreur de connexion CML lors de l\'authentification', [
+                'error' => $e->getMessage(),
+            ]);
+            return ['error' => 'Erreur de connexion au serveur CML. Le serveur est peut-être indisponible.', 'status' => 503, 'connection_error' => true];
         } catch (\Exception $e) {
+            \Log::error('Exception lors de l\'authentification CML', [
+                'error' => $e->getMessage(),
+            ]);
             return ['error' => 'Exception: ' . $e->getMessage()];
         } finally {
             $this->token = session('cml_token');
@@ -108,7 +116,7 @@ class AuthService extends BaseCiscoApiService
     public function authenticate(string $username, string $password): array
     {
         try {
-            $response = Http::withOptions(['verify' => false])
+            $response = Http::withOptions(['verify' => false, 'timeout' => 10])
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
@@ -128,7 +136,15 @@ class AuthService extends BaseCiscoApiService
             }
 
             return ['error' => 'Authentification incorrecte', 'status' => $response->status()];
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            \Log::warning('Erreur de connexion CML lors de l\'authentification', [
+                'error' => $e->getMessage(),
+            ]);
+            return ['error' => 'Erreur de connexion au serveur CML. Le serveur est peut-être indisponible.', 'status' => 503, 'connection_error' => true];
         } catch (\Exception $e) {
+            \Log::error('Exception lors de l\'authentification CML', [
+                'error' => $e->getMessage(),
+            ]);
             return ['error' => 'Exception: ' . $e->getMessage()];
         }
     }

@@ -1,5 +1,4 @@
-import React from 'react';
-import Draggable from 'react-draggable';
+import React, { useRef, useState, useCallback } from 'react';
 import { LabAnnotation } from '@/types/annotation';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
@@ -164,19 +163,64 @@ export const AnnotationRenderer: React.FC<AnnotationRendererProps> = ({
     </div>
   );
 
+  const dragRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0, startX: 0, startY: 0 });
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!isEditing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+    setDragStart({ 
+      x: e.clientX, 
+      y: e.clientY, 
+      startX: startPos.x, 
+      startY: startPos.y 
+    });
+  }, [isEditing, startPos]);
+
+  React.useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !isEditing) return;
+      e.preventDefault();
+      const deltaX = e.clientX - dragStart.x;
+      const deltaY = e.clientY - dragStart.y;
+      
+      const deltaCml = screenToCml(deltaX, deltaY);
+      onDrag(annotation.id, deltaCml.x, deltaCml.y);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, isEditing, dragStart, screenToCml, onDrag, annotation.id]);
+
   if (isEditing) {
     return (
-      <Draggable
-        position={{ x: startPos.x, y: startPos.y }}
-        onDrag={(e, data) => {
-          const deltaCml = screenToCml(data.deltaX, data.deltaY);
-          onDrag(annotation.id, deltaCml.x, deltaCml.y);
+      <div
+        ref={dragRef}
+        className="annotation-draggable group"
+        style={{
+          position: 'absolute',
+          left: `${startPos.x}px`,
+          top: `${startPos.y}px`,
+          cursor: isDragging ? 'grabbing' : 'move',
         }}
+        onMouseDown={handleMouseDown}
       >
-        <div className="annotation-draggable group">
-          {annotationContent}
-        </div>
-      </Draggable>
+        {annotationContent}
+      </div>
     );
   }
 

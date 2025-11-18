@@ -17,8 +17,14 @@ Route::middleware(['web', 'auth'])->group(function(){
 
     // Lab reservation endpoints
     Route::post('/labs/reserve', [ReservationController::class, 'store']);
+    
+    // Lab runtime control endpoints
     Route::post('/labs/{lab}/start', [\App\Http\Controllers\LabRuntimeController::class, 'start']);
     Route::post('/labs/{lab}/stop', [\App\Http\Controllers\LabRuntimeController::class, 'stop']);
+    Route::post('/labs/{lab}/wipe', [\App\Http\Controllers\LabRuntimeController::class, 'wipe']);
+    Route::post('/labs/{lab}/restart', [\App\Http\Controllers\LabRuntimeController::class, 'restart']);
+    Route::get('/labs/{lab}/export', [\App\Http\Controllers\LabRuntimeController::class, 'export']);
+    Route::get('/labs/{lab}/check', [LabController::class, 'convergence']); // Alias pour convergence
 
     // Console management
     Route::get('/labs/{labId}/nodes/{nodeId}/consoles', [ConsoleController::class, 'index']);

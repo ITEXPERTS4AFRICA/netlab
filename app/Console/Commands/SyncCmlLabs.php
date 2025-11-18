@@ -142,7 +142,7 @@ class SyncCmlLabs extends Command
                 } else {
                     Lab::create($labAttributes);
                     $syncedCount++;
-                }
+        }
             } catch (\Exception $e) {
                 $errorCount++;
                 $this->newLine();

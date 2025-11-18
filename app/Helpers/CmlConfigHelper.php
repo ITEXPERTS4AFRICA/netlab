@@ -71,6 +71,44 @@ class CmlConfigHelper
     }
 
     /**
+     * Obtenir le nom d'utilisateur CML par défaut pour rafraîchissement automatique
+     * Utilise les valeurs depuis la base de données ou les valeurs par défaut
+     */
+    public static function getDefaultUsername(): string
+    {
+        try {
+            $username = Setting::get('cml.default_username');
+            if ($username) {
+                return $username;
+            }
+        } catch (\Exception $e) {
+            // Si la table settings n'existe pas encore, continuer avec le fallback
+        }
+
+        // Valeur par défaut si non configuré
+        return 'cheick';
+    }
+
+    /**
+     * Obtenir le mot de passe CML par défaut pour rafraîchissement automatique
+     * Utilise les valeurs depuis la base de données ou les valeurs par défaut
+     */
+    public static function getDefaultPassword(): string
+    {
+        try {
+            $password = Setting::get('cml.default_password');
+            if ($password) {
+                return $password;
+            }
+        } catch (\Exception $e) {
+            // Si la table settings n'existe pas encore, continuer avec le fallback
+        }
+
+        // Valeur par défaut si non configuré
+        return 'cheick2025';
+    }
+
+    /**
      * Obtenir toutes les credentials CML
      */
     public static function getCredentials(): array

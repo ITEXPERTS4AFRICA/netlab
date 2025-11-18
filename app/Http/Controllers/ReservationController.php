@@ -64,7 +64,11 @@ class ReservationController extends Controller
         // Log pour déboguer
         \Log::info('Reservation request received', [
             'data' => $request->all(),
-            'headers' => $request->headers->all(),
+            'is_instant' => $request->boolean('instant', false),
+            'lab_id' => $request->lab_id,
+            'start_at' => $request->start_at,
+            'end_at' => $request->end_at,
+            'user_id' => Auth::id(),
         ]);
 
         try {
@@ -106,7 +110,15 @@ class ReservationController extends Controller
         $user = Auth::user();
 
         // Trouver le lab par cml_id
-        $lab = Lab::where('cml_id', $request->lab_id)->firstOrFail();
+        $lab = Lab::where('cml_id', $request->lab_id)->first();
+        
+        if (!$lab) {
+            \Log::error('Lab not found for reservation', [
+                'lab_id' => $request->lab_id,
+                'user_id' => $user->id,
+            ]);
+            return response()->json(['error' => 'Lab non trouvé'], 404);
+        }
 
         // Vérifier que le lab est publié
         if (!$lab->is_published) {
@@ -122,17 +134,35 @@ class ReservationController extends Controller
 
         $isInstant = $request->boolean('instant', false);
         $now = new \DateTime();
-
+        
+        \Log::info('Reservation timing check', [
+            'is_instant' => $isInstant,
+            'start_at' => $start->format('Y-m-d H:i:s'),
+            'now' => $now->format('Y-m-d H:i:s'),
+            'start_diff_seconds' => $start->getTimestamp() - $now->getTimestamp(),
+        ]);
+        
         // Pour les réservations instantanées, ajuster start_at à maintenant si nécessaire
         if ($isInstant) {
-            if ($start < $now) {
-                $start = clone $now; // Ajuster au moment présent
-            }
-
-            // Vérifier que start_at est dans les 15 prochaines minutes
+            // Pour les réservations instantanées, on accepte start_at dans le passé (jusqu'à 5 minutes)
+            // ou dans le futur (jusqu'à 15 minutes)
+            $fiveMinutesAgo = (clone $now)->modify('-5 minutes');
             $fifteenMinutesFromNow = (clone $now)->modify('+15 minutes');
-            if ($start > $fifteenMinutesFromNow) {
-                return response()->json(['error' => 'Une réservation instantanée doit commencer dans les 15 prochaines minutes'], 422);
+            
+            if ($start < $fiveMinutesAgo) {
+                // Si la date est trop dans le passé, ajuster à maintenant
+                $start = clone $now;
+                \Log::info('Adjusted start_at to now for instant reservation', [
+                    'original_start' => $request->start_at,
+                    'adjusted_start' => $start->format('Y-m-d H:i:s'),
+                ]);
+            } elseif ($start > $fifteenMinutesFromNow) {
+                return response()->json([
+                    'error' => 'Une réservation instantanée doit commencer dans les 15 prochaines minutes',
+                    'start_at' => $start->format('Y-m-d H:i:s'),
+                    'now' => $now->format('Y-m-d H:i:s'),
+                    'max_start' => $fifteenMinutesFromNow->format('Y-m-d H:i:s'),
+                ], 422);
             }
         } else {
             // Pour les réservations normales, start_at doit être dans le futur (au moins 1 minute)
@@ -189,18 +219,33 @@ class ReservationController extends Controller
             'estimated_cents' => $estimatedCents,
         ]);
 
+        \Log::info('Reservation created', [
+            'reservation_id' => $reservation->id,
+            'is_instant' => $isInstant,
+            'skip_payment' => $skipPayment,
+            'estimated_cents' => $estimatedCents,
+            'status' => $reservation->status,
+            'will_auto_start' => $isInstant && $skipPayment,
+        ]);
+
         // Si réservation instantanée et gratuite, démarrer le lab automatiquement
         if ($isInstant && $skipPayment) {
             $token = session('cml_token');
             if ($token) {
                 $apiService = new CiscoApiService();
                 $apiService->setToken($token);
-                $labState = $apiService->getLabState($token, $lab->cml_id);
+                $labState = $apiService->labs->getLabState($lab->cml_id);
 
                 if (!isset($labState['error'])) {
                     $state = is_array($labState) ? ($labState['state'] ?? null) : null;
-                    if ($state === 'STOPPED') {
-                        $apiService->startLab($token, $lab->cml_id);
+                    if ($state === 'STOPPED' || $state === 'DEFINED_ON_CORE') {
+                        $startResult = $apiService->labs->startLab($lab->cml_id);
+                        \Log::info('Lab auto-started for instant reservation', [
+                            'reservation_id' => $reservation->id,
+                            'lab_id' => $lab->id,
+                            'cml_id' => $lab->cml_id,
+                            'start_result' => $startResult,
+                        ]);
                     }
                 }
             }

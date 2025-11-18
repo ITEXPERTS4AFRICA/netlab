@@ -12,17 +12,50 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Vérifier si la colonne existe et son type actuel
-        $columnExists = DB::selectOne("
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_name = 'sessions' 
-            AND column_name = 'user_id'
-        ");
+        $driver = DB::getDriverName();
+        
+        // Pour SQLite, on vérifie différemment
+        if ($driver === 'sqlite') {
+            // SQLite n'a pas besoin de cette migration car il utilise des types dynamiques
+            // On vérifie juste si la colonne existe
+            $tableInfo = DB::select("PRAGMA table_info(sessions)");
+            $columnExists = collect($tableInfo)->contains(function ($column) {
+                return $column->name === 'user_id';
+            });
+            
+            if (!$columnExists) {
+                // Si la colonne n'existe pas, la créer
+                Schema::table('sessions', function (Blueprint $table) {
+                    $table->foreignUlid('user_id')->nullable()->index();
+                });
+            }
+            return;
+        }
+        
+        // Pour PostgreSQL et MySQL
+        if ($driver === 'pgsql') {
+            // Vérifier si la colonne existe et son type actuel (PostgreSQL)
+            $columnExists = DB::selectOne("
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'sessions' 
+                AND column_name = 'user_id'
+                AND table_schema = current_schema()
+            ");
+        } else {
+            // MySQL
+            $columnExists = DB::selectOne("
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'sessions' 
+                AND column_name = 'user_id'
+                AND table_schema = DATABASE()
+            ");
+        }
 
         if ($columnExists) {
-            // Si la colonne est de type bigint, on la modifie
-            if ($columnExists->data_type === 'bigint') {
+            // Si la colonne est de type bigint, on la modifie (PostgreSQL uniquement)
+            if ($driver === 'pgsql' && $columnExists->data_type === 'bigint') {
                 // Supprimer la contrainte de clé étrangère si elle existe
                 DB::statement('ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_user_id_foreign');
                 

@@ -23,12 +23,18 @@ class CmlConfigController extends Controller
         $baseUrl = Setting::get('cml.base_url', config('services.cml.base_url') ?? env('CML_API_BASE_URL'));
         $username = Setting::get('cml.username', env('CML_USERNAME'));
         $password = Setting::get('cml.password', env('CML_PASSWORD'));
+        
+        // Credentials par défaut pour le rafraîchissement automatique
+        $defaultUsername = Setting::get('cml.default_username', 'cheick');
+        $defaultPassword = Setting::get('cml.default_password', 'cheick2025');
 
         return Inertia::render('admin/cml-config/index', [
             'config' => [
                 'base_url' => $baseUrl ?? '',
                 'username' => $username ?? '',
                 'password' => $password ? '••••••••' : null, // Masquer le mot de passe
+                'default_username' => $defaultUsername ?? 'cheick',
+                'default_password' => $defaultPassword ? '••••••••' : null, // Masquer le mot de passe par défaut
             ],
         ]);
     }
@@ -42,15 +48,23 @@ class CmlConfigController extends Controller
             'base_url' => ['required', 'url'],
             'username' => ['required', 'string', 'max:255'],
             'password' => ['nullable', 'string', 'min:1'],
+            'default_username' => ['required', 'string', 'max:255'],
+            'default_password' => ['nullable', 'string', 'min:1'],
         ]);
 
         // Sauvegarder dans la base de données
         Setting::set('cml.base_url', $validated['base_url'], 'string', 'URL de base de l\'API CML');
         Setting::set('cml.username', $validated['username'], 'string', 'Nom d\'utilisateur CML');
+        Setting::set('cml.default_username', $validated['default_username'], 'string', 'Nom d\'utilisateur CML par défaut pour rafraîchissement automatique');
 
         // Ne mettre à jour le mot de passe que s'il est fourni
         if (!empty($validated['password'])) {
             Setting::set('cml.password', $validated['password'], 'string', 'Mot de passe CML', true); // Crypter le mot de passe
+        }
+
+        // Ne mettre à jour le mot de passe par défaut que s'il est fourni
+        if (!empty($validated['default_password'])) {
+            Setting::set('cml.default_password', $validated['default_password'], 'string', 'Mot de passe CML par défaut pour rafraîchissement automatique', true); // Crypter le mot de passe
         }
 
         // Mettre à jour aussi le .env pour compatibilité (optionnel)

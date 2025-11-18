@@ -86,12 +86,33 @@ abstract class BaseCiscoApiService
      */
     private function executeGet(string $endpoint, array $headers = []): array
     {
-        $response = Http::withToken($this->token)
-            ->withOptions(['verify' => false])
-            ->withHeaders(array_merge(['Accept' => 'application/json'], $headers))
-            ->get("{$this->baseUrl}{$endpoint}");
+        try {
+            $response = Http::withToken($this->token)
+                ->withOptions(['verify' => false, 'timeout' => 10])
+                ->withHeaders(array_merge(['Accept' => 'application/json'], $headers))
+                ->get("{$this->baseUrl}{$endpoint}");
 
-        return $this->handleResponse($response, "Unable to fetch from {$endpoint}");
+            return $this->handleResponse($response, "Unable to fetch from {$endpoint}");
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            \Log::warning('Erreur de connexion CML', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'error' => 'Erreur de connexion au serveur CML. Le serveur est peut-être indisponible.',
+                'status' => 503,
+                'connection_error' => true,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Exception lors de l\'appel CML', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'error' => 'Erreur lors de la communication avec CML: ' . $e->getMessage(),
+                'status' => 500,
+            ];
+        }
     }
 
     /**
@@ -99,12 +120,33 @@ abstract class BaseCiscoApiService
      */
     protected function post(string $endpoint, array $data = [], array $headers = []): array
     {
-        $response = Http::withToken($this->token)
-            ->withOptions(['verify' => false])
-            ->withHeaders(array_merge(['Accept' => 'application/json'], $headers))
-            ->post("{$this->baseUrl}{$endpoint}", $data);
+        try {
+            $response = Http::withToken($this->token)
+                ->withOptions(['verify' => false, 'timeout' => 10])
+                ->withHeaders(array_merge(['Accept' => 'application/json'], $headers))
+                ->post("{$this->baseUrl}{$endpoint}", $data);
 
-        return $this->handleResponse($response, "Unable to post to {$endpoint}");
+            return $this->handleResponse($response, "Unable to post to {$endpoint}");
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            \Log::warning('Erreur de connexion CML', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'error' => 'Erreur de connexion au serveur CML. Le serveur est peut-être indisponible.',
+                'status' => 503,
+                'connection_error' => true,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Exception lors de l\'appel CML', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'error' => 'Erreur lors de la communication avec CML: ' . $e->getMessage(),
+                'status' => 500,
+            ];
+        }
     }
 
     /**
@@ -112,12 +154,33 @@ abstract class BaseCiscoApiService
      */
     protected function patch(string $endpoint, array $data = [], array $headers = []): array
     {
-        $response = Http::withToken($this->token)
-            ->withOptions(['verify' => false])
-            ->withHeaders(array_merge(['Accept' => 'application/json'], $headers))
-            ->patch("{$this->baseUrl}{$endpoint}", $data);
+        try {
+            $response = Http::withToken($this->token)
+                ->withOptions(['verify' => false, 'timeout' => 10])
+                ->withHeaders(array_merge(['Accept' => 'application/json'], $headers))
+                ->patch("{$this->baseUrl}{$endpoint}", $data);
 
-        return $this->handleResponse($response, "Unable to patch {$endpoint}");
+            return $this->handleResponse($response, "Unable to patch {$endpoint}");
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            \Log::warning('Erreur de connexion CML', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'error' => 'Erreur de connexion au serveur CML. Le serveur est peut-être indisponible.',
+                'status' => 503,
+                'connection_error' => true,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Exception lors de l\'appel CML', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'error' => 'Erreur lors de la communication avec CML: ' . $e->getMessage(),
+                'status' => 500,
+            ];
+        }
     }
 
     /**
@@ -125,12 +188,33 @@ abstract class BaseCiscoApiService
      */
     protected function put(string $endpoint, array $data = [], array $headers = []): array
     {
-        $response = Http::withToken($this->token)
-            ->withOptions(['verify' => false])
-            ->withHeaders(array_merge(['Accept' => 'application/json'], $headers))
-            ->put("{$this->baseUrl}{$endpoint}", $data);
+        try {
+            $response = Http::withToken($this->token)
+                ->withOptions(['verify' => false, 'timeout' => 10])
+                ->withHeaders(array_merge(['Accept' => 'application/json'], $headers))
+                ->put("{$this->baseUrl}{$endpoint}", $data);
 
-        return $this->handleResponse($response, "Unable to put to {$endpoint}");
+            return $this->handleResponse($response, "Unable to put to {$endpoint}");
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            \Log::warning('Erreur de connexion CML', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'error' => 'Erreur de connexion au serveur CML. Le serveur est peut-être indisponible.',
+                'status' => 503,
+                'connection_error' => true,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Exception lors de l\'appel CML', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'error' => 'Erreur lors de la communication avec CML: ' . $e->getMessage(),
+                'status' => 500,
+            ];
+        }
     }
 
     /**
@@ -138,12 +222,33 @@ abstract class BaseCiscoApiService
      */
     protected function delete(string $endpoint, array $headers = []): array
     {
-        $response = Http::withToken($this->token)
-            ->withOptions(['verify' => false])
-            ->withHeaders(array_merge(['Accept' => 'application/json'], $headers))
-            ->delete("{$this->baseUrl}{$endpoint}");
+        try {
+            $response = Http::withToken($this->token)
+                ->withOptions(['verify' => false, 'timeout' => 10])
+                ->withHeaders(array_merge(['Accept' => 'application/json'], $headers))
+                ->delete("{$this->baseUrl}{$endpoint}");
 
-        return $this->handleResponse($response, "Unable to delete {$endpoint}");
+            return $this->handleResponse($response, "Unable to delete {$endpoint}");
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            \Log::warning('Erreur de connexion CML', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'error' => 'Erreur de connexion au serveur CML. Le serveur est peut-être indisponible.',
+                'status' => 503,
+                'connection_error' => true,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Exception lors de l\'appel CML', [
+                'endpoint' => $endpoint,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'error' => 'Erreur lors de la communication avec CML: ' . $e->getMessage(),
+                'status' => 500,
+            ];
+        }
     }
 
     /**
@@ -157,10 +262,25 @@ abstract class BaseCiscoApiService
             return is_array($json) ? $json : ['data' => $json];
         }
 
+        // Logger les détails de l'erreur pour le débogage
+        \Log::warning('Erreur API CML', [
+            'endpoint' => $errorMessage,
+            'status' => $response->status(),
+            'body' => $response->body(),
+            'headers' => $response->headers(),
+        ]);
+
+        // Essayer de parser le body comme JSON pour obtenir plus de détails
+        $errorBody = $response->json();
+        $errorDetail = is_array($errorBody) && isset($errorBody['description']) 
+            ? $errorBody['description'] 
+            : $response->body();
+
         return [
             'error' => $errorMessage,
             'status' => $response->status(),
-            'body' => $response->body()
+            'body' => $errorDetail,
+            'detail' => $errorBody,
         ];
     }
 
