@@ -9,6 +9,14 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use App\Http\Middleware\EnsureCmlAuthenticated;
+
+// Masquer les notices "Broken pipe" du serveur PHP intégré
+if (php_sapi_name() === 'cli-server' && env('APP_ENV') === 'local') {
+    error_reporting(E_ALL & ~E_NOTICE);
+    ini_set('display_errors', '0');
+    ini_set('display_startup_errors', '0');
+}
+
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
