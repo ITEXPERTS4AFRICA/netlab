@@ -200,7 +200,8 @@ class CinetPay
         $this->_cfg_cpm_site_id = $site_id;
         $this->_cfg_cpm_version = strtoupper($version);
         $this->_cfg_apikey = $apikey;
-        $htpp_prefixe = ($this->_use_ssl) ? 'https://' : 'http://';
+        $htpp_prefixe = 'https://'; // Toujours utiliser HTTPS
+        // $htpp_prefixe = ($this->_use_ssl) ? 'https://' : 'http://';
         $this->_cashDeskUri = $htpp_prefixe . $this->getCashDeskHost();
         $this->_signatureUri = $htpp_prefixe . $this->getSignatureHost();
         $this->_checkPayStatusUri = $htpp_prefixe . $this->getCheckPayStatusHost();
