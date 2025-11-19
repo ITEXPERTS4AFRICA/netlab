@@ -6,8 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Loader2, Power, RefreshCcw, Terminal } from 'lucide-react';
+import { Loader2, Power, RefreshCcw, Terminal, Code, Monitor } from 'lucide-react';
 import { useConsole, type ConsoleResponse, type ConsoleSessionResponse } from '@/hooks/useConsole';
+import IOSConsole from '@/components/IOSConsole';
 
 type LabNode = {
     id: string;
@@ -77,6 +78,9 @@ const CONNECTION_META: Record<ConnectionState, { label: string; variant: 'outlin
 const MAX_LOG_LINES = 500;
 
 export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Props) {
+    // Mode d'affichage : 'iframe' (console CML native) ou 'ios' (console intelligente IOS)
+    const [consoleMode, setConsoleMode] = useState<'iframe' | 'ios'>('ios');
+    
     // Trouver le premier node valide avec un id - utiliser useMemo pour éviter les re-calculs
     const firstValidNodeId = useMemo(() => {
         if (!nodes || nodes.length === 0) return '';
@@ -688,8 +692,45 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
 
                 <Separator />
 
+                {/* Sélecteur de mode console */}
+                {session && (
+                    <div className="flex items-center gap-2 pb-2">
+                        <span className="text-xs text-muted-foreground">Mode console :</span>
+                        <Button
+                            variant={consoleMode === 'ios' ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setConsoleMode('ios')}
+                            className="h-7"
+                        >
+                            <Code className="h-3 w-3 mr-1" />
+                            IOS Intelligent
+                        </Button>
+                        {session.consoleUrl && (
+                            <Button
+                                variant={consoleMode === 'iframe' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setConsoleMode('iframe')}
+                                className="h-7"
+                            >
+                                <Monitor className="h-3 w-3 mr-1" />
+                                Console CML
+                            </Button>
+                        )}
+                    </div>
+                )}
+
+                {/* Console intelligente IOS */}
+                {consoleMode === 'ios' && session ? (
+                    <IOSConsole
+                        onSendCommand={handleSendCommand}
+                        output={logLines}
+                        isConnected={isSessionOpen}
+                        nodeLabel={selectedNode?.label || selectedNode?.name || undefined}
+                        className="flex-1"
+                    />
+                ) : (
                 <div className="flex-1 overflow-hidden rounded-lg border border-muted bg-black/95 dark:bg-black">
-                    {session?.consoleUrl ? (
+                        {session?.consoleUrl && consoleMode === 'iframe' ? (
                         <iframe
                             src={session.consoleUrl}
                             className="h-full w-full border-0"
@@ -710,12 +751,17 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                         </div>
                     )}
                 </div>
+                )}
             </CardContent>
 
             <CardFooter className="flex flex-col gap-2">
-                {session?.consoleUrl ? (
+                {consoleMode === 'iframe' && session?.consoleUrl ? (
                     <p className="text-xs text-muted-foreground">
                         Utilisez la console ci-dessus pour entrer vos commandes directement.
+                    </p>
+                ) : consoleMode === 'ios' ? (
+                    <p className="text-xs text-muted-foreground">
+                        Console IOS intelligente avec auto-complétion, historique et coloration syntaxique.
                     </p>
                 ) : (
                 <div className="flex w-full items-center gap-2">

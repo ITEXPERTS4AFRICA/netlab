@@ -319,7 +319,7 @@ class LabsController extends Controller
                         $extractedState = strtoupper(trim((string)$extractedState['data']));
                     }
                     $lab->state = $extractedState;
-                    $lab->save();
+                $lab->save();
                 }
             }
         }
@@ -458,17 +458,19 @@ class LabsController extends Controller
                     }
                 }
                 
-                // Normaliser les links de la topologie si disponibles
+                // Normaliser les links de la topologie si disponibles (sera enrichi plus tard avec les interfaces)
+                // Format LinkTopology: i1, i2, n1, n2 (IDs courts comme "l1")
+                // Format Link: interface_a, interface_b, node_a, node_b (UUIDs complets)
                 $topologyLinks = $topology['links'] ?? [];
                 if (is_array($topologyLinks) && !empty($topologyLinks)) {
                     $topology['links'] = array_map(function($link) {
                         if (is_array($link)) {
                             return [
                                 'id' => $link['id'] ?? $link['link_id'] ?? uniqid('link_'),
-                                'n1' => $link['n1'] ?? $link['node1'] ?? $link['src'] ?? null,
-                                'n2' => $link['n2'] ?? $link['node2'] ?? $link['dst'] ?? null,
-                                'i1' => $link['i1'] ?? $link['interface1'] ?? $link['src_interface'] ?? null,
-                                'i2' => $link['i2'] ?? $link['interface2'] ?? $link['dst_interface'] ?? null,
+                                'n1' => $link['n1'] ?? $link['node1'] ?? $link['node_a'] ?? $link['src'] ?? null,
+                                'n2' => $link['n2'] ?? $link['node2'] ?? $link['node_b'] ?? $link['dst'] ?? null,
+                                'i1' => $link['i1'] ?? $link['interface1'] ?? $link['interface_a'] ?? $link['src_interface'] ?? null,
+                                'i2' => $link['i2'] ?? $link['interface2'] ?? $link['interface_b'] ?? $link['dst_interface'] ?? null,
                                 'state' => $link['state'] ?? null,
                             ];
                         }
@@ -485,32 +487,131 @@ class LabsController extends Controller
             
             // Fetch links for topology graph (utiliser les links de la topologie si disponibles, sinon récupérer séparément)
             if (!isset($topology['links']) || empty($topology['links'])) {
-                $linksData = $cisco->getLabLinks($lab->cml_id);
-                if (!isset($linksData['error']) && is_array($linksData)) {
+            $linksData = $cisco->getLabLinks($lab->cml_id);
+            if (!isset($linksData['error']) && is_array($linksData)) {
                     // Normaliser les links récupérés
+                    // Format Link: interface_a, interface_b, node_a, node_b (UUIDs complets)
+                    // Format LinkTopology: i1, i2, n1, n2 (IDs courts)
                     $links = array_map(function($link) {
                         if (is_array($link)) {
                             return [
                                 'id' => $link['id'] ?? $link['link_id'] ?? uniqid('link_'),
-                                'n1' => $link['n1'] ?? $link['node1'] ?? $link['src'] ?? null,
-                                'n2' => $link['n2'] ?? $link['node2'] ?? $link['dst'] ?? null,
-                                'i1' => $link['i1'] ?? $link['interface1'] ?? $link['src_interface'] ?? null,
-                                'i2' => $link['i2'] ?? $link['interface2'] ?? $link['dst_interface'] ?? null,
+                                'n1' => $link['n1'] ?? $link['node1'] ?? $link['node_a'] ?? $link['src'] ?? null,
+                                'n2' => $link['n2'] ?? $link['node2'] ?? $link['node_b'] ?? $link['dst'] ?? null,
+                                'i1' => $link['i1'] ?? $link['interface1'] ?? $link['interface_a'] ?? $link['src_interface'] ?? null,
+                                'i2' => $link['i2'] ?? $link['interface2'] ?? $link['interface_b'] ?? $link['dst_interface'] ?? null,
                                 'state' => $link['state'] ?? null,
                             ];
                         }
                         return $link;
                     }, $linksData);
-                }
+            }
             } else {
                 // Utiliser les links de la topologie
                 $links = $topology['links'] ?? [];
+            }
+            
+            // Approche optimisée : récupérer uniquement les interfaces utilisées dans les liens
+            $interfacesMap = [];
+            
+            // D'abord, collecter tous les IDs d'interfaces utilisés dans les liens
+            // Support des deux formats : i1/i2 (topology) et interface_a/interface_b (links)
+            $interfaceIdsToFetch = [];
+            foreach ($links as $link) {
+                if (is_array($link)) {
+                    $i1 = $link['i1'] ?? $link['interface_a'] ?? null;
+                    $i2 = $link['i2'] ?? $link['interface_b'] ?? null;
+                    
+                    if (!empty($i1)) {
+                        $interfaceIdsToFetch[$i1] = true;
+                    }
+                    if (!empty($i2)) {
+                        $interfaceIdsToFetch[$i2] = true;
+                    }
+                }
+            }
+            
+            \Log::info('Interfaces à récupérer depuis les liens', [
+                'lab_id' => $lab->cml_id,
+                'interface_ids_count' => count($interfaceIdsToFetch),
+                'interface_ids' => array_slice(array_keys($interfaceIdsToFetch), 0, 10), // Limiter à 10 pour le log
+                'sample_link' => is_array($links[0] ?? null) ? [
+                    'id' => $links[0]['id'] ?? null,
+                    'i1' => $links[0]['i1'] ?? null,
+                    'i2' => $links[0]['i2'] ?? null,
+                    'interface_a' => $links[0]['interface_a'] ?? null,
+                    'interface_b' => $links[0]['interface_b'] ?? null,
+                ] : null,
+            ]);
+            
+            // Récupérer les détails de chaque interface utilisée dans les liens
+            foreach (array_keys($interfaceIdsToFetch) as $interfaceId) {
+                try {
+                    $interfaceDetails = $cisco->interfaces->getInterface($lab->cml_id, $interfaceId);
+                    if (!isset($interfaceDetails['error']) && is_array($interfaceDetails)) {
+                        $interfacesMap[$interfaceId] = [
+                            'id' => $interfaceId,
+                            'label' => $interfaceDetails['label'] ?? null,
+                            'type' => $interfaceDetails['type'] ?? null,
+                            'is_connected' => $interfaceDetails['is_connected'] ?? false,
+                            'state' => $interfaceDetails['state'] ?? null,
+                            'mac_address' => $interfaceDetails['mac_address'] ?? null,
+                            'node' => $interfaceDetails['node'] ?? null,
+                        ];
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning('Erreur lors de la récupération de l\'interface', [
+                        'lab_id' => $lab->cml_id,
+                        'interface_id' => $interfaceId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+            
+            \Log::info('Interfaces récupérées pour les liens', [
+                'lab_id' => $lab->cml_id,
+                'interfaces_count' => count($interfacesMap),
+                'sample_interface_ids' => array_slice(array_keys($interfacesMap), 0, 3),
+            ]);
+            
+            // Fonction pour enrichir un lien avec les informations des interfaces
+            $enrichLink = function($link) use ($interfacesMap) {
+                if (!is_array($link)) {
+                    return $link;
+                }
+                
+                $enriched = $link;
+                
+                // Support des deux formats : i1/i2 (topology) et interface_a/interface_b (links)
+                $i1 = $link['i1'] ?? $link['interface_a'] ?? null;
+                $i2 = $link['i2'] ?? $link['interface_b'] ?? null;
+                
+                // Enrichir l'interface 1
+                if (!empty($i1) && isset($interfacesMap[$i1])) {
+                    $enriched['interface1'] = $interfacesMap[$i1];
+                }
+                
+                // Enrichir l'interface 2
+                if (!empty($i2) && isset($interfacesMap[$i2])) {
+                    $enriched['interface2'] = $interfacesMap[$i2];
+                }
+                
+                return $enriched;
+            };
+            
+            // Enrichir les liens
+            $links = array_map($enrichLink, $links);
+            
+            // Enrichir aussi les liens de la topologie si disponibles
+            if (isset($topology['links']) && is_array($topology['links'])) {
+                $topology['links'] = array_map($enrichLink, $topology['links']);
             }
             
             \Log::info('Données topologie finales', [
                 'lab_id' => $lab->cml_id,
                 'nodes_count' => count($nodes),
                 'links_count' => count($links),
+                'interfaces_count' => count($interfacesMap),
                 'topology_has_nodes' => isset($topology['nodes']) && is_array($topology['nodes']),
                 'topology_has_links' => isset($topology['links']) && is_array($topology['links']),
             ]);
