@@ -579,7 +579,7 @@ export default function LabShow({ lab }: Props) {
                                                 className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                                             >
                                                 <div className="mt-1">
-                                                    {getMediaIcon(media.type)}
+                                                {getMediaIcon(media.type)}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     {editingMediaId === media.id ? (
@@ -643,15 +643,15 @@ export default function LabShow({ lab }: Props) {
                                                             {media.description && (
                                                                 <p className="text-sm text-muted-foreground mt-1">{media.description}</p>
                                                             )}
-                                                            {media.file_url && (
-                                                                <a
-                                                                    href={media.file_url}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
+                                                {media.file_url && (
+                                                    <a
+                                                        href={media.file_url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
                                                                     className="text-sm text-primary hover:underline mt-1 inline-block"
-                                                                >
+                                                    >
                                                                     {media.type === 'link' ? media.file_url : 'Voir le fichier'}
-                                                                </a>
+                                                    </a>
                                                             )}
                                                         </>
                                                     )}

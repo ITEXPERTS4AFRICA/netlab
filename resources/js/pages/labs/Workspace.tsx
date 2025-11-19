@@ -366,28 +366,28 @@ export default function Workspace() {
                             
                             if (normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') {
                                 return (
-                                    <Button
-                                        onClick={handleStartLab}
-                                        size="sm"
-                                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-                                    >
-                                        <Play className="h-4 w-4" />
-                                        Start Lab
-                                    </Button>
+                            <Button
+                                onClick={handleStartLab}
+                                size="sm"
+                                className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                            >
+                                <Play className="h-4 w-4" />
+                                Start Lab
+                            </Button>
                                 );
                             }
-                            
+
                             if (normalizedState === 'RUNNING' || normalizedState === 'STARTED') {
                                 return (
-                                    <Button
-                                        onClick={handleStopLab}
-                                        variant="destructive"
-                                        size="sm"
-                                        className="flex items-center gap-2"
-                                    >
-                                        <Square className="h-4 w-4" />
-                                        Stop Lab
-                                    </Button>
+                            <Button
+                                onClick={handleStopLab}
+                                variant="destructive"
+                                size="sm"
+                                className="flex items-center gap-2"
+                            >
+                                <Square className="h-4 w-4" />
+                                Stop Lab
+                            </Button>
                                 );
                             }
                             
@@ -473,7 +473,17 @@ export default function Workspace() {
 
                 {/* Workspace Area */}
                 <div className="flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
-                    <div className="relative flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                    {/* Console - Priorité principale */}
+                    <div className="min-h-[28rem] w-full flex-[2] overflow-hidden">
+                        <LabConsolePanel
+                            cmlLabId={lab.cml_id}
+                            nodes={nodeList}
+                            initialSessions={consoleSessions}
+                        />
+                    </div>
+
+                    {/* Topology Graph - Secondaire */}
+                    <div className="relative flex-[1] min-w-[400px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
                         {/* Topology Graph - Show when lab is running - Must be on top */}
                         {(() => {
                             const normalizedState = typeof lab.state === 'string' 
@@ -561,46 +571,38 @@ export default function Workspace() {
                                     : normalizedState.toLowerCase();
                                 
                                 return (
-                                    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50">
-                                        <div className="mx-4 max-w-md rounded-lg bg-white p-6 text-center shadow-xl dark:bg-gray-800">
-                                            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
+                            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50">
+                                <div className="mx-4 max-w-md rounded-lg bg-white p-6 text-center shadow-xl dark:bg-gray-800">
+                                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
                                                 {normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE' ? (
-                                                    <AlertTriangle className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                                            <AlertTriangle className="h-8 w-8 text-gray-600 dark:text-gray-400" />
                                                 ) : normalizedState === 'STARTING' || normalizedState === 'STOPPING' ? (
-                                                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-                                                ) : (
-                                                    <Info className="h-8 w-8 text-gray-600 dark:text-gray-400" />
-                                                )}
-                                            </div>
-                                            <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+                                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+                                        ) : (
+                                            <Info className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                                        )}
+                                    </div>
+                                    <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
                                                 Lab {stateDisplay}
-                                            </h3>
-                                            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                                    </h3>
+                                    <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
                                                 {(normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') && 
                                                     'Le lab est actuellement arrêté ou défini sur le core. Démarrez-le pour visualiser et interagir avec les annotations.'}
                                                 {normalizedState === 'STARTING' && 'Le lab démarre. Cela peut prendre quelques minutes...'}
                                                 {normalizedState === 'STOPPING' && 'Le lab s\'arrête. Veuillez patienter...'}
-                                            </p>
+                                    </p>
                                             {(normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') && (
-                                                <Button onClick={handleStartLab} className="bg-green-600 hover:bg-green-700">
-                                                    <Play className="mr-2 h-4 w-4" />
+                                        <Button onClick={handleStartLab} className="bg-green-600 hover:bg-green-700">
+                                            <Play className="mr-2 h-4 w-4" />
                                                     Démarrer le Lab
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
                                 );
                             }
                             return null;
                         })()}
-                    </div>
-
-                    <div className="min-h-[28rem] w-full flex-shrink-0 overflow-hidden lg:w-[420px]">
-                        <LabConsolePanel
-                            cmlLabId={lab.cml_id}
-                            nodes={nodeList}
-                            initialSessions={consoleSessions}
-                        />
                     </div>
                 </div>
             </div>

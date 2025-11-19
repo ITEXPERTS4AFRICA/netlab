@@ -14,6 +14,16 @@ type Node = {
     [key: string]: unknown;
 };
 
+type Interface = {
+    id: string;
+    label?: string;
+    type?: 'physical' | 'loopback';
+    is_connected?: boolean;
+    state?: string;
+    mac_address?: string;
+    node?: string;
+};
+
 type Link = {
     id: string;
     n1?: string;
@@ -21,6 +31,8 @@ type Link = {
     i1?: string;
     i2?: string;
     state?: string;
+    interface1?: Interface;
+    interface2?: Interface;
     [key: string]: unknown;
 };
 
@@ -40,11 +52,13 @@ type Props = {
 export default function LabTopology({ nodes, links, topology, className = '' }: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+    const [selectedLink, setSelectedLink] = useState<Link | null>(null);
     const [zoom, setZoom] = useState(1);
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+    const linkPositionsRef = useRef<Map<string, { x1: number; y1: number; x2: number; y2: number }>>(new Map());
 
     // Combine nodes from props and topology
     const allNodes = useMemo(() => {
@@ -114,16 +128,41 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         }
 
         // Set canvas size
-        const rect = canvas.getBoundingClientRect();
+        let rect = canvas.getBoundingClientRect();
         console.log('LabTopology: Canvas rect', {
             width: rect.width,
             height: rect.height,
             left: rect.left,
             top: rect.top,
+            computedStyle: {
+                width: globalThis.getComputedStyle(canvas).width,
+                height: globalThis.getComputedStyle(canvas).height,
+                display: globalThis.getComputedStyle(canvas).display,
+            },
         });
 
+        // Si le canvas n'a pas de dimensions CSS, forcer des dimensions minimales
+        if (rect.width === 0 || rect.height === 0) {
+            console.warn('LabTopology: Canvas a des dimensions 0x0, utilisation de dimensions par défaut');
+            const parent = canvas.parentElement;
+            if (parent) {
+                const parentRect = parent.getBoundingClientRect();
+                if (parentRect.width > 0 && parentRect.height > 0) {
+                    rect = parentRect;
+                    console.log('LabTopology: Utilisation des dimensions du parent', {
+                        width: rect.width,
+                        height: rect.height,
+                    });
+                } else {
+                    // Dimensions par défaut
+                    rect = { width: 800, height: 600, left: 0, top: 0 } as DOMRect;
+                    console.warn('LabTopology: Utilisation de dimensions par défaut 800x600');
+                }
+            }
+        }
+
         // Use actual pixel dimensions, not CSS dimensions
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = globalThis.devicePixelRatio || 1;
         canvas.width = rect.width * dpr;
         canvas.height = rect.height * dpr;
 
@@ -184,16 +223,6 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
             horizontalLines: Math.ceil(cssHeight / gridSize),
         });
 
-        // Test: Draw a simple test circle at center AFTER background to verify canvas is working
-        ctx.fillStyle = '#ff0000'; // Red test circle - should be visible on dark background
-        ctx.beginPath();
-        ctx.arc(cssWidth / 2, cssHeight / 2, 15, 0, 2 * Math.PI);
-        ctx.fill();
-        console.log('LabTopology: Cercle de test rouge dessiné au centre', {
-            centerX: cssWidth / 2,
-            centerY: cssHeight / 2,
-        });
-
         // Calculate node positions in world coordinates (0,0 at center)
         const nodePositions = new Map<string, { x: number; y: number }>();
 
@@ -252,23 +281,152 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
             nodePositions: Array.from(nodePositions.entries()).map(([id, pos]) => ({ id, ...pos })),
         });
 
-        // Draw links with brighter color to ensure visibility
-        ctx.strokeStyle = '#94a3b8'; // Lighter gray
-        ctx.lineWidth = Math.max(2 / zoom, 1); // Ensure minimum line width
+        // Draw links with interface information
+        const linkPositions = new Map<string, { x1: number; y1: number; x2: number; y2: number }>();
         let linksDrawn = 0;
+
+        console.log('LabTopology: Dessin des liens', {
+            totalLinks: allLinks.length,
+            sampleLink: allLinks[0] ? {
+                id: allLinks[0].id,
+                n1: allLinks[0].n1,
+                n2: allLinks[0].n2,
+                i1: allLinks[0].i1,
+                i2: allLinks[0].i2,
+                hasInterface1: !!allLinks[0].interface1,
+                hasInterface2: !!allLinks[0].interface2,
+                interface1: allLinks[0].interface1,
+                interface2: allLinks[0].interface2,
+            } : null,
+            nodePositionsKeys: Array.from(nodePositions.keys()),
+        });
+
         for (const link of allLinks) {
-            const node1Id = String(link.n1 || link.node1 || link.src || '');
-            const node2Id = String(link.n2 || link.node2 || link.dst || '');
+            const node1Id = typeof link.n1 === 'string' ? link.n1 :
+                          typeof link.node1 === 'string' ? link.node1 :
+                          typeof link.src === 'string' ? link.src : '';
+            const node2Id = typeof link.n2 === 'string' ? link.n2 :
+                          typeof link.node2 === 'string' ? link.node2 :
+                          typeof link.dst === 'string' ? link.dst : '';
             const node1 = nodePositions.get(node1Id);
             const node2 = nodePositions.get(node2Id);
+
+            if (!node1 || !node2) {
+                console.warn('LabTopology: Node position manquante pour le lien', {
+                    linkId: link.id,
+                    node1Id,
+                    node2Id,
+                    hasNode1: !!node1,
+                    hasNode2: !!node2,
+                    availableNodes: Array.from(nodePositions.keys()),
+                });
+                continue;
+            }
+
             if (node1 && node2) {
+                const isSelected = selectedLink?.id === link.id;
+
+                // Couleur du lien selon le statut
+                let linkColor = '#94a3b8'; // Gris par défaut
+                let linkWidth = Math.max(2 / zoom, 1);
+
+                // Vérifier le statut des interfaces
+                const interface1 = link.interface1;
+                const interface2 = link.interface2;
+                const isConnected1 = interface1?.is_connected ?? false;
+                const isConnected2 = interface2?.is_connected ?? false;
+                const linkState = link.state || interface1?.state || interface2?.state;
+
+                if (isSelected) {
+                    linkColor = '#3b82f6'; // Bleu pour le lien sélectionné
+                    linkWidth = Math.max(4 / zoom, 2);
+                } else if (linkState === 'STARTED' || linkState === 'BOOTED') {
+                    linkColor = '#10b981'; // Vert pour actif
+                    linkWidth = Math.max(3 / zoom, 1.5);
+                } else if (linkState === 'STOPPED' || linkState === 'DEFINED_ON_CORE') {
+                    linkColor = '#f59e0b'; // Orange pour arrêté
+                } else if (!isConnected1 || !isConnected2) {
+                    linkColor = '#ef4444'; // Rouge si une interface n'est pas connectée
+                }
+
+                ctx.strokeStyle = linkColor;
+                ctx.lineWidth = linkWidth;
+
+                // Dessiner le lien
                 ctx.beginPath();
                 ctx.moveTo(node1.x, node1.y);
                 ctx.lineTo(node2.x, node2.y);
                 ctx.stroke();
+
+                // Stocker la position du lien pour la détection de clic
+                linkPositions.set(link.id, {
+                    x1: node1.x,
+                    y1: node1.y,
+                    x2: node2.x,
+                    y2: node2.y,
+                });
+
+                // Dessiner les labels des interfaces au milieu du lien
+                const midX = (node1.x + node2.x) / 2;
+                const midY = (node1.y + node2.y) / 2;
+
+                // Préparer les informations à afficher
+                const label1 = interface1?.label || '?';
+                const label2 = interface2?.label || '?';
+                const linkLabel = `${label1} ↔ ${label2}`;
+
+                // Type d'interface
+                const type1 = interface1?.type === 'loopback' ? 'L' : interface1?.type ? 'P' : '?';
+                const type2 = interface2?.type === 'loopback' ? 'L' : interface2?.type ? 'P' : '?';
+                const typeText = `${type1}-${type2}`;
+
+                // Statut de connexion (utiliser les variables déjà déclarées plus haut)
+                const bothConnected = isConnected1 && isConnected2;
+                const statusText = bothConnected ? '✓' : '✗';
+                const statusColor = bothConnected ? '#10b981' : '#ef4444';
+
+                // Mesurer les textes pour dimensionner le fond
+                ctx.font = `bold ${Math.max(10 / zoom, 8)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const textMetrics = ctx.measureText(linkLabel);
+                const textWidth = textMetrics.width;
+
+                ctx.font = `${Math.max(8 / zoom, 6)}px sans-serif`;
+                const typeMetrics = ctx.measureText(typeText);
+                const typeWidth = typeMetrics.width;
+
+                const maxWidth = Math.max(textWidth, typeWidth);
+                const padding = 12;
+                const totalHeight = 28;
+
+                // Fond pour le texte (pour la lisibilité)
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(midX - maxWidth / 2 - padding, midY - totalHeight / 2, maxWidth + padding * 2, totalHeight);
+
+                // Labels des interfaces
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${Math.max(10 / zoom, 8)}px sans-serif`;
+                ctx.fillText(linkLabel, midX, midY - 6);
+
+                // Type d'interface
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = `${Math.max(8 / zoom, 6)}px sans-serif`;
+                ctx.fillText(`Type: ${typeText}`, midX, midY + 6);
+
+                // Statut de connexion à droite
+                ctx.fillStyle = statusColor;
+                ctx.font = `bold ${Math.max(10 / zoom, 8)}px sans-serif`;
+                ctx.textAlign = 'left';
+                ctx.fillText(statusText, midX + maxWidth / 2 + 2, midY - 6);
+                ctx.textAlign = 'center'; // Reset
+
                 linksDrawn++;
             }
         }
+
+        // Stocker les positions des liens pour la détection de clic
+        linkPositionsRef.current = linkPositions;
 
         if (allLinks.length > 0 && linksDrawn === 0) {
             console.warn('LabTopology: Aucun link dessiné', {
@@ -348,28 +506,46 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
             linksDrawn,
             totalNodes: allNodes.length,
             totalLinks: allLinks.length,
+            canvasWidth: canvas.width,
+            canvasHeight: canvas.height,
+            cssWidth,
+            cssHeight,
         });
-    }, [allNodes, allLinks, selectedNode, zoom, pan]);
+    }, [allNodes, allLinks, selectedNode, selectedLink, zoom, pan]);
 
     // Redessiner quand la taille du canvas change
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const resizeObserver = new ResizeObserver(() => {
-            // Force le redessin en déclenchant un re-render
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-                const rect = canvas.getBoundingClientRect();
-                canvas.width = rect.width;
-                canvas.height = rect.height;
-                // Le useEffect précédent va redessiner automatiquement
+        const resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const { width, height } = entry.contentRect;
+                console.log('LabTopology: ResizeObserver déclenché', {
+                    width,
+                    height,
+                    canvasWidth: canvas.width,
+                    canvasHeight: canvas.height,
+                });
             }
+            // Le useEffect précédent va redessiner automatiquement
         });
 
         resizeObserver.observe(canvas);
 
+        // Force un redessin initial après un court délai pour s'assurer que le canvas est monté
+        const timeoutId = setTimeout(() => {
+            const rect = canvas.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                console.log('LabTopology: Redessin forcé après délai', {
+                    width: rect.width,
+                    height: rect.height,
+                });
+            }
+        }, 100);
+
         return () => {
+            clearTimeout(timeoutId);
             resizeObserver.disconnect();
         };
     }, [allNodes, allLinks, selectedNode, zoom, pan]);
@@ -427,10 +603,69 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
             }
         }
 
+        // Check if clicking on a link
+        let clickedLink: Link | null = null;
+        if (!clickedNode) {
+            // Convertir la position de la souris en coordonnées world
+            const worldX = (mouseX - cssWidth / 2 - pan.x) / zoom;
+            const worldY = (mouseY - cssHeight / 2 - pan.y) / zoom;
+
+            // Vérifier si on clique sur un lien (distance à la ligne)
+            const clickThreshold = 10 / zoom; // Tolérance de clic
+
+            for (const link of allLinks) {
+                const linkPos = linkPositionsRef.current.get(link.id);
+                if (!linkPos) continue;
+
+                // Calculer la distance du point à la ligne
+                const { x1, y1, x2, y2 } = linkPos;
+                const A = worldX - x1;
+                const B = worldY - y1;
+                const C = x2 - x1;
+                const D = y2 - y1;
+
+                const dot = A * C + B * D;
+                const lenSq = C * C + D * D;
+                let param = -1;
+
+                if (lenSq !== 0) {
+                    param = dot / lenSq;
+                }
+
+                let xx, yy;
+                if (param < 0) {
+                    xx = x1;
+                    yy = y1;
+                } else if (param > 1) {
+                    xx = x2;
+                    yy = y2;
+                } else {
+                    xx = x1 + param * C;
+                    yy = y1 + param * D;
+                }
+
+                const dx = worldX - xx;
+                const dy = worldY - yy;
+                const distance = Math.hypot(dx, dy);
+
+                if (distance <= clickThreshold) {
+                    clickedLink = link;
+                    break;
+                }
+            }
+        }
+
         if (clickedNode) {
             setSelectedNode(clickedNode);
+            setSelectedLink(null);
+            setIsDragging(false);
+        } else if (clickedLink) {
+            setSelectedLink(clickedLink);
+            setSelectedNode(null);
             setIsDragging(false);
         } else {
+            setSelectedNode(null);
+            setSelectedLink(null);
             setIsDragging(true);
             setDragStart({ x: mouseX, y: mouseY });
         }
@@ -468,6 +703,7 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         setZoom(1);
         setPan({ x: 0, y: 0 });
         setSelectedNode(null);
+        setSelectedLink(null);
     };
 
     if (allNodes.length === 0) {
@@ -579,6 +815,132 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
                                             }
                                         >
                                             {selectedNode.state}
+                                        </Badge>
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
+            {/* Link Details Panel */}
+            {selectedLink && (
+                <div className="absolute bottom-4 left-4 z-10">
+                    <Card className="border-0 bg-white/90 shadow-lg backdrop-blur-sm dark:bg-gray-900/90">
+                        <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-4 mb-3">
+                                <h4 className="font-semibold">Détails du lien</h4>
+                                <button
+                                    onClick={() => setSelectedLink(null)}
+                                    className="text-muted-foreground hover:text-foreground"
+                                >
+                                    ×
+                                </button>
+                            </div>
+
+                            <div className="space-y-3 text-xs">
+                                {/* Interface 1 */}
+                                {selectedLink.interface1 && (
+                                    <div className="border-b border-gray-200 dark:border-gray-700 pb-2">
+                                        <div className="font-semibold text-sm mb-1">Interface 1</div>
+                                        <div className="space-y-1">
+                                            <div>
+                                                <span className="text-muted-foreground">Label: </span>
+                                                <span className="font-medium">{selectedLink.interface1.label || 'N/A'}</span>
+                                            </div>
+                                            {selectedLink.interface1.type && (
+                                                <div>
+                                                    <span className="text-muted-foreground">Type: </span>
+                                                    <Badge variant="outline" className="ml-1">
+                                                        {selectedLink.interface1.type === 'loopback' ? 'Loopback' : 'Physical'}
+                                                    </Badge>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <span className="text-muted-foreground">Connectée: </span>
+                                                <Badge
+                                                    variant={selectedLink.interface1.is_connected ? 'default' : 'destructive'}
+                                                    className="ml-1"
+                                                >
+                                                    {selectedLink.interface1.is_connected ? 'Oui' : 'Non'}
+                                                </Badge>
+                                            </div>
+                                            {selectedLink.interface1.state && (
+                                                <div>
+                                                    <span className="text-muted-foreground">État: </span>
+                                                    <Badge variant="secondary" className="ml-1">
+                                                        {selectedLink.interface1.state}
+                                                    </Badge>
+                                                </div>
+                                            )}
+                                            {selectedLink.interface1.mac_address && (
+                                                <div>
+                                                    <span className="text-muted-foreground">MAC: </span>
+                                                    <span className="font-mono text-xs">{selectedLink.interface1.mac_address}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Interface 2 */}
+                                {selectedLink.interface2 && (
+                                    <div>
+                                        <div className="font-semibold text-sm mb-1">Interface 2</div>
+                                        <div className="space-y-1">
+                                            <div>
+                                                <span className="text-muted-foreground">Label: </span>
+                                                <span className="font-medium">{selectedLink.interface2.label || 'N/A'}</span>
+                                            </div>
+                                            {selectedLink.interface2.type && (
+                                                <div>
+                                                    <span className="text-muted-foreground">Type: </span>
+                                                    <Badge variant="outline" className="ml-1">
+                                                        {selectedLink.interface2.type === 'loopback' ? 'Loopback' : 'Physical'}
+                                                    </Badge>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <span className="text-muted-foreground">Connectée: </span>
+                                                <Badge
+                                                    variant={selectedLink.interface2.is_connected ? 'default' : 'destructive'}
+                                                    className="ml-1"
+                                                >
+                                                    {selectedLink.interface2.is_connected ? 'Oui' : 'Non'}
+                                                </Badge>
+                                            </div>
+                                            {selectedLink.interface2.state && (
+                                                <div>
+                                                    <span className="text-muted-foreground">État: </span>
+                                                    <Badge variant="secondary" className="ml-1">
+                                                        {selectedLink.interface2.state}
+                                                    </Badge>
+                                                </div>
+                                            )}
+                                            {selectedLink.interface2.mac_address && (
+                                                <div>
+                                                    <span className="text-muted-foreground">MAC: </span>
+                                                    <span className="font-mono text-xs">{selectedLink.interface2.mac_address}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Statut du lien */}
+                                {selectedLink.state && (
+                                    <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                                        <span className="text-muted-foreground">Statut du lien: </span>
+                                        <Badge
+                                            variant={
+                                                selectedLink.state === 'STARTED' || selectedLink.state === 'BOOTED'
+                                                    ? 'default'
+                                                    : 'secondary'
+                                            }
+                                            className="ml-1"
+                                        >
+                                            {selectedLink.state}
                                         </Badge>
                                     </div>
                                 )}
