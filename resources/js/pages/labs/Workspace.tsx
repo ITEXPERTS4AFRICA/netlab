@@ -473,7 +473,17 @@ export default function Workspace() {
 
                 {/* Workspace Area */}
                 <div className="flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
-                    <div className="relative flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                    {/* Console - Priorité principale */}
+                    <div className="min-h-[28rem] w-full flex-[2] overflow-hidden">
+                        <LabConsolePanel
+                            cmlLabId={lab.cml_id}
+                            nodes={nodeList}
+                            initialSessions={consoleSessions}
+                        />
+                    </div>
+
+                    {/* Topology Graph - Secondaire */}
+                    <div className="relative flex-[1] min-w-[400px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
                         {/* Topology Graph - Show when lab is running - Must be on top */}
                         {(() => {
                             const normalizedState = typeof lab.state === 'string' 
@@ -593,14 +603,6 @@ export default function Workspace() {
                             }
                             return null;
                         })()}
-                    </div>
-
-                    <div className="min-h-[28rem] w-full flex-shrink-0 overflow-hidden lg:w-[420px]">
-                        <LabConsolePanel
-                            cmlLabId={lab.cml_id}
-                            nodes={nodeList}
-                            initialSessions={consoleSessions}
-                        />
                     </div>
                 </div>
             </div>

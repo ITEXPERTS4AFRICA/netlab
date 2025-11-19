@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Loader2, Power, RefreshCcw, Terminal, Code, Monitor } from 'lucide-react';
+import { Loader2, Power, RefreshCcw, Terminal, Code } from 'lucide-react';
 import { useConsole, type ConsoleResponse, type ConsoleSessionResponse } from '@/hooks/useConsole';
 import IOSConsole from '@/components/IOSConsole';
 
@@ -260,7 +260,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         if (activeSession.consoleUrl) {
             teardownWebsocket({ silent: true });
             setConnectionState('open');
-            appendLog('[Console] Console disponible via iframe.');
+            // Ne pas logger le message iframe, l'iframe sera affiché directement
             return;
         }
         
@@ -410,7 +410,10 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             setSession(nextSession);
             setConnectionState('open'); // CML utilise des iframes, pas de connexion WebSocket
             appendLog('[Console] Session console créée.');
-            appendLog(`[Console] URL: ${consoleUrl}`);
+            // Masquer l'URL complète, ne garder que l'ID de session
+            const urlParts = consoleUrl.split('/');
+            const urlSessionId = urlParts[urlParts.length - 1] || 'N/A';
+            appendLog(`[Console] Session ID: ${urlSessionId}`);
             toast.success('Session console créée.');
         } catch (err) {
             console.error('Erreur lors de la création de session:', err);
@@ -447,6 +450,10 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             toast.error('Aucune session console active.');
             return;
         }
+
+        // Si on a un consoleUrl, on peut toujours essayer d'envoyer via WebSocket
+        // ou simplement logger la commande pour l'instant
+        // (L'iframe CML n'est plus affiché, on utilise uniquement la console IOS intelligente)
 
         // Si on a un WebSocket ouvert, l'utiliser
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -693,7 +700,6 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                 <Separator />
 
                 {/* Sélecteur de mode console */}
-                {session && (
                     <div className="flex items-center gap-2 pb-2">
                         <span className="text-xs text-muted-foreground">Mode console :</span>
                         <Button
@@ -705,39 +711,21 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                             <Code className="h-3 w-3 mr-1" />
                             IOS Intelligent
                         </Button>
-                        {session.consoleUrl && (
-                            <Button
-                                variant={consoleMode === 'iframe' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setConsoleMode('iframe')}
-                                className="h-7"
-                            >
-                                <Monitor className="h-3 w-3 mr-1" />
-                                Console CML
-                            </Button>
-                        )}
                     </div>
-                )}
 
-                {/* Console intelligente IOS */}
-                {consoleMode === 'ios' && session ? (
+                {/* Console intelligente IOS - Toujours afficher, jamais l'iframe CML */}
+                {consoleMode === 'ios' ? (
                     <IOSConsole
                         onSendCommand={handleSendCommand}
                         output={logLines}
                         isConnected={isSessionOpen}
                         nodeLabel={selectedNode?.label || selectedNode?.name || undefined}
+                        nodeState={selectedNode?.state}
                         className="flex-1"
                     />
                 ) : (
                 <div className="flex-1 overflow-hidden rounded-lg border border-muted bg-black/95 dark:bg-black">
-                        {session?.consoleUrl && consoleMode === 'iframe' ? (
-                        <iframe
-                            src={session.consoleUrl}
-                            className="h-full w-full border-0"
-                            title="Console CML"
-                            allow="clipboard-read; clipboard-write"
-                        />
-                    ) : logLines.length > 0 ? (
+                        {logLines.length > 0 ? (
                         <div className="overflow-y-auto p-3 font-mono text-xs text-emerald-200">
                             {logLines.map((line, index) => (
                             <pre key={index} className="whitespace-pre-wrap">
@@ -755,11 +743,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             </CardContent>
 
             <CardFooter className="flex flex-col gap-2">
-                {consoleMode === 'iframe' && session?.consoleUrl ? (
-                    <p className="text-xs text-muted-foreground">
-                        Utilisez la console ci-dessus pour entrer vos commandes directement.
-                    </p>
-                ) : consoleMode === 'ios' ? (
+                {consoleMode === 'ios' ? (
                     <p className="text-xs text-muted-foreground">
                         Console IOS intelligente avec auto-complétion, historique et coloration syntaxique.
                     </p>
