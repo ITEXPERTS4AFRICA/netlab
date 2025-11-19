@@ -12,7 +12,7 @@ Route::get('/', function () {
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
     Route::get('profile', function () {
-        return Inertia::render('users/profile');
+        return redirect()->route('profile.edit');
     })->name('profile.show');
     Route::get('labs',[\App\Http\Controllers\LabsController::class,'index' ])->name('labs');
     Route::get('labs/my-reserved',[\App\Http\Controllers\LabsController::class,'myReservedLabs' ])->name('labs.my-reserved');

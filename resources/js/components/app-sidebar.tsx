@@ -17,7 +17,7 @@ import {
 import { dashboard } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, SendToBackIcon, Zap, ExternalLink, Users, Shield, Settings, FlaskConical } from 'lucide-react';
+import { LayoutGrid, SendToBackIcon, Zap, ExternalLink, Users, Shield, Settings, FlaskConical, Calendar, Activity } from 'lucide-react';
 import AppLogo from './app-logo';
 import { Badge } from '@/components/ui/badge';
 import { router } from '@inertiajs/react';
@@ -36,7 +36,7 @@ type ActiveReservation = {
 const mainNavItems: NavItem[] = [
     {
         title: 'Dashboard',
-        href: dashboard(),
+        href: dashboard().url,
         icon: LayoutGrid,
     },
     {
@@ -89,9 +89,19 @@ export function AppSidebar() {
             icon: FlaskConical,
         },
         {
+            title: 'Réservations',
+            href: '/admin/reservations',
+            icon: Calendar,
+        },
+        {
             title: 'Configuration CML',
             href: '/admin/cml-config',
             icon: Settings,
+        },
+        {
+            title: 'Santé API Paiement',
+            href: '/admin/payments/health',
+            icon: Activity,
         },
     ];
 
@@ -101,7 +111,7 @@ export function AppSidebar() {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
+                            <Link href={dashboard().url} prefetch>
                                 <AppLogo />
                             </Link>
                         </SidebarMenuButton>

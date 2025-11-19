@@ -14,13 +14,30 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $this->call([
+            AdminUserSeeder::class,
+        ]);
 
+        // Créer un utilisateur de test optionnel
         User::firstOrCreate(
             ['email' => 'test@example.com'],
             [
                 'name' => 'Test User',
                 'password' => Hash::make('password'),
+                'role' => 'student',
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ]
+        );
+
+        // Créer un instructeur de test
+        User::firstOrCreate(
+            ['email' => 'instructor@example.com'],
+            [
+                'name' => 'Instructeur Test',
+                'password' => Hash::make('password'),
+                'role' => 'instructor',
+                'is_active' => true,
                 'email_verified_at' => now(),
             ]
         );

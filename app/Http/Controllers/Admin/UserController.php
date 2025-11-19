@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Reservation;
+use App\Models\Payment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -43,10 +45,87 @@ class UserController extends Controller
             }
         }
 
-        $users = $query->withCount('reservations')
+        $users = $query->withCount([
+                'reservations',
+                'reservations as active_reservations_count' => function ($q) {
+                    $q->where('status', 'active')
+                        ->where('end_at', '>', now());
+                },
+                'reservations as pending_reservations_count' => function ($q) {
+                    $q->where('status', 'pending')
+                        ->where('created_at', '>', now()->subMinutes(15));
+                },
+                'reservations as completed_reservations_count' => function ($q) {
+                    $q->where('status', 'completed');
+                },
+                'payments as pending_payments_count' => function ($q) {
+                    $q->where('status', 'pending');
+                },
+            ])
             ->orderBy('created_at', 'desc')
             ->paginate(15)
             ->withQueryString();
+
+        $userIds = $users->getCollection()->pluck('id');
+
+        $recentReservations = Reservation::with('lab:id,lab_title')
+            ->whereIn('user_id', $userIds)
+            ->orderByDesc('start_at')
+            ->get()
+            ->groupBy('user_id')
+            ->map(function ($group) {
+                return $group->take(3);
+            });
+
+        $nextReservations = Reservation::with('lab:id,lab_title')
+            ->whereIn('user_id', $userIds)
+            ->where('status', '!=', 'cancelled')
+            ->where('start_at', '>', now())
+            ->orderBy('start_at')
+            ->get()
+            ->groupBy('user_id')
+            ->map(function ($group) {
+                return $group->first();
+            });
+
+        $users->getCollection()->transform(function ($user) use ($recentReservations, $nextReservations) {
+            $recent = $recentReservations->get($user->id, collect());
+            $next = $nextReservations->get($user->id);
+
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'is_active' => $user->is_active,
+                'avatar' => $user->avatar,
+                'organization' => $user->organization,
+                'department' => $user->department,
+                'total_reservations' => $user->reservations_count,
+                'active_reservations_count' => $user->active_reservations_count,
+                'pending_reservations_count' => $user->pending_reservations_count,
+                'completed_reservations_count' => $user->completed_reservations_count,
+                'pending_payments_count' => $user->pending_payments_count,
+                'last_activity_at' => $user->last_activity_at?->toDateTimeString(),
+                'created_at' => $user->created_at->toDateTimeString(),
+                'recent_reservations' => $recent->map(function ($reservation) {
+                    return [
+                        'id' => $reservation->id,
+                        'lab_title' => $reservation->lab->lab_title ?? 'Lab',
+                        'status' => $reservation->status,
+                        'start_at' => $reservation->start_at?->toIso8601String(),
+                        'end_at' => $reservation->end_at?->toIso8601String(),
+                        'estimated_cents' => $reservation->estimated_cents,
+                    ];
+                })->values(),
+                'next_reservation' => $next ? [
+                    'id' => $next->id,
+                    'lab_title' => $next->lab->lab_title ?? 'Lab',
+                    'start_at' => $next->start_at?->toIso8601String(),
+                    'status' => $next->status,
+                ] : null,
+            ];
+        });
 
         return Inertia::render('admin/users/index', [
             'users' => $users,

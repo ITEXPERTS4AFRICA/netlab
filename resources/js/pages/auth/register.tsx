@@ -1,4 +1,3 @@
-import RegisteredUserController from '@/actions/App/Http/Controllers/Auth/RegisteredUserController';
 import { login } from '@/routes';
 import { Form, Head } from '@inertiajs/react';
 import { LoaderCircle } from 'lucide-react';
@@ -8,7 +7,7 @@ import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AuthLayout from '@/layouts/auth-layout';
 import { useState } from 'react';
@@ -22,13 +21,15 @@ export default function Register() {
             <Card>
                 <CardContent className="pt-6">
                     <Form
-                        {...RegisteredUserController.store.form()}
+                        action="/register"
+                        method="post"
                         resetOnSuccess={['password', 'password_confirmation']}
                         disableWhileProcessing
                         className="flex flex-col gap-6"
                     >
                         {({ processing, errors }) => (
                             <>
+                                <input type="hidden" name="_method" value="post" />
                                 <div className="space-y-4">
                                     <div>
                                         <h3 className="text-lg font-semibold mb-2">Informations de base</h3>

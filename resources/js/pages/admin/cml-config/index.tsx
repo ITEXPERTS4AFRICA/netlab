@@ -31,6 +31,16 @@ interface TestResult {
     token?: string;
     labs_count?: number;
     details?: Record<string, unknown>;
+    connection_error?: boolean;
+    is_timeout?: boolean;
+    suggestions?: string[];
+    debug?: {
+        base_url?: string;
+        username?: string;
+        password_provided?: boolean;
+        url_used?: string;
+        error_type?: string;
+    };
 }
 
 export default function CmlConfigIndex({ config }: Props) {
@@ -81,7 +91,7 @@ export default function CmlConfigIndex({ config }: Props) {
                     'X-CSRF-TOKEN': csrfToken,
                     'X-Requested-With': 'XMLHttpRequest',
                 },
-                credentials: 'same-origin',
+                credentials: 'include', // Important : inclure les cookies de session
                 body: JSON.stringify({
                     base_url: data.base_url,
                     username: data.username,
@@ -103,6 +113,22 @@ export default function CmlConfigIndex({ config }: Props) {
                         try {
                             const errorData = await response.json();
                             errorMessage = errorData.message || `Erreur d'authentification (${response.status}). Veuillez rafraîchir la page.`;
+                            
+                            // Si c'est une erreur 403, afficher plus de détails
+                            if (response.status === 403) {
+                                const details: Record<string, unknown> = {
+                                    message: errorMessage,
+                                    user_role: errorData.user_role,
+                                };
+                                
+                                setTestResult({
+                                    success: false,
+                                    message: errorMessage + (errorData.user_role ? ` (Rôle actuel: ${errorData.user_role})` : ''),
+                                    details: details,
+                                });
+                                setIsTesting(false);
+                                return;
+                            }
                         } catch {
                             errorMessage = `Erreur d'authentification (${response.status}). Veuillez rafraîchir la page.`;
                         }
@@ -118,6 +144,30 @@ export default function CmlConfigIndex({ config }: Props) {
                     try {
                         const errorData = await response.json();
                         errorMessage = errorData.message || `Erreur ${response.status}`;
+                        
+                        // Extraire les suggestions et connection_error depuis errorData
+                        const testResult: TestResult = {
+                            success: false,
+                            message: errorMessage,
+                            details: errorData.details || errorData,
+                            debug: errorData.debug,
+                        };
+                        
+                        if (errorData.connection_error) {
+                            testResult.connection_error = errorData.connection_error;
+                        }
+                        if (errorData.suggestions) {
+                            testResult.suggestions = errorData.suggestions;
+                        } else if (errorData.details && typeof errorData.details === 'object' && 'suggestions' in errorData.details) {
+                            testResult.suggestions = (errorData.details as { suggestions?: string[] }).suggestions;
+                        }
+                        if (errorData.is_timeout) {
+                            testResult.is_timeout = errorData.is_timeout;
+                        }
+                        
+                        setTestResult(testResult);
+                        setIsTesting(false);
+                        return;
                     } catch {
                         errorMessage = `Erreur ${response.status}`;
                     }
@@ -135,6 +185,21 @@ export default function CmlConfigIndex({ config }: Props) {
             }
 
             const result: TestResult = await response.json();
+            
+            // Extraire les suggestions et connection_error depuis details si elles existent
+            if (result.details && typeof result.details === 'object') {
+                const details = result.details as Record<string, unknown>;
+                if ('suggestions' in details && Array.isArray(details.suggestions)) {
+                    result.suggestions = details.suggestions as string[];
+                }
+                if (!result.connection_error && 'connection_error' in details) {
+                    result.connection_error = details.connection_error as boolean;
+                }
+                if (!result.is_timeout && 'is_timeout' in details) {
+                    result.is_timeout = details.is_timeout as boolean;
+                }
+            }
+            
             setTestResult(result);
         } catch (error) {
             setTestResult({
@@ -181,6 +246,73 @@ export default function CmlConfigIndex({ config }: Props) {
                             <div className="flex-1 w-full flex flex-col">
                                 <AlertDescription className="flex flex-col flex-1 w-full">
                                     <div className="font-semibold mb-1">{testResult.message}</div>
+                                    
+                                    {/* Suggestions de dépannage pour les erreurs de connexion */}
+                                    {!testResult.success && testResult.connection_error && testResult.suggestions && (
+                                        <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
+                                            <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                                                💡 Suggestions de dépannage :
+                                            </p>
+                                            <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
+                                                {testResult.suggestions.map((suggestion, index) => (
+                                                    <li key={index}>{suggestion}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+
+                                    {/* Détails d'erreur */}
+                                    {!testResult.success && testResult.details && (() => {
+                                        const errorMessage = typeof testResult.details.message === 'string' ? testResult.details.message : null;
+                                        const errorUrl = typeof testResult.details.url_used === 'string' ? testResult.details.url_used : null;
+                                        
+                                        return (
+                                            <div className="mt-2 p-3 bg-red-100 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800 text-sm">
+                                                <div className="font-medium mb-2 text-red-800 dark:text-red-200">Détails de l'erreur :</div>
+                                                {errorMessage && (
+                                                    <div className="mb-2">
+                                                        <strong className="text-xs">Message technique :</strong>
+                                                        <code className="block mt-1 bg-red-200 dark:bg-red-800 p-2 rounded break-all text-xs">
+                                                            {errorMessage}
+                                                        </code>
+                                                    </div>
+                                                )}
+                                                {errorUrl && (
+                                                    <div className="mb-2">
+                                                        <strong className="text-xs">URL utilisée :</strong>
+                                                        <code className="block mt-1 bg-red-200 dark:bg-red-800 p-2 rounded break-all text-xs">
+                                                            {errorUrl}
+                                                        </code>
+                                                    </div>
+                                                )}
+                                                <pre className="text-xs overflow-auto text-red-700 dark:text-red-300 max-h-60">
+                                                    {JSON.stringify(testResult.details, null, 2)}
+                                                </pre>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Informations de débogage (mode local uniquement) */}
+                                    {!testResult.success && testResult.debug && (
+                                        <div className="mt-2 p-3 bg-amber-100 dark:bg-amber-900/20 rounded border border-amber-200 dark:border-amber-800 text-sm">
+                                            <div className="font-medium mb-2 text-amber-800 dark:text-amber-200">Informations de débogage :</div>
+                                            <ul className="space-y-1 text-xs text-amber-700 dark:text-amber-300">
+                                                {testResult.debug.base_url && (
+                                                    <li><strong>URL de base :</strong> {testResult.debug.base_url}</li>
+                                                )}
+                                                {testResult.debug.username && (
+                                                    <li><strong>Utilisateur :</strong> {testResult.debug.username}</li>
+                                                )}
+                                                {testResult.debug.password_provided !== undefined && (
+                                                    <li><strong>Mot de passe fourni :</strong> {testResult.debug.password_provided ? 'Oui' : 'Non'}</li>
+                                                )}
+                                                {testResult.debug.url_used && (
+                                                    <li><strong>URL utilisée :</strong> <code className="bg-amber-200 dark:bg-amber-800 px-1 rounded">{testResult.debug.url_used}</code></li>
+                                                )}
+                                            </ul>
+                                        </div>
+                                    )}
+
                                     {testResult.success && (
                                         <div className="text-sm space-y-2 mt-2 flex flex-col flex-1">
                                             {testResult.token && (

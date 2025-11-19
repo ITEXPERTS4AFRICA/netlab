@@ -10,9 +10,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Traits\HandlesCmlToken;
 
 class LabRuntimeController extends Controller
 {
+    use HandlesCmlToken;
     /**
      * Résoudre le lab depuis un paramètre de route
      * Peut être soit un ID de base de données (integer) soit un UUID CML (string)
@@ -41,7 +43,8 @@ class LabRuntimeController extends Controller
             return response()->json(['error' => $error], 404);
         }
 
-        $token = session('cml_token');
+        // Obtenir ou rafraîchir automatiquement le token CML
+        $token = $this->getOrRefreshCmlToken($apiService);
 
         \Log::info('Démarrage du lab', [
             'lab_id' => $labModel->id,
@@ -49,13 +52,14 @@ class LabRuntimeController extends Controller
             'has_token' => !empty($token),
         ]);
 
+        // Si toujours pas de token après rafraîchissement, retourner une erreur gracieuse
         if (!$token) {
-            $error = 'Token CML non disponible. Veuillez vous reconnecter.';
-            \Log::error($error);
+            $error = 'Impossible de se connecter à CML. Veuillez vérifier la configuration.';
+            \Log::warning($error);
             if ($request->header('X-Inertia')) {
                 return redirect()->back()->withErrors(['error' => $error]);
             }
-            return response()->json(['error' => $error], 401);
+            return response()->json(['error' => $error], 503); // 503 Service Unavailable au lieu de 401
         }
 
         $cisco->setToken($token);
@@ -147,15 +151,17 @@ class LabRuntimeController extends Controller
             return response()->json(['error' => $error], 404);
         }
 
-        $token = session('cml_token');
+        // Obtenir ou rafraîchir automatiquement le token CML
+        $token = $this->getOrRefreshCmlToken($apiService);
         
+        // Si toujours pas de token après rafraîchissement, retourner une erreur gracieuse
         if (!$token) {
-            $error = 'Token CML non disponible. Veuillez vous reconnecter.';
-            \Log::error($error);
+            $error = 'Impossible de se connecter à CML. Veuillez vérifier la configuration.';
+            \Log::warning($error);
             if ($request->header('X-Inertia')) {
                 return redirect()->back()->withErrors(['error' => $error]);
             }
-            return response()->json(['error' => $error], 401);
+            return response()->json(['error' => $error], 503); // 503 Service Unavailable
         }
 
         $cisco->setToken($token);
@@ -229,15 +235,17 @@ class LabRuntimeController extends Controller
             return response()->json(['error' => $error], 404);
         }
 
-        $token = session('cml_token');
+        // Obtenir ou rafraîchir automatiquement le token CML
+        $token = $this->getOrRefreshCmlToken($apiService);
         
+        // Si toujours pas de token après rafraîchissement, retourner une erreur gracieuse
         if (!$token) {
-            $error = 'Token CML non disponible. Veuillez vous reconnecter.';
-            \Log::error($error);
+            $error = 'Impossible de se connecter à CML. Veuillez vérifier la configuration.';
+            \Log::warning($error);
             if ($request->header('X-Inertia')) {
                 return redirect()->back()->withErrors(['error' => $error]);
             }
-            return response()->json(['error' => $error], 401);
+            return response()->json(['error' => $error], 503); // 503 Service Unavailable
         }
 
         $cisco->setToken($token);
@@ -306,15 +314,17 @@ class LabRuntimeController extends Controller
             return response()->json(['error' => $error], 404);
         }
 
-        $token = session('cml_token');
+        // Obtenir ou rafraîchir automatiquement le token CML
+        $token = $this->getOrRefreshCmlToken($apiService);
         
+        // Si toujours pas de token après rafraîchissement, retourner une erreur gracieuse
         if (!$token) {
-            $error = 'Token CML non disponible. Veuillez vous reconnecter.';
-            \Log::error($error);
+            $error = 'Impossible de se connecter à CML. Veuillez vérifier la configuration.';
+            \Log::warning($error);
             if ($request->header('X-Inertia')) {
                 return redirect()->back()->withErrors(['error' => $error]);
             }
-            return response()->json(['error' => $error], 401);
+            return response()->json(['error' => $error], 503); // 503 Service Unavailable
         }
 
         $cisco->setToken($token);

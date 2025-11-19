@@ -9,9 +9,11 @@ use Illuminate\Support\Facades\Cache;
 use App\Models\Lab;
 use App\Models\Reservation;
 use Illuminate\Support\Facades\Auth;
+use App\Traits\HandlesCmlToken;
 
 class LabsController extends Controller
 {
+    use HandlesCmlToken;
     /**
      * Display a listing of the resource.
      * Affiche uniquement les labs publiés (is_published = true)
@@ -136,20 +138,37 @@ class LabsController extends Controller
     public function myReservedLabs(Request $request, CiscoApiService $cisco)
     {
         $user = Auth::user();
-        $token = session('cml_token');
+        
+        // Obtenir ou rafraîchir automatiquement le token CML
+        $token = $this->getOrRefreshCmlToken($cisco);
 
+        // Si toujours pas de token après rafraîchissement, continuer sans erreur
+        // Les fonctionnalités qui nécessitent CML seront simplement désactivées
         if (!$token) {
-            return Inertia::render('labs/MyReservedLabs', [
-                'reservedLabs' => [],
-                'error' => 'CML authentication required. Please log in to CML first.',
-            ]);
+            \Log::warning('Token CML non disponible pour myReservedLabs, continuation sans erreur');
         }
 
         // Récupérer les réservations de l'utilisateur avec leurs labs (exclure les terminées)
-        $reservations = Reservation::with('lab')
+        // Exclure les réservations "pending" qui nécessitent un paiement mais n'ont pas de paiement réussi
+        // Exclure également les réservations pending expirées (créées il y a plus de 15 minutes)
+        $reservations = Reservation::with(['lab', 'payments'])
             ->where('user_id', $user->id)
             ->where('status', '!=', 'cancelled')
             ->where('end_at', '>', now()) // Exclure les réservations terminées
+            ->where(function($query) {
+                // Inclure les réservations actives
+                $query->where('status', 'active')
+                    // Ou les réservations pending qui sont gratuites (estimated_cents = 0)
+                    ->orWhere(function($q) {
+                        $q->where('status', 'pending')
+                          ->where('estimated_cents', 0)
+                          ->where('created_at', '>', now()->subMinutes(15)); // Non expirées
+                    })
+                    // Ou les réservations pending qui ont un paiement réussi
+                    ->orWhereHas('payments', function($q) {
+                        $q->where('status', 'completed');
+                    });
+            })
             ->orderBy('start_at', 'desc')
             ->get();
 
@@ -250,7 +269,8 @@ class LabsController extends Controller
 
     public function workspace(Lab $lab, CiscoApiService $cisco)
     {
-        $token = session('cml_token');
+        // Obtenir ou rafraîchir automatiquement le token CML
+        $token = $this->getOrRefreshCmlToken($cisco);
 
         // Ensure the lab exists in our database, create if not
         if (!$lab->exists) {

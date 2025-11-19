@@ -745,4 +745,32 @@ class CiscoApiService
     {
         return $this->token;
     }
+
+    /**
+     * Définir l'URL de base pour tous les services CML
+     * Utile pour tester la connexion avec une URL différente
+     */
+    public function setBaseUrl(string $baseUrl): void
+    {
+        // Nettoyer l'URL (enlever le /api si présent et les slashes finaux)
+        $baseUrl = rtrim($baseUrl, '/');
+        if (str_ends_with($baseUrl, '/api')) {
+            $baseUrl = rtrim($baseUrl, '/api');
+        }
+
+        // Mettre à jour tous les services
+        $this->auth->setBaseUrl($baseUrl);
+        $this->labs->setBaseUrl($baseUrl);
+        $this->nodes->setBaseUrl($baseUrl);
+        $this->links->setBaseUrl($baseUrl);
+        $this->system->setBaseUrl($baseUrl);
+        $this->images->setBaseUrl($baseUrl);
+        $this->licensing->setBaseUrl($baseUrl);
+        $this->resourcePools->setBaseUrl($baseUrl);
+        $this->console->setBaseUrl($baseUrl);
+        $this->groups->setBaseUrl($baseUrl);
+        $this->telemetry->setBaseUrl($baseUrl);
+        $this->import->setBaseUrl($baseUrl);
+        $this->interfaces->setBaseUrl($baseUrl);
+    }
 }

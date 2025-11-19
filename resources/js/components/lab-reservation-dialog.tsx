@@ -17,6 +17,7 @@ import { TimeSlotPicker, TimeSlot } from '@/components/ui/time-slot-picker';
 import { router } from '@inertiajs/react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 
 interface Lab {
   id: string;
@@ -48,8 +49,9 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [isInstant, setIsInstant] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data, setData, processing, errors, reset } = useForm({
+  const { data, setData, errors, reset } = useForm({
     lab_id: lab.id,
     start_at: '',
     end_at: '',
@@ -130,9 +132,11 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
     });
   };
 
+  const pricePerHour = lab.price_cents ?? 0;
+
   // Calculer le prix estimé (aligné avec le backend) - mémorisé pour éviter les recalculs
   const estimatedPrice = useMemo(() => {
-    if (!lab.price_cents || lab.price_cents === 0) return 0;
+    if (!pricePerHour) return 0;
 
     let durationHours = 0;
 
@@ -157,8 +161,36 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
     // Aligné avec le backend : ceil(durationHours) * pricePerHour avec minimum 1 heure
     // Le backend fait : max(1, ceil($totalHours)) * $pricePerHour
     const hours = Math.max(1, Math.ceil(durationHours));
-    return hours * lab.price_cents;
-  }, [lab.price_cents, isInstant, selectedSlot, selectedDate, data.start_at, data.end_at]);
+    return hours * pricePerHour;
+  }, [pricePerHour, isInstant, selectedSlot, selectedDate, data.start_at, data.end_at]);
+
+  const displayedTotalCents = estimatedPrice > 0 ? estimatedPrice : pricePerHour;
+
+  const reservationSummary = useMemo(() => {
+    if (isInstant) {
+      const start = new Date();
+      const end = new Date(start.getTime() + 4 * 60 * 60 * 1000);
+      return {
+        mode: 'Instantanée',
+        date: start.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' }),
+        time: `${start.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
+        duration: '4 h',
+      };
+    }
+    if (selectedSlot) {
+      const slotDate = selectedDate.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' });
+      const start = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.startTime}:00`);
+      const end = new Date(`${selectedDate.toISOString().split('T')[0]}T${selectedSlot.endTime}:00`);
+      const diffHours = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60)));
+      return {
+        mode: 'Planifiée',
+        date: slotDate,
+        time: `${selectedSlot.startTime} - ${selectedSlot.endTime}`,
+        duration: `${diffHours} h`,
+      };
+    }
+    return null;
+  }, [isInstant, selectedSlot, selectedDate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,6 +272,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       return;
     }
 
+    setIsSubmitting(true);
     // Utiliser l'API REST au lieu de Inertia pour gérer le paiement
     try {
       const requestData = {
@@ -295,6 +328,44 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       }
 
       if (!response.ok) {
+        // Gérer les erreurs de timeout CinetPay
+        if (result.error && (result.code === 'CONNECTION_TIMEOUT' || result.is_timeout)) {
+          const timeoutMessage = result.error || 'L\'API de paiement CinetPay ne répond pas. Veuillez réessayer plus tard.';
+          console.error('CinetPay timeout error:', result);
+          
+          // Si la réservation a été créée, rediriger vers les réservations avec un message
+          if (result.reservation && result.can_retry_payment) {
+            console.log('Redirection vers /labs/my-reserved avec réservation:', result.reservation.id);
+            toast.warning(
+              result.message || 'La réservation a été créée mais le paiement n\'a pas pu être initialisé. Vous pourrez réessayer le paiement depuis la page de vos réservations.',
+              {
+                duration: 8000,
+              }
+            );
+            setOpen(false);
+            
+            // Utiliser un petit délai pour permettre au toast de s'afficher
+            setTimeout(() => {
+              router.visit('/labs/my-reserved', {
+                method: 'get',
+                preserveScroll: true,
+                data: {
+                  reservation_id: result.reservation.id,
+                  payment_error: true,
+                  error_message: timeoutMessage,
+                },
+              });
+            }, 500);
+            return;
+          }
+          
+          // Si pas de réservation, afficher juste l'erreur
+          toast.error(timeoutMessage, {
+            duration: 10000,
+          });
+          return;
+        }
+
         // Gérer les erreurs de validation Laravel (422)
         if (response.status === 422 && result.errors) {
           // Erreurs de validation Laravel
@@ -329,6 +400,25 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
           errors: result.errors,
           fullResult: result,
         });
+
+        // Si la réservation a été créée mais le paiement a échoué, rediriger vers les réservations
+        if (result.reservation && result.can_retry_payment) {
+          toast.warning('La réservation a été créée mais le paiement n\'a pas pu être initialisé. Vous pourrez réessayer le paiement plus tard.', {
+            duration: 8000,
+          });
+          setOpen(false);
+          router.visit('/labs/my-reserved', {
+            method: 'get',
+            preserveScroll: true,
+            data: {
+              reservation_id: result.reservation.id,
+              payment_error: true,
+              error_message: errorMessage,
+            },
+          });
+          return;
+        }
+
         throw new Error(errorMessage);
       }
 
@@ -383,6 +473,8 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
 
       // Afficher aussi dans une alerte visuelle
       alert(errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -593,7 +685,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
           </div>
 
           {/* Affichage du prix */}
-          {lab.price_cents && lab.price_cents > 0 && (
+          {pricePerHour > 0 && (
             <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border">
               <div className="flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-primary" />
@@ -604,8 +696,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
               <span className="text-lg font-bold text-primary">
                 {estimatedPrice > 0
                   ? `${(estimatedPrice / 100).toLocaleString('fr-FR')} ${lab.currency || 'XOF'}`
-                  : `${(lab.price_cents / 100).toLocaleString('fr-FR')} ${lab.currency || 'XOF'}/h`
-                }
+                  : `${(pricePerHour / 100).toLocaleString('fr-FR')} ${lab.currency || 'XOF'}/h`}
               </span>
             </div>
           )}
@@ -635,6 +726,70 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
                 {estimatedPrice > 0 && ' Le paiement sera requis avant l\'accès.'}
               </p>
             </div>
+          )}
+
+          {(isInstant || selectedSlot) && (
+            <Card className="border border-dashed border-primary/30 bg-primary/5">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-base font-semibold">Panier & validation</h4>
+                  {reservationSummary && (
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                        reservationSummary.mode === 'Instantanée'
+                          ? 'bg-green-500/15 text-green-700 dark:text-green-200'
+                          : 'bg-blue-500/15 text-blue-700 dark:text-blue-200'
+                      }`}
+                    >
+                      {reservationSummary.mode}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Vérifiez les détails avant de lancer le paiement.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Lab sélectionné</p>
+                  <p className="font-medium">{lab.title || lab.lab_title || `Lab ${lab.id}`}</p>
+                  {(lab.short_description || lab.description) && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                      {lab.short_description || lab.description}
+                    </p>
+                  )}
+                </div>
+                {reservationSummary && (
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Mode</p>
+                      <p className="font-medium">{reservationSummary.mode}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Date</p>
+                      <p className="font-medium">{reservationSummary.date}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Créneau</p>
+                      <p className="font-medium">{reservationSummary.time}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Durée</p>
+                      <p className="font-medium">{reservationSummary.duration}</p>
+                    </div>
+                  </div>
+                )}
+                <Separator />
+                <div className="flex items-center justify-between text-base font-semibold">
+                  <span>Total</span>
+                  <span>
+                    {displayedTotalCents > 0
+                      ? `${(displayedTotalCents / 100).toLocaleString('fr-FR')} ${lab.currency || 'XOF'}`
+                      : 'Gratuit'}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {(uploadError || Object.keys(errors).length > 0) && (
@@ -678,19 +833,23 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
           <Separator />
 
           <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={processing}>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={processing || !selectedSlot} className="min-w-32">
-              {processing ? (
+            <Button
+              type="submit"
+              disabled={isSubmitting || (!isInstant && !selectedSlot)}
+              className="min-w-32"
+            >
+              {isSubmitting ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                  Creating Reservation...
+                  {displayedTotalCents > 0 ? 'Préparation du paiement...' : 'Création...'}
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4" />
-                  Book Reservation
+                  {displayedTotalCents > 0 ? 'Valider et payer' : 'Confirmer'}
                 </div>
               )}
             </Button>

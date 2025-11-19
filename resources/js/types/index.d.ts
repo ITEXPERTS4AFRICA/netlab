@@ -36,6 +36,18 @@ export interface User {
     name: string;
     email?: string;
     avatar?: string;
+    role?: string;
+    bio?: string | null;
+    phone?: string | null;
+    organization?: string | null;
+    department?: string | null;
+    position?: string | null;
+    skills?: string[] | string | null;
+    certifications?: string[] | string | null;
+    education?: string[] | string | null;
+    total_reservations?: number;
+    total_labs_completed?: number;
+    last_activity_at?: string | null;
     email_verified_at?: string | null;
     created_at: string;
     updated_at: string;

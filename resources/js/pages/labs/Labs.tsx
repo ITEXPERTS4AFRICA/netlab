@@ -533,7 +533,7 @@ export default function Labs() {
                                                             {lab.difficulty_level}
                                                         </Badge>
                                                     )}
-                                                    {lab.rating && lab.rating_count > 0 && (
+                                                    {lab.rating && (lab.rating_count ?? 0) > 0 && (
                                                         <Badge variant="outline" className="text-xs">
                                                             <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
                                                             {lab.rating.toFixed(1)} ({lab.rating_count})
@@ -602,7 +602,7 @@ export default function Labs() {
                                                 </Badge>
                                             )}
                                             {/* Vues */}
-                                            {lab.view_count > 0 && (
+                                            {(lab.view_count ?? 0) > 0 && (
                                                 <div className="flex items-center gap-2 text-muted-foreground">
                                                     <TrendingUp className="h-4 w-4" />
                                                     <span>{lab.view_count} vues</span>
@@ -656,14 +656,7 @@ export default function Labs() {
 
                                         {/* Actions */}
                                         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/50">
-                                            <LabReservationDialog
-                                                lab={{
-                                                    id: lab.id,
-                                                    title: lab.lab_title,
-                                                    description: lab.lab_description,
-                                                    state: lab.state
-                                                }}
-                                            >
+                                            <LabReservationDialog lab={lab}>
                                                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                                                     <Button
                                                         size="sm"

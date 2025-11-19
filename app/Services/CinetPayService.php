@@ -26,10 +26,25 @@ class CinetPayService
         $config = config('services.cinetpay');
         $this->apiKey = $config['api_key'];
         $this->siteId = $config['site_id'];
+        
+        // Utiliser url() helper pour générer les URLs absolues si non définies
+        // Cela garantit que les URLs fonctionnent même si l'IP/port change
         $this->notifyUrl = $config['notify_url'] ?? url('/api/payments/cinetpay/webhook');
         $this->returnUrl = $config['return_url'] ?? url('/api/payments/return');
         $this->cancelUrl = $config['cancel_url'] ?? url('/api/payments/cancel');
-        $this->mode = $config['mode'] ?? 'sandbox';
+        
+        // Nettoyer le mode pour gérer les cas où il est collé avec d'autres variables
+        $mode = $config['mode'] ?? 'sandbox';
+        // Extraire uniquement le mode valide (sandbox, production, test, prod)
+        $mode = strtolower(trim($mode));
+        if (strpos($mode, 'production') !== false || strpos($mode, 'prod') !== false) {
+            $this->mode = 'production';
+        } elseif (strpos($mode, 'sandbox') !== false || strpos($mode, 'test') !== false) {
+            $this->mode = 'sandbox';
+        } else {
+            $this->mode = 'sandbox'; // Par défaut
+        }
+        
         $this->version = 'V2';
 
         // Initialiser le SDK officiel CinetPay
@@ -157,28 +172,49 @@ class CinetPayService
             $errorMessage = $e->getMessage();
             $errorCode = 'SDK_ERROR';
             $errorDescription = null;
+            $isTimeout = false;
 
-            // Extraire le code d'erreur et le message depuis l'exception CinetPay
-            // Format: "Une erreur est survenue, Code: 641, Message: ERROR_AMOUNT_TOO_LOW"
-            if (preg_match('/Code:\s*(\d+)/', $errorMessage, $codeMatches)) {
-                $errorCode = $codeMatches[1];
-            }
-            if (preg_match('/Message:\s*(.+?)(?:$|,)/', $errorMessage, $messageMatches)) {
-                $errorDescription = trim($messageMatches[1]);
-            }
+            // Détecter les erreurs de timeout
+            if (stripos($errorMessage, 'timeout') !== false || 
+                stripos($errorMessage, 'Connection timed out') !== false ||
+                stripos($errorMessage, 'timed out after') !== false) {
+                $isTimeout = true;
+                $errorCode = 'CONNECTION_TIMEOUT';
+                $errorDescription = 'TIMEOUT';
+                
+                // Message d'erreur personnalisé pour les timeouts
+                if ($this->mode === 'sandbox' || $this->mode === 'test') {
+                    $errorMessage = 'L\'API sandbox de CinetPay est temporairement indisponible ou ne répond pas. Le timeout de connexion (45 secondes) a été dépassé. Veuillez réessayer plus tard ou contacter le support si le problème persiste.';
+                } else {
+                    $errorMessage = 'Timeout de connexion à l\'API CinetPay. Le serveur ne répond pas dans les délais impartis. Veuillez réessayer plus tard.';
+                }
+            } else {
+                // Extraire le code d'erreur et le message depuis l'exception CinetPay
+                // Format: "Une erreur est survenue, Code: 641, Message: ERROR_AMOUNT_TOO_LOW"
+                if (preg_match('/Code:\s*(\d+)/', $errorMessage, $codeMatches)) {
+                    $errorCode = $codeMatches[1];
+                }
+                if (preg_match('/Message:\s*(.+?)(?:$|,)/', $errorMessage, $messageMatches)) {
+                    $errorDescription = trim($messageMatches[1]);
+                }
 
-            // Message d'erreur personnalisé pour l'erreur 641
-            if ($errorCode === '641' || $errorDescription === 'ERROR_AMOUNT_TOO_LOW') {
-                $errorMessage = "Le montant minimum requis est de {$minAmountXOF} XOF (soit {$minAmountCents} centimes). Le montant actuel est de {$amount} XOF.";
+                // Message d'erreur personnalisé pour l'erreur 641
+                if ($errorCode === '641' || $errorDescription === 'ERROR_AMOUNT_TOO_LOW') {
+                    $errorMessage = "Le montant minimum requis est de {$minAmountXOF} XOF (soit {$minAmountCents} centimes). Le montant actuel est de {$amount} XOF.";
+                }
             }
 
             Log::error('CinetPay payment initiation error via SDK', [
                 'error' => $errorMessage,
                 'code' => $errorCode,
                 'description' => $errorDescription,
+                'is_timeout' => $isTimeout,
                 'transaction_id' => $transactionId,
                 'amount_in_cents' => $amountInCents,
                 'amount_in_xof' => $amount,
+                'mode' => $this->mode,
+                'original_exception' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return [
@@ -186,6 +222,7 @@ class CinetPayService
                 'error' => 'Erreur lors de l\'initialisation du paiement: ' . $errorMessage,
                 'code' => $errorCode,
                 'description' => $errorDescription,
+                'is_timeout' => $isTimeout,
             ];
         }
     }
@@ -425,5 +462,137 @@ class CinetPayService
         $id = sprintf('%06d', $id) . mt_rand(100, 9999);
 
         return 'NETLAB_' . $id;
+    }
+
+    /**
+     * Vérifier l'état de santé de l'API CinetPay
+     *
+     * @return array
+     */
+    public function checkHealth(): array
+    {
+        $health = [
+            'status' => 'unknown',
+            'timestamp' => now()->toIso8601String(),
+            'configuration' => [],
+            'connectivity' => [],
+            'api_status' => [],
+            'overall_health' => 'unknown',
+        ];
+
+        // 1. Vérifier la configuration
+        $config = config('services.cinetpay');
+        $health['configuration'] = [
+            'api_key' => !empty($config['api_key']) ? '✓ Défini (' . substr($config['api_key'], 0, 8) . '...)' : '✗ Manquant',
+            'site_id' => !empty($config['site_id']) ? '✓ Défini (' . $config['site_id'] . ')' : '✗ Manquant',
+            'mode' => $config['mode'] ?? 'non défini',
+            'notify_url' => $config['notify_url'] ?? url('/api/payments/cinetpay/webhook'),
+            'return_url' => $config['return_url'] ?? url('/api/payments/return'),
+            'cancel_url' => $config['cancel_url'] ?? url('/api/payments/cancel'),
+        ];
+
+        $configValid = !empty($config['api_key']) && !empty($config['site_id']) && !empty($config['mode']);
+
+        // 2. Vérifier la connectivité réseau
+        $signatureUrl = $this->getSignatureUrl();
+        $connectivityStart = microtime(true);
+        
+        try {
+            $response = Http::timeout(10)->asForm()->post($signatureUrl, [
+                'apikey' => $this->apiKey,
+                'cpm_site_id' => $this->siteId,
+            ]);
+            
+            $connectivityDuration = round((microtime(true) - $connectivityStart) * 1000, 2);
+            
+            $health['connectivity'] = [
+                'status' => $response->successful() ? 'reachable' : 'unreachable',
+                'response_time_ms' => $connectivityDuration,
+                'http_status' => $response->status(),
+                'url' => $signatureUrl,
+            ];
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            $connectivityDuration = round((microtime(true) - $connectivityStart) * 1000, 2);
+            $health['connectivity'] = [
+                'status' => 'timeout',
+                'response_time_ms' => $connectivityDuration,
+                'error' => 'Timeout de connexion (>10s)',
+                'url' => $signatureUrl,
+            ];
+        } catch (\Exception $e) {
+            $connectivityDuration = round((microtime(true) - $connectivityStart) * 1000, 2);
+            $health['connectivity'] = [
+                'status' => 'error',
+                'response_time_ms' => $connectivityDuration,
+                'error' => $e->getMessage(),
+                'url' => $signatureUrl,
+            ];
+        }
+
+        // 3. Tester l'initialisation d'un paiement (sans créer de transaction réelle)
+        $apiTestStart = microtime(true);
+        try {
+            // Test avec un montant minimal (100 XOF = 10000 centimes)
+            $testPaymentData = [
+                'amount' => 10000, // 100 XOF en centimes
+                'currency' => 'XOF',
+                'description' => 'Test de santé API - ' . now()->toDateTimeString(),
+                'transaction_id' => 'HEALTH_CHECK_' . time(),
+            ];
+
+            $testResult = $this->initiatePayment($testPaymentData);
+            $apiTestDuration = round((microtime(true) - $apiTestStart) * 1000, 2);
+
+            $health['api_status'] = [
+                'status' => $testResult['success'] ? 'operational' : 'error',
+                'response_time_ms' => $apiTestDuration,
+                'can_initiate_payment' => $testResult['success'],
+                'error' => $testResult['error'] ?? null,
+                'code' => $testResult['code'] ?? null,
+            ];
+        } catch (\Exception $e) {
+            $apiTestDuration = round((microtime(true) - $apiTestStart) * 1000, 2);
+            $health['api_status'] = [
+                'status' => 'error',
+                'response_time_ms' => $apiTestDuration,
+                'can_initiate_payment' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+
+        // 4. Déterminer l'état de santé global
+        $issues = [];
+        
+        if (!$configValid) {
+            $issues[] = 'Configuration incomplète';
+        }
+        
+        if ($health['connectivity']['status'] === 'timeout' || $health['connectivity']['status'] === 'error') {
+            $issues[] = 'API non accessible';
+        }
+        
+        if ($health['api_status']['status'] === 'error' || !$health['api_status']['can_initiate_payment']) {
+            $issues[] = 'Impossible d\'initialiser un paiement';
+        }
+
+        if (empty($issues)) {
+            $health['overall_health'] = 'healthy';
+            $health['status'] = 'operational';
+        } elseif (count($issues) === 1 && $issues[0] === 'Configuration incomplète') {
+            $health['overall_health'] = 'degraded';
+            $health['status'] = 'misconfigured';
+        } else {
+            $health['overall_health'] = 'unhealthy';
+            $health['status'] = 'down';
+        }
+
+        $health['issues'] = $issues;
+        $health['summary'] = [
+            'config_valid' => $configValid,
+            'api_reachable' => in_array($health['connectivity']['status'], ['reachable']),
+            'payment_working' => $health['api_status']['can_initiate_payment'] ?? false,
+        ];
+
+        return $health;
     }
 }

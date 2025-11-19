@@ -550,6 +550,25 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         };
     }, [allNodes, allLinks, selectedNode, zoom, pan]);
 
+    // Attacher l'événement wheel manuellement avec passive: false pour permettre preventDefault
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const wheelHandler = (e: WheelEvent) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            setZoom((prev) => Math.max(0.5, Math.min(2, prev * delta)));
+        };
+
+        // Attacher l'événement avec passive: false
+        canvas.addEventListener('wheel', wheelHandler, { passive: false });
+
+        return () => {
+            canvas.removeEventListener('wheel', wheelHandler);
+        };
+    }, []);
+
     const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -693,12 +712,6 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         setIsDragging(false);
     };
 
-    const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        setZoom((prev) => Math.max(0.5, Math.min(2, prev * delta)));
-    };
-
     const handleResetView = () => {
         setZoom(1);
         setPan({ x: 0, y: 0 });
@@ -746,7 +759,6 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
-                onWheel={handleWheel}
             />
 
             {/* Topology Info Panel */}

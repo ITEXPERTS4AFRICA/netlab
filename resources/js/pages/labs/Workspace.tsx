@@ -20,11 +20,16 @@ import {
     Eye,
     Share2,
     ExternalLink,
-    Timer
+    Timer,
+    Activity,
+    CheckCircle2,
+    XCircle,
+    Send
 } from 'lucide-react';
 import LabConsolePanel, { type ConsoleSession, type ConsoleSessionsResponse } from '@/components/lab-console-panel';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { ActionLogsProvider, useActionLogs, type ActionLogEntry } from '@/contexts/ActionLogsContext';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -47,7 +52,7 @@ type Lab = {
     state: string;
     lab_title: string;
     node_count: string|number;
-    lab_description: string;
+    lab_description?: string | string[] | Record<string, unknown>;
     created: string;
     modified: string;
     owner: string;
@@ -92,10 +97,32 @@ type Props = {
     consoleSessions: ConsoleSession[] | ConsoleSessionsResponse | null;
 };
 
-export default function Workspace() {
+function WorkspaceContent() {
     const { lab, reservation, nodes, links = [], topology, consoleSessions } = usePage<Props>().props;
     const [editMode, setEditMode] = useState(false);
     const [timeLeft, setTimeLeft] = useState<number>(0);
+    const { actionLogs } = useActionLogs();
+    const labDescription = useMemo(() => {
+        if (!lab.lab_description) return '';
+        if (typeof lab.lab_description === 'string') return lab.lab_description;
+        if (Array.isArray(lab.lab_description)) {
+            return lab.lab_description.join('\n\n');
+        }
+        if (typeof lab.lab_description === 'object') {
+            if ('description' in lab.lab_description && typeof (lab.lab_description as any).description === 'string') {
+                return (lab.lab_description as any).description;
+            }
+            return JSON.stringify(lab.lab_description, null, 2);
+        }
+        return String(lab.lab_description);
+    }, [lab.lab_description]);
+    const descriptionParagraphs = useMemo(() => {
+        if (!labDescription) return [];
+        return labDescription
+            .split(/\n+/)
+            .map((paragraph) => paragraph.trim())
+            .filter(Boolean);
+    }, [labDescription]);
 
     const nodeList = useMemo<LabNode[]>(() => {
         if (Array.isArray(nodes)) {
@@ -120,16 +147,22 @@ export default function Workspace() {
         }
     }, [nodeList, nodes, lab.state, lab.node_count]);
 
+    const [reservationProgress, setReservationProgress] = useState<number>(0);
+
     useEffect(() => {
         if (!reservation) return;
 
         const interval = setInterval(() => {
             const now = new Date().getTime();
+            const start = new Date(reservation.start_at).getTime();
             const end = new Date(reservation.end_at).getTime();
+            const total = end - start;
+            const elapsed = now - start;
             const remaining = end - now;
 
             if (remaining <= 0) {
                 clearInterval(interval);
+                setReservationProgress(100);
                 toast.error('Session ended. Redirecting to dashboard...', {
                     duration: 3000,
                 });
@@ -137,6 +170,8 @@ export default function Workspace() {
                     router.visit('/dashboard');
                 }, 3000);
             } else {
+                const progress = Math.min(100, Math.max(0, (elapsed / total) * 100));
+                setReservationProgress(progress);
                 setTimeLeft(Math.floor(remaining / 1000));
             }
         }, 1000);
@@ -444,32 +479,99 @@ export default function Workspace() {
                             </div>
 
                             {reservation && (
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center ${timeLeft < 300 ? 'animate-pulse bg-red-100 dark:bg-red-900/20' : ''}`}>
-                                        <Timer className={`w-5 h-5 ${timeLeft < 300 ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`} />
+                                <div className="flex flex-col gap-2 w-full">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center ${timeLeft < 300 ? 'animate-pulse bg-red-100 dark:bg-red-900/20' : ''}`}>
+                                            <Timer className={`w-5 h-5 ${timeLeft < 300 ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                {formatTime(timeLeft)}
+                                            </p>
+                                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                                                {timeLeft < 3600 ? 'remaining (min:sec)' : 'remaining (hr:min:sec)'}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                            {formatTime(timeLeft)}
-                                        </p>
-                                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                                            {timeLeft < 3600 ? 'remaining (min:sec)' : 'remaining (hr:min:sec)'}
-                                        </p>
+                                    {/* Progressbar animée */}
+                                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden relative">
+                                        <div
+                                            className={`h-full rounded-full transition-all duration-1000 ease-linear relative ${
+                                                reservationProgress < 50 
+                                                    ? 'bg-gradient-to-r from-green-500 to-emerald-400' 
+                                                    : reservationProgress < 80 
+                                                    ? 'bg-gradient-to-r from-yellow-500 to-amber-400' 
+                                                    : 'bg-gradient-to-r from-red-500 to-rose-400'
+                                            } ${timeLeft < 300 ? 'animate-pulse' : ''}`}
+                                            style={{
+                                                width: `${reservationProgress}%`,
+                                                boxShadow: reservationProgress > 0 
+                                                    ? reservationProgress < 50
+                                                        ? '0 0 8px rgba(16, 185, 129, 0.6)'
+                                                        : reservationProgress < 80
+                                                        ? '0 0 8px rgba(234, 179, 8, 0.6)'
+                                                        : '0 0 8px rgba(239, 68, 68, 0.6)'
+                                                    : 'none',
+                                            }}
+                                        >
+                                            {/* Effet shimmer animé */}
+                                            <div 
+                                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                                                style={{
+                                                    animation: 'shimmer 2s infinite linear',
+                                                }}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        {lab.lab_description && (
+                        {labDescription && (
                             <>
                                 <Separator className="my-4" />
                                 <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                                    {lab.lab_description}
+                                    {labDescription}
                                 </p>
                             </>
                         )}
                     </CardContent>
                 </Card>
+
+                {descriptionParagraphs.length > 0 && (
+                    <Card className="border border-dashed border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
+                        <CardHeader>
+                            <div className="flex items-center gap-2">
+                                <Info className="h-5 w-5 text-blue-500" />
+                                <h3 className="text-lg font-semibold">Description du lab</h3>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                                Comprenez le contexte, les objectifs et les ressources avant de vous lancer.
+                            </p>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            {descriptionParagraphs.slice(0, 4).map((paragraph, index) => (
+                                <p key={index} className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+                                    {paragraph}
+                                </p>
+                            ))}
+                            {descriptionParagraphs.length > 4 && (
+                                <details className="text-sm text-blue-600 dark:text-blue-300">
+                                    <summary className="cursor-pointer hover:underline">
+                                        Voir plus de détails
+                                    </summary>
+                                    <div className="mt-2 space-y-3 text-gray-700 dark:text-gray-300">
+                                        {descriptionParagraphs.slice(4).map((paragraph, index) => (
+                                            <p key={`extra-${index}`} className="text-sm leading-relaxed">
+                                                {paragraph}
+                                            </p>
+                                        ))}
+                                    </div>
+                                </details>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
 
                 {/* Workspace Area */}
                 <div className="flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
@@ -479,11 +581,110 @@ export default function Workspace() {
                             cmlLabId={lab.cml_id}
                             nodes={nodeList}
                             initialSessions={consoleSessions}
+                            labTitle={lab.lab_title}
                         />
                     </div>
 
-                    {/* Topology Graph - Secondaire */}
+                    {/* Logs & Monitoring - À la place de Topology View */}
                     <div className="relative flex-[1] min-w-[400px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                        <div className="h-full flex flex-col">
+                            <div className="border-b border-border p-4">
+                                <h3 className="text-lg font-semibold flex items-center gap-2">
+                                    <Activity className="h-5 w-5" />
+                                    Logs & Monitoring
+                                    {actionLogs.length > 0 && (
+                                        <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-xs">
+                                            {actionLogs.length}
+                                        </Badge>
+                                    )}
+                                </h3>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Suivi de toutes les actions effectuées
+                                </p>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4">
+                                {actionLogs.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center h-full py-8 text-center">
+                                        <Activity className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
+                                        <p className="text-sm text-muted-foreground">
+                                            Aucune action enregistrée
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            Les actions effectuées apparaîtront ici
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {actionLogs.map((log) => {
+                                            const statusIcon = 
+                                                log.status === 'success' ? (
+                                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                                ) : log.status === 'error' ? (
+                                                    <XCircle className="h-4 w-4 text-red-500" />
+                                                ) : log.status === 'sent' ? (
+                                                    <Send className="h-4 w-4 text-blue-500" />
+                                                ) : (
+                                                    <Clock className="h-4 w-4 text-yellow-500 animate-pulse" />
+                                                );
+
+                                            const statusColor =
+                                                log.status === 'success' ? 'text-green-600 dark:text-green-400' :
+                                                log.status === 'error' ? 'text-red-600 dark:text-red-400' :
+                                                log.status === 'sent' ? 'text-blue-600 dark:text-blue-400' :
+                                                'text-yellow-600 dark:text-yellow-400';
+
+                                            const typeBadgeColor =
+                                                log.type === 'command' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                                                log.type === 'session' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
+                                                log.type === 'error' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                                                'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
+
+                                            return (
+                                                <div
+                                                    key={log.id}
+                                                    className="flex items-start gap-2 p-2 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors"
+                                                >
+                                                    <div className="mt-0.5">{statusIcon}</div>
+                                                    <div className="flex-1 min-w-0 space-y-1">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className={`text-xs font-medium ${statusColor}`}>
+                                                                {log.action}
+                                                            </span>
+                                                            <Badge variant="secondary" className={`text-xs ${typeBadgeColor}`}>
+                                                                {log.type}
+                                                            </Badge>
+                                                        </div>
+                                                        {log.command && (
+                                                            <div className="font-mono text-xs bg-muted p-1.5 rounded border text-xs">
+                                                                <span className="text-muted-foreground">&gt; </span>
+                                                                {log.command}
+                                                            </div>
+                                                        )}
+                                                        {log.details && (
+                                                            <p className="text-xs text-muted-foreground line-clamp-2">
+                                                                {log.details}
+                                                            </p>
+                                                        )}
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {log.timestamp.toLocaleTimeString('fr-FR', {
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                                second: '2-digit',
+                                                            })}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Topology Graph - En bas avec largeur maximale */}
+                <div className="relative w-full h-[400px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 mt-4">
                         {/* Topology Graph - Show when lab is running - Must be on top */}
                         {(() => {
                             const normalizedState = typeof lab.state === 'string' 
@@ -494,14 +695,21 @@ export default function Workspace() {
                             
                             const shouldShow = normalizedState === 'RUNNING' || normalizedState === 'STARTED';
                             
-                            console.log('Workspace: Rendu topologie', {
-                                normalizedState,
-                                shouldShow,
-                                nodeListCount: nodeList.length,
-                                linksCount: Array.isArray(links) ? links.length : 0,
-                                topologyType: typeof topology,
-                                hasTopologyNodes: !!(topology && typeof topology === 'object' && (topology as any).nodes),
-                            });
+                            // Log uniquement en mode développement et seulement si les valeurs changent
+                            if (import.meta.env.DEV) {
+                                const logKey = `${normalizedState}-${shouldShow}-${nodeList.length}-${Array.isArray(links) ? links.length : 0}`;
+                                if (!(window as any).__lastTopologyLog || (window as any).__lastTopologyLog !== logKey) {
+                                    console.log('Workspace: Rendu topologie', {
+                                        normalizedState,
+                                        shouldShow,
+                                        nodeListCount: nodeList.length,
+                                        linksCount: Array.isArray(links) ? links.length : 0,
+                                        topologyType: typeof topology,
+                                        hasTopologyNodes: !!(topology && typeof topology === 'object' && (topology as any).nodes),
+                                    });
+                                    (window as any).__lastTopologyLog = logKey;
+                                }
+                            }
                             
                             return shouldShow;
                         })() ? (
@@ -603,9 +811,16 @@ export default function Workspace() {
                             }
                             return null;
                         })()}
-                    </div>
                 </div>
             </div>
         </AppLayout>
+    );
+}
+
+export default function Workspace() {
+    return (
+        <ActionLogsProvider>
+            <WorkspaceContent />
+        </ActionLogsProvider>
     );
 }

@@ -117,11 +117,37 @@ class CmlConfigController extends Controller
             $result = $cmlService->auth_extended($username, $password);
 
             if (isset($result['error'])) {
-                return response()->json([
+                $statusCode = $result['status'] ?? 503;
+                $message = $result['error'];
+                
+                // Ajouter des informations supplémentaires pour le débogage
+                $responseData = [
                     'success' => false,
-                    'message' => $result['error'],
-                    'details' => $result,
-                ], 401);
+                    'message' => $message,
+                    'details' => $result['details'] ?? $result,
+                ];
+
+                // Si c'est une erreur de connexion, ajouter des suggestions
+                if (isset($result['connection_error']) && $result['connection_error']) {
+                    $responseData['connection_error'] = true;
+                    $responseData['is_timeout'] = $result['is_timeout'] ?? false;
+                    if (isset($result['details']['suggestions'])) {
+                        $responseData['suggestions'] = $result['details']['suggestions'];
+                    }
+                }
+
+                // En mode local, ajouter plus d'informations
+                if (app()->environment('local')) {
+                    $responseData['debug'] = [
+                        'base_url' => $baseUrl,
+                        'username' => $username,
+                        'password_provided' => !empty($password),
+                        'url_used' => rtrim($baseUrl, '/') . '/api/v0/auth_extended',
+                        'error_type' => $result['connection_error'] ?? false ? 'connection' : 'authentication',
+                    ];
+                }
+
+                return response()->json($responseData, $statusCode);
             }
 
             // Vérifier que le token est présent

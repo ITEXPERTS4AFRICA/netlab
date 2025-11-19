@@ -1,13 +1,13 @@
 <?php
 
-use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\CmlConfigController;
+use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\PaymentHealthController;
+use App\Http\Controllers\Admin\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
-    Route::get('/', function () {
-        return redirect()->route('admin.users.index');
-    })->name('dashboard');
+    Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
     // Gestion des utilisateurs
     Route::resource('users', UserController::class);
@@ -17,6 +17,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('cml-config', [CmlConfigController::class, 'index'])->name('cml-config.index');
     Route::put('cml-config', [CmlConfigController::class, 'update'])->name('cml-config.update');
     Route::post('cml-config/test', [CmlConfigController::class, 'testConnection'])->name('cml-config.test');
+
+    // Santé de l'API de paiement
+    Route::get('payments/health', [PaymentHealthController::class, 'index'])->name('payments.health');
+    Route::post('payments/health/refresh', [PaymentHealthController::class, 'refresh'])->name('payments.health.refresh');
 
     // Gestion des labs (sans création manuelle)
     Route::get('labs', [\App\Http\Controllers\Admin\LabController::class, 'index'])->name('labs.index');
@@ -42,5 +46,12 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('labs/{lab}/snapshots/{snapshot}/restore', [\App\Http\Controllers\Admin\LabController::class, 'restoreSnapshot'])->name('labs.snapshots.restore');
     Route::patch('labs/{lab}/snapshots/{snapshot}/set-default', [\App\Http\Controllers\Admin\LabController::class, 'setDefaultSnapshot'])->name('labs.snapshots.set-default');
     Route::delete('labs/{lab}/snapshots/{snapshot}', [\App\Http\Controllers\Admin\LabController::class, 'deleteSnapshot'])->name('labs.snapshots.delete');
+
+    // Gestion des réservations
+    Route::get('reservations', [\App\Http\Controllers\Admin\ReservationController::class, 'index'])->name('reservations.index');
+    Route::get('reservations/{reservation}', [\App\Http\Controllers\Admin\ReservationController::class, 'show'])->name('reservations.show');
+    Route::put('reservations/{reservation}', [\App\Http\Controllers\Admin\ReservationController::class, 'update'])->name('reservations.update');
+    Route::post('reservations/{reservation}/cancel', [\App\Http\Controllers\Admin\ReservationController::class, 'cancel'])->name('reservations.cancel');
+    Route::post('reservations/cleanup', [\App\Http\Controllers\Admin\ReservationController::class, 'cleanupExpired'])->name('reservations.cleanup');
 });
 

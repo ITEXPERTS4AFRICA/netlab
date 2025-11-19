@@ -345,6 +345,20 @@ class ConsoleController extends Controller
 
         return response()->json($log);
     }
+
+    /**
+     * Endpoint ping pour vérifier la disponibilité de l'API console.
+     */
+    public function ping(): JsonResponse
+    {
+        $token = session('cml_token');
+        
+        return response()->json([
+            'status' => 'ok',
+            'timestamp' => now()->toIso8601String(),
+            'has_token' => !empty($token),
+        ]);
+    }
 }
 
 

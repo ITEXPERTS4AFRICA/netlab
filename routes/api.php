@@ -27,6 +27,7 @@ Route::middleware(['web', 'auth'])->group(function(){
     Route::get('/labs/{lab}/check', [LabController::class, 'convergence']); // Alias pour convergence
 
     // Console management
+    Route::get('/console/ping', [ConsoleController::class, 'ping']);
     Route::get('/labs/{labId}/nodes/{nodeId}/consoles', [ConsoleController::class, 'index']);
     Route::get('/labs/{labId}/nodes/{nodeId}/consoles/{consoleId}/log', [ConsoleController::class, 'log']);
     Route::get('/console/sessions', [ConsoleController::class, 'sessions']);
@@ -38,6 +39,10 @@ Route::middleware(['web', 'auth'])->group(function(){
     Route::get('/payments/{payment}', [\App\Http\Controllers\PaymentController::class, 'show']);
     Route::post('/reservations/{reservation}/payments/initiate', [\App\Http\Controllers\PaymentController::class, 'initiate']);
     Route::get('/payments/{payment}/check-status', [\App\Http\Controllers\PaymentController::class, 'checkStatus']);
+
+    // CML Token management
+    Route::post('/cml/token/refresh', [\App\Http\Controllers\Api\CmlTokenController::class, 'refresh']);
+    Route::get('/cml/token/check', [\App\Http\Controllers\Api\CmlTokenController::class, 'check']);
 });
 
 // Webhooks (sans authentification)

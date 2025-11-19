@@ -304,14 +304,28 @@ class ReservationController extends Controller
                 'error' => $result['error'] ?? 'Unknown error',
                 'code' => $result['code'] ?? 'UNKNOWN',
                 'description' => $result['description'] ?? null,
+                'is_timeout' => $result['is_timeout'] ?? false,
                 'reservation_id' => $reservation->id,
             ]);
 
+            // En cas d'erreur de paiement, la réservation reste créée mais en statut "pending"
+            // Elle sera automatiquement annulée après 15 minutes si le paiement n'est pas réussi
+            // L'utilisateur pourra réessayer le paiement plus tard via l'endpoint de paiement
+            // Marquer la réservation avec un indicateur pour qu'elle soit automatiquement nettoyée
+            $reservation->update([
+                'status' => 'pending',
+                'notes' => 'Paiement non initialisé - ' . ($result['is_timeout'] ? 'Timeout' : 'Erreur') . ' - ' . now()->toDateTimeString(),
+            ]);
+            
             return response()->json([
                 'error' => $result['error'] ?? 'Erreur lors de l\'initialisation du paiement',
                 'code' => $result['code'] ?? 'UNKNOWN',
                 'description' => $result['description'] ?? null,
-                'reservation' => $reservation,
+                'is_timeout' => $result['is_timeout'] ?? false,
+                'reservation' => $reservation->fresh(),
+                'can_retry_payment' => true,
+                'retry_payment_url' => "/api/reservations/{$reservation->id}/payments/initiate",
+                'message' => 'La réservation a été créée mais le paiement n\'a pas pu être initialisé. Vous pouvez réessayer le paiement depuis la page de vos réservations. Note: La réservation sera automatiquement annulée après 15 minutes si le paiement n\'est pas réussi.',
             ], 500);
         }
 

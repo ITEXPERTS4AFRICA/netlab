@@ -32,6 +32,7 @@ export default function IOSConsole({
     const [suggestionIndex, setSuggestionIndex] = useState(0);
     const [showHistory, setShowHistory] = useState(false);
     const [showCheatsheet, setShowCheatsheet] = useState(false);
+    const [cheatsheetView, setCheatsheetView] = useState<'list' | 'kanban'>('list');
     const inputRef = useRef<HTMLInputElement>(null);
     const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -451,53 +452,120 @@ export default function IOSConsole({
                         </Button>
                     </CollapsibleTrigger>
                     <CollapsibleContent className="mt-2">
-                        <div className="bg-gray-900 rounded-lg border border-gray-700 p-4 max-h-[300px] overflow-y-auto">
-                            <div className="space-y-4">
-                                {Object.entries(iosCommandsCatalog).map(([category, commands]) => {
-                                    const isArray = Array.isArray(commands);
-                                    return (
-                                        <div key={category} className="border-b border-gray-700 pb-3 last:border-0">
-                                            <h4 className="text-sm font-semibold text-blue-400 mb-2">{category}</h4>
-                                            <div className="space-y-1">
-                                                {isArray ? (
-                                                    commands.map((cmd, idx) => (
-                                                        <div
-                                                            key={idx}
-                                                            onClick={() => handleCommandClick(cmd)}
-                                                            className="text-xs font-mono text-gray-300 hover:text-blue-400 hover:bg-gray-800 cursor-pointer px-2 py-1 rounded transition-colors"
-                                                        >
-                                                            {cmd}
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    Object.entries(commands).map(([mainCmd, subCmds]) => (
-                                                        <div key={mainCmd} className="mb-1">
-                                                            <div
-                                                                onClick={() => handleCommandClick(mainCmd)}
-                                                                className="text-xs font-mono text-cyan-400 hover:text-cyan-300 hover:bg-gray-800 cursor-pointer px-2 py-1 rounded transition-colors font-semibold"
-                                                            >
-                                                                {mainCmd}
-                                                            </div>
-                                                            {Array.isArray(subCmds) && subCmds.length > 0 && (
-                                                                <div className="ml-4 mt-1 space-y-0.5">
-                                                                    {subCmds.map((subCmd, idx) => (
-                                                                        <div
-                                                                            key={idx}
-                                                                            onClick={() => handleCommandClick(`${mainCmd} ${subCmd}`)}
-                                                                            className="text-xs font-mono text-gray-400 hover:text-blue-400 hover:bg-gray-800 cursor-pointer px-2 py-0.5 rounded transition-colors"
-                                                                        >
-                                                                            {subCmd}
-                                                                        </div>
-                                                                    ))}
+                        <div className="bg-gray-900 rounded-lg border border-gray-700 p-4">
+                            {/* Sélecteur de vue */}
+                            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700">
+                                <span className="text-xs text-gray-400">Vue :</span>
+                                <Button
+                                    variant={cheatsheetView === 'list' ? 'default' : 'ghost'}
+                                    size="sm"
+                                    onClick={() => setCheatsheetView('list')}
+                                    className="h-7 text-xs"
+                                >
+                                    Liste
+                                </Button>
+                                <Button
+                                    variant={cheatsheetView === 'kanban' ? 'default' : 'ghost'}
+                                    size="sm"
+                                    onClick={() => setCheatsheetView('kanban')}
+                                    className="h-7 text-xs"
+                                >
+                                    Kanban
+                                </Button>
+                            </div>
+
+                            <div className={cn(
+                                "max-h-[300px] overflow-y-auto",
+                                cheatsheetView === 'kanban' && "overflow-x-auto"
+                            )}>
+                                {cheatsheetView === 'list' ? (
+                                    <div className="space-y-4">
+                                        {Object.entries(iosCommandsCatalog).map(([category, commands]) => {
+                                            const isArray = Array.isArray(commands);
+                                            return (
+                                                <div key={category} className="border-b border-gray-700 pb-3 last:border-0">
+                                                    <h4 className="text-sm font-semibold text-blue-400 mb-2">{category}</h4>
+                                                    <div className="space-y-1">
+                                                        {isArray ? (
+                                                            commands.map((cmd, idx) => (
+                                                                <div
+                                                                    key={idx}
+                                                                    onClick={() => handleCommandClick(cmd)}
+                                                                    className="text-xs font-mono text-gray-300 hover:text-blue-400 hover:bg-gray-800 cursor-pointer px-2 py-1 rounded transition-colors"
+                                                                >
+                                                                    {cmd}
                                                                 </div>
-                                                            )}
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                                            ))
+                                                        ) : (
+                                                            Object.entries(commands).map(([mainCmd, subCmds]) => (
+                                                                <div key={mainCmd} className="mb-1">
+                                                                    <div
+                                                                        onClick={() => handleCommandClick(mainCmd)}
+                                                                        className="text-xs font-mono text-cyan-400 hover:text-cyan-300 hover:bg-gray-800 cursor-pointer px-2 py-1 rounded transition-colors font-semibold"
+                                                                    >
+                                                                        {mainCmd}
+                                                                    </div>
+                                                                    {Array.isArray(subCmds) && subCmds.length > 0 && (
+                                                                        <div className="ml-4 mt-1 space-y-0.5">
+                                                                            {subCmds.map((subCmd, idx) => (
+                                                                                <div
+                                                                                    key={idx}
+                                                                                    onClick={() => handleCommandClick(`${mainCmd} ${subCmd}`)}
+                                                                                    className="text-xs font-mono text-gray-400 hover:text-blue-400 hover:bg-gray-800 cursor-pointer px-2 py-0.5 rounded transition-colors"
+                                                                                >
+                                                                                    {subCmd}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div className="flex gap-3 min-w-max">
+                                        {Object.entries(iosCommandsCatalog).map(([category, commands]) => {
+                                            const isArray = Array.isArray(commands);
+                                            const allCommands: string[] = [];
+                                            
+                                            if (isArray) {
+                                                allCommands.push(...commands);
+                                            } else {
+                                                Object.entries(commands).forEach(([mainCmd, subCmds]) => {
+                                                    allCommands.push(mainCmd);
+                                                    if (Array.isArray(subCmds)) {
+                                                        subCmds.forEach(subCmd => {
+                                                            allCommands.push(`${mainCmd} ${subCmd}`);
+                                                        });
+                                                    }
+                                                });
+                                            }
+
+                                            return (
+                                                <div key={category} className="flex-shrink-0 w-64 bg-gray-800 rounded-lg border border-gray-700 p-3">
+                                                    <h4 className="text-sm font-semibold text-blue-400 mb-3 pb-2 border-b border-gray-700">
+                                                        {category}
+                                                    </h4>
+                                                    <div className="space-y-1.5 max-h-[250px] overflow-y-auto">
+                                                        {allCommands.map((cmd, idx) => (
+                                                            <div
+                                                                key={idx}
+                                                                onClick={() => handleCommandClick(cmd)}
+                                                                className="text-xs font-mono text-gray-300 hover:text-blue-400 hover:bg-gray-700 cursor-pointer px-2 py-1.5 rounded transition-colors bg-gray-900/50 border border-gray-700/50"
+                                                            >
+                                                                {cmd}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </CollapsibleContent>

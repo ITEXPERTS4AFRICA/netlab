@@ -7,8 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { Loader2, Power, RefreshCcw, Terminal, Code } from 'lucide-react';
-import { useConsole, type ConsoleResponse, type ConsoleSessionResponse } from '@/hooks/useConsole';
+import { useConsole } from '@/hooks/useConsole';
 import IOSConsole from '@/components/IOSConsole';
+import { useActionLogs } from '@/contexts/ActionLogsContext';
+import ConsoleCommandTester from '@/components/ConsoleCommandTester';
 
 type LabNode = {
     id: string;
@@ -53,6 +55,7 @@ type Props = {
     cmlLabId: string;
     nodes: LabNode[];
     initialSessions: ConsoleSessionsResponse | ConsoleSession[] | null;
+    labTitle?: string;
 };
 
 type SessionState = {
@@ -77,7 +80,7 @@ const CONNECTION_META: Record<ConnectionState, { label: string; variant: 'outlin
 
 const MAX_LOG_LINES = 500;
 
-export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Props) {
+export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labTitle }: Props) {
     // Mode d'affichage : 'iframe' (console CML native) ou 'ios' (console intelligente IOS)
     const [consoleMode, setConsoleMode] = useState<'iframe' | 'ios'>('ios');
     
@@ -104,6 +107,9 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
     const [error, setError] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const sessionRef = useRef<SessionState | null>(null);
+    
+    // Utiliser le contexte partagé pour les logs d'actions
+    const { actionLogs, addActionLog, updateActionLogStatus } = useActionLogs();
     
     // Utiliser le hook useConsole pour les appels API typés
     const consoleApi = useConsole();
@@ -144,6 +150,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             return next;
         });
     }, []);
+
 
     const teardownWebsocket = useCallback((options?: { reason?: string; silent?: boolean }) => {
         if (wsRef.current) {
@@ -247,6 +254,29 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         }
     }, [selectedNodeId, closeSession]);
 
+    // Vérifier la disponibilité de la connexion avant de créer une session
+    const checkConnectionAvailability = useCallback(async (): Promise<boolean> => {
+        try {
+            // Vérifier que le serveur CML est accessible
+            const response = await fetch('/api/console/ping', {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store',
+            });
+            
+            if (!response.ok) {
+                console.warn('API console non disponible:', response.status);
+                return false;
+            }
+            
+            const data = await response.json();
+            return data.status === 'ok';
+        } catch (err) {
+            console.error('Erreur lors de la vérification de la connexion:', err);
+            return false;
+        }
+    }, []);
+
     useEffect(() => {
         const activeSession = session;
 
@@ -260,8 +290,27 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         if (activeSession.consoleUrl) {
             teardownWebsocket({ silent: true });
             setConnectionState('open');
-            // Ne pas logger le message iframe, l'iframe sera affiché directement
-            return;
+            
+            // Vérifier périodiquement que la session est toujours disponible
+            const checkInterval = setInterval(async () => {
+                try {
+                    const isAvailable = await checkConnectionAvailability();
+                    if (!isAvailable && connectionState === 'open') {
+                        console.warn('Connexion perdue, tentative de reconnexion...');
+                        setConnectionState('error');
+                        toast.warning('Connexion perdue. Vérification de la disponibilité...');
+                    } else if (isAvailable && connectionState === 'error') {
+                        setConnectionState('open');
+                        toast.success('Connexion rétablie.');
+                    }
+                } catch (err) {
+                    console.error('Erreur lors de la vérification de la connexion:', err);
+                }
+            }, 30000); // Vérifier toutes les 30 secondes
+
+            return () => {
+                clearInterval(checkInterval);
+            };
         }
         
         // Fallback pour WebSocket (si jamais utilisé dans le futur)
@@ -348,13 +397,28 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                 wsRef.current = null;
             }
         };
-    }, [session, appendLog, teardownWebsocket]);
+    }, [session, appendLog, teardownWebsocket, checkConnectionAvailability, connectionState]);
 
     const handleCreateSession = useCallback(async (type?: string) => {
         if (!selectedNodeId) {
             toast.error('Sélectionnez un nœud avant de lancer une console.');
             return;
         }
+
+        // Vérifier la disponibilité de la connexion avant de créer la session
+        const isAvailable = await checkConnectionAvailability();
+        if (!isAvailable) {
+            toast.error('Connexion non disponible. Vérifiez que le serveur CML est accessible.');
+            return;
+        }
+
+        addActionLog({
+            type: 'session',
+            action: 'Création de session console',
+            status: 'pending',
+            nodeId: selectedNodeId,
+            details: `Ouverture d'une session console pour le nœud ${selectedNodeId}${type ? ` (type: ${type})` : ''}`,
+        });
 
         setLoadingSession(true);
         setError(null);
@@ -374,7 +438,8 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             
             // Vérifier si la réponse contient une erreur
             if ('error' in data && data.error) {
-                throw new Error(data.error);
+                const errorMessage = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+                throw new Error(errorMessage);
             }
 
             const sessionId = data.session_id ?? data.id ?? '';
@@ -397,10 +462,12 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                 throw new Error('URL de console non fournie par le serveur.');
             }
 
+            const consoleUrlString = typeof consoleUrl === 'string' ? consoleUrl : String(consoleUrl);
+
             const nextSession: SessionState = {
                 sessionId,
                 nodeId: data.node_id ?? selectedNodeId,
-                consoleUrl: typeof consoleUrl === 'string' ? consoleUrl : undefined,
+                consoleUrl: consoleUrlString,
                 wsHref: undefined, // CML n'utilise pas de WebSocket
                 protocol: data.protocol,
                 type: data.type ?? type,
@@ -411,15 +478,28 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             setConnectionState('open'); // CML utilise des iframes, pas de connexion WebSocket
             appendLog('[Console] Session console créée.');
             // Masquer l'URL complète, ne garder que l'ID de session
-            const urlParts = consoleUrl.split('/');
+            const urlParts = consoleUrlString.split('/');
             const urlSessionId = urlParts[urlParts.length - 1] || 'N/A';
             appendLog(`[Console] Session ID: ${urlSessionId}`);
+            
+            // Mettre à jour le log d'action
+            const lastLog = actionLogs.find(log => log.type === 'session' && log.status === 'pending' && log.nodeId === selectedNodeId);
+            if (lastLog) {
+                updateActionLogStatus(lastLog.id, 'success', `Session créée avec succès. ID: ${urlSessionId}`);
+            }
+            
             toast.success('Session console créée.');
         } catch (err) {
             console.error('Erreur lors de la création de session:', err);
             const errorMessage = err instanceof Error ? err.message : 'Impossible de créer la session.';
             setError(errorMessage);
             setConnectionState('error');
+            
+            // Mettre à jour le log d'action avec l'erreur
+            const lastLog = actionLogs.find(log => log.type === 'session' && log.status === 'pending' && log.nodeId === selectedNodeId);
+            if (lastLog) {
+                updateActionLogStatus(lastLog.id, 'error', `Erreur: ${errorMessage}`);
+            }
             
             // Message d'erreur plus détaillé
             let toastMessage = 'Création de session impossible.';
@@ -435,11 +515,25 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         } finally {
             setLoadingSession(false);
         }
-    }, [appendLog, cmlLabId, closeSession, selectedNodeId]);
+    }, [appendLog, cmlLabId, closeSession, selectedNodeId, addActionLog, actionLogs, updateActionLogStatus, checkConnectionAvailability]);
 
     const handleCloseSession = useCallback(() => {
+        addActionLog({
+            type: 'session',
+            action: 'Fermeture de session console',
+            status: 'pending',
+            nodeId: sessionRef.current?.nodeId,
+            details: 'Fermeture manuelle de la session',
+        });
         void closeSession({ reason: 'Session fermée manuellement' });
-    }, [closeSession]);
+        // Mettre à jour le statut après la fermeture
+        setTimeout(() => {
+            const lastLog = actionLogs.find(log => log.type === 'session' && log.action === 'Fermeture de session console' && log.status === 'pending');
+            if (lastLog) {
+                updateActionLogStatus(lastLog.id, 'success', 'Session fermée avec succès');
+            }
+        }, 500);
+    }, [closeSession, addActionLog, actionLogs, updateActionLogStatus]);
 
     const handleSendCommand = useCallback(async () => {
         const trimmed = command.trimEnd();
@@ -451,9 +545,16 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
             return;
         }
 
-        // Si on a un consoleUrl, on peut toujours essayer d'envoyer via WebSocket
-        // ou simplement logger la commande pour l'instant
-        // (L'iframe CML n'est plus affiché, on utilise uniquement la console IOS intelligente)
+        // Créer un log d'action pour cette commande
+        const actionLogId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        addActionLog({
+            type: 'command',
+            action: 'Envoi de commande',
+            command: trimmed,
+            status: 'pending',
+            nodeId: activeSession.nodeId,
+            details: `Commande: ${trimmed}`,
+        });
 
         // Si on a un WebSocket ouvert, l'utiliser
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -461,9 +562,20 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
         try {
             wsRef.current.send(payload);
             appendLog(`> ${trimmed}`);
+                
+                // Mettre à jour le statut du log
+                updateActionLogStatus(actionLogId, 'sent', `Commande envoyée via WebSocket: ${trimmed}`);
+                
+                // Mettre à jour le statut après un court délai pour indiquer le succès
+                setTimeout(() => {
+                    updateActionLogStatus(actionLogId, 'success', `Commande envoyée avec succès: ${trimmed}`);
+                }, 500);
+                
             setCommand('');
+                toast.success(`Commande envoyée: ${trimmed}`);
         } catch (err) {
             console.error(err);
+                updateActionLogStatus(actionLogId, 'error', `Erreur lors de l'envoi: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
             toast.error('Échec d\'envoi de la commande.');
             setConnectionState('error');
         }
@@ -472,10 +584,11 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
 
         // Sinon, essayer d'envoyer via l'API REST si disponible
         // Pour l'instant, on affiche juste un message d'erreur
+        updateActionLogStatus(actionLogId, 'error', 'Connexion WebSocket non disponible');
         toast.error('Connexion WebSocket non disponible. Veuillez attendre que la connexion soit établie.');
         appendLog(`> ${trimmed} (en attente de connexion...)`);
         setCommand('');
-    }, [appendLog, command]);
+    }, [appendLog, command, addActionLog, updateActionLogStatus, sessionRef]);
 
     const handleLoadLog = useCallback(async (consoleId: string) => {
         if (!consoleId) return;
@@ -699,7 +812,9 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
 
                 <Separator />
 
-                {/* Sélecteur de mode console */}
+                {/* Section console */}
+                <div className="flex-1 flex flex-col">
+                    {/* Sélecteur de mode console */}
                     <div className="flex items-center gap-2 pb-2">
                         <span className="text-xs text-muted-foreground">Mode console :</span>
                         <Button
@@ -713,33 +828,193 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions }: Pr
                         </Button>
                     </div>
 
-                {/* Console intelligente IOS - Toujours afficher, jamais l'iframe CML */}
-                {consoleMode === 'ios' ? (
-                    <IOSConsole
-                        onSendCommand={handleSendCommand}
-                        output={logLines}
-                        isConnected={isSessionOpen}
-                        nodeLabel={selectedNode?.label || selectedNode?.name || undefined}
-                        nodeState={selectedNode?.state}
-                        className="flex-1"
-                    />
-                ) : (
-                <div className="flex-1 overflow-hidden rounded-lg border border-muted bg-black/95 dark:bg-black">
-                        {logLines.length > 0 ? (
-                        <div className="overflow-y-auto p-3 font-mono text-xs text-emerald-200">
-                            {logLines.map((line, index) => (
-                            <pre key={index} className="whitespace-pre-wrap">
-                                {line}
-                            </pre>
-                            ))}
-                        </div>
+                    {/* Console intelligente IOS - Toujours afficher, jamais l'iframe CML */}
+                    {consoleMode === 'ios' ? (
+                        <IOSConsole
+                            onSendCommand={(cmd) => {
+                                // Créer un log d'action pour cette commande
+                                const actionLogId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                                addActionLog({
+                                    type: 'command',
+                                    action: 'Envoi de commande',
+                                    command: cmd,
+                                    status: 'pending',
+                                    nodeId: sessionRef.current?.nodeId,
+                                    details: `Commande: ${cmd}`,
+                                });
+                                
+                                // Appeler handleSendCommand avec la commande
+                                const trimmed = cmd.trimEnd();
+                                if (!trimmed) return;
+                                
+                                const activeSession = sessionRef.current;
+                                if (!activeSession) {
+                                    toast.error('Aucune session console active.');
+                                    return;
+                                }
+                                
+                                // Si on a un WebSocket ouvert, l'utiliser
+                                if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                                    const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
+                                    try {
+                                        wsRef.current.send(payload);
+                                        appendLog(`> ${trimmed}`);
+                                        
+                                        // Mettre à jour le statut du log
+                                        updateActionLogStatus(actionLogId, 'sent', `Commande envoyée via WebSocket: ${trimmed}`);
+                                        
+                                        // Mettre à jour le statut après un court délai pour indiquer le succès
+                                        setTimeout(() => {
+                                            updateActionLogStatus(actionLogId, 'success', `Commande envoyée avec succès: ${trimmed}`);
+                                        }, 500);
+                                        
+                                        toast.success(`Commande envoyée: ${trimmed}`);
+                                    } catch (err) {
+                                        console.error(err);
+                                        updateActionLogStatus(actionLogId, 'error', `Erreur lors de l'envoi: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+                                        toast.error('Échec d\'envoi de la commande.');
+                                        setConnectionState('error');
+                                    }
+                                    return;
+                                }
+                                
+                                // Sinon, essayer d'envoyer via l'API REST si disponible
+                                updateActionLogStatus(actionLogId, 'error', 'Connexion WebSocket non disponible');
+                                toast.error('Connexion WebSocket non disponible. Veuillez attendre que la connexion soit établie.');
+                                appendLog(`> ${trimmed} (en attente de connexion...)`);
+                            }}
+                            output={logLines}
+                            isConnected={Boolean(isSessionOpen)}
+                            nodeLabel={selectedNode?.label || selectedNode?.name || undefined}
+                            nodeState={selectedNode?.state}
+                            className="flex-1"
+                        />
                     ) : (
-                        <div className="flex h-full items-center justify-center p-3">
-                        <p className="text-muted-foreground">La sortie console apparaîtra ici.</p>
+                        <div className="flex-1 overflow-hidden rounded-lg border border-muted bg-black/95 dark:bg-black">
+                            {logLines.length > 0 ? (
+                                <div className="overflow-y-auto p-3 font-mono text-xs text-emerald-200">
+                                    {logLines.map((line, index) => (
+                                        <pre key={index} className="whitespace-pre-wrap">
+                                            {line}
+                                        </pre>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="flex h-full items-center justify-center p-3">
+                                    <p className="text-muted-foreground">La sortie console apparaîtra ici.</p>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
-                )}
+
+                {/* Section Tests TDD */}
+                <Separator />
+                <ConsoleCommandTester
+                    onCommandSend={async (command) => {
+                        // Utiliser handleSendCommand pour envoyer la commande
+                        const trimmed = command.trim();
+                        if (!trimmed) return;
+
+                        const activeSession = sessionRef.current;
+                        if (!activeSession) {
+                            throw new Error('Aucune session console active.');
+                        }
+
+                        // Vérifier que la session est prête
+                        const isReady = activeSession.consoleUrl 
+                            ? connectionState === 'open'
+                            : (wsRef.current !== null && wsRef.current.readyState === WebSocket.OPEN);
+                        
+                        if (!isReady) {
+                            throw new Error('Session non prête. Veuillez attendre que la connexion soit établie.');
+                        }
+
+                        // Si on a un WebSocket ouvert, l'utiliser
+                        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                            const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
+                            wsRef.current.send(payload);
+                            appendLog(`> ${trimmed}`);
+                            return;
+                        }
+
+                        // Pour CML avec consoleUrl (iframe), les commandes sont envoyées via l'iframe
+                        if (activeSession.consoleUrl) {
+                            appendLog(`> ${trimmed}`);
+                            return;
+                        }
+
+                        throw new Error('Connexion non disponible');
+                    }}
+                    commandCatalog={{
+                        'Commandes de visualisation': {
+                            'show': [
+                                'running-config', 'startup-config', 'version', 'inventory', 'clock',
+                                'ip', 'interface', 'vlan', 'cdp', 'lldp', 'arp', 'route', 'ospf',
+                                'eigrp', 'bgp', 'access-lists', 'mac', 'spanning-tree', 'trunk',
+                                'port-security', 'users', 'sessions', 'processes', 'memory', 'cpu',
+                                'flash', 'boot', 'redundancy', 'standby', 'logging', 'snmp',
+                            ],
+                        },
+                        'Commandes de configuration': {
+                            'configure': ['terminal', 'memory', 'network'],
+                            'interface': [
+                                'gigabitethernet', 'fastethernet', 'ethernet', 'serial', 'loopback',
+                                'tunnel', 'vlan', 'port-channel', 'tengigabitethernet',
+                            ],
+                            'ip': [
+                                'address', 'route', 'ospf', 'eigrp', 'bgp', 'access-list', 'nat',
+                                'dhcp', 'domain', 'name-server', 'default-gateway',
+                            ],
+                            'vlan': [],
+                            'line': ['console', 'vty', 'aux'],
+                            'hostname': [],
+                            'banner': ['motd', 'login', 'exec'],
+                            'username': [],
+                            'clock': ['set', 'timezone'],
+                            'logging': ['console', 'buffered', 'trap', 'facility'],
+                            'snmp-server': ['community', 'location', 'contact', 'enable'],
+                        },
+                        'Commandes d\'interface': [
+                            'ip address', 'ip access-group', 'shutdown', 'no shutdown',
+                            'description', 'duplex', 'speed', 'switchport', 'switchport mode',
+                            'switchport access vlan', 'switchport trunk', 'spanning-tree',
+                            'port-security', 'cdp', 'lldp',
+                        ],
+                        'Commandes de ligne': [
+                            'password', 'login', 'exec-timeout', 'logging synchronous',
+                            'transport input', 'transport output', 'access-class',
+                        ],
+                        'Commandes système': {
+                            'enable': ['password', 'secret'],
+                            'disable': [],
+                            'exit': [],
+                            'logout': [],
+                            'reload': [],
+                            'copy': ['running-config', 'startup-config', 'flash', 'tftp', 'ftp'],
+                            'write': ['memory', 'erase'],
+                            'erase': ['startup-config', 'flash'],
+                        },
+                        'Commandes réseau': {
+                            'ping': [],
+                            'traceroute': [],
+                            'telnet': [],
+                            'ssh': [],
+                        },
+                        'Commandes de débogage': {
+                            'debug': [],
+                            'undebug': [],
+                        },
+                        'Commandes terminal': {
+                            'terminal': ['length', 'width', 'monitor', 'no', 'history'],
+                            'clear': ['line', 'counters', 'arp', 'mac', 'spanning-tree'],
+                        },
+                        'Commandes de négation': {
+                            'no': ['shutdown'],
+                        },
+                    }}
+                    labName={labTitle}
+                />
             </CardContent>
 
             <CardFooter className="flex flex-col gap-2">
