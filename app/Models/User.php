@@ -10,6 +10,8 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use App\Models\Reservation;
 use App\Models\Payment;
+use App\Models\Warning;
+use App\Models\UserBan;
 
 class User extends Authenticatable
 {
@@ -127,6 +129,61 @@ class User extends Authenticatable
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function warnings(): HasMany
+    {
+        return $this->hasMany(Warning::class);
+    }
+
+    public function issuedWarnings(): HasMany
+    {
+        return $this->hasMany(Warning::class, 'issued_by');
+    }
+
+    public function bans(): HasMany
+    {
+        return $this->hasMany(UserBan::class);
+    }
+
+    public function issuedBans(): HasMany
+    {
+        return $this->hasMany(UserBan::class, 'banned_by');
+    }
+
+    /**
+     * Vérifier si l'utilisateur est actuellement banni
+     */
+    public function isBanned(): bool
+    {
+        return $this->bans()
+            ->where(function ($query) {
+                $query->where('is_permanent', true)
+                    ->orWhere('banned_until', '>', now());
+            })
+            ->exists();
+    }
+
+    /**
+     * Obtenir le banissement actif
+     */
+    public function activeBan()
+    {
+        return $this->bans()
+            ->where(function ($query) {
+                $query->where('is_permanent', true)
+                    ->orWhere('banned_until', '>', now());
+            })
+            ->latest()
+            ->first();
+    }
+
+    /**
+     * Vérifier si l'utilisateur est admin ou instructeur
+     */
+    public function isAdminOrInstructor(): bool
+    {
+        return $this->isAdmin() || $this->isInstructor();
     }
 
     /**

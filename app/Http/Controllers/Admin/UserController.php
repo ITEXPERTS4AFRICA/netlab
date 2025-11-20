@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Reservation;
 use App\Models\Payment;
+use App\Models\Warning;
+use App\Models\UserBan;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -153,11 +156,17 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
+        // Seuls les admins peuvent créer des admins
+        if ($request->input('role') === 'admin' && !auth()->user()->isAdmin()) {
+            return redirect()->back()
+                ->with('error', 'Seuls les administrateurs peuvent créer des comptes administrateurs.');
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'role' => ['required', 'in:admin,instructor,student,user'],
+            'role' => ['required', 'in:admin,instructor,student'],
             'is_active' => ['boolean'],
             'phone' => ['nullable', 'string', 'max:20'],
             'organization' => ['nullable', 'string', 'max:255'],
@@ -213,11 +222,23 @@ class UserController extends Controller
      */
     public function update(Request $request, User $user)
     {
+        // Seuls les admins peuvent donner le rôle admin
+        if ($request->input('role') === 'admin' && !auth()->user()->isAdmin()) {
+            return redirect()->back()
+                ->with('error', 'Seuls les administrateurs peuvent donner le rôle administrateur.');
+        }
+
+        // Empêcher de retirer son propre rôle admin
+        if ($user->id === auth()->id() && $request->input('role') !== 'admin') {
+            return redirect()->back()
+                ->with('error', 'Vous ne pouvez pas retirer votre propre rôle administrateur.');
+        }
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
-            'role' => ['required', 'in:admin,instructor,student,user'],
+            'role' => ['required', 'in:admin,instructor,student'],
             'is_active' => ['boolean'],
             'phone' => ['nullable', 'string', 'max:20'],
             'organization' => ['nullable', 'string', 'max:255'],
@@ -268,5 +289,131 @@ class UserController extends Controller
 
         return redirect()->back()
             ->with('success', $user->is_active ? 'Utilisateur activé.' : 'Utilisateur désactivé.');
+    }
+
+    /**
+     * Donner un avertissement à un utilisateur
+     */
+    public function issueWarning(Request $request, User $user)
+    {
+        // Vérifier que l'utilisateur actuel est admin ou instructeur
+        if (!auth()->user()->isAdminOrInstructor()) {
+            abort(403, 'Seuls les administrateurs et instructeurs peuvent donner des avertissements.');
+        }
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:500'],
+            'details' => ['nullable', 'string'],
+            'severity' => ['required', 'in:low,medium,high,critical'],
+        ]);
+
+        $warning = Warning::create([
+            'user_id' => $user->id,
+            'issued_by' => auth()->id(),
+            'reason' => $validated['reason'],
+            'details' => $validated['details'] ?? null,
+            'severity' => $validated['severity'],
+        ]);
+
+        // Envoyer une notification à l'utilisateur
+        // TODO: Implémenter le système de notifications
+
+        return redirect()->back()
+            ->with('success', 'Avertissement émis avec succès.');
+    }
+
+    /**
+     * Bannir un utilisateur
+     */
+    public function banUser(Request $request, User $user)
+    {
+        // Vérifier que l'utilisateur actuel est admin ou instructeur
+        if (!auth()->user()->isAdminOrInstructor()) {
+            abort(403, 'Seuls les administrateurs et instructeurs peuvent bannir des utilisateurs.');
+        }
+
+        // Empêcher de se bannir soi-même
+        if ($user->id === auth()->id()) {
+            return redirect()->back()
+                ->with('error', 'Vous ne pouvez pas vous bannir vous-même.');
+        }
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:500'],
+            'details' => ['nullable', 'string'],
+            'is_permanent' => ['boolean'],
+            'banned_until' => ['nullable', 'date', 'after:now'],
+        ]);
+
+        // Désactiver l'utilisateur
+        $user->is_active = false;
+        $user->save();
+
+        $ban = UserBan::create([
+            'user_id' => $user->id,
+            'banned_by' => auth()->id(),
+            'reason' => $validated['reason'],
+            'details' => $validated['details'] ?? null,
+            'is_permanent' => $validated['is_permanent'] ?? false,
+            'banned_until' => $validated['banned_until'] ?? null,
+        ]);
+
+        // Envoyer une notification à l'utilisateur
+        // TODO: Implémenter le système de notifications
+
+        return redirect()->back()
+            ->with('success', 'Utilisateur banni avec succès.');
+    }
+
+    /**
+     * Débannir un utilisateur
+     */
+    public function unbanUser(User $user)
+    {
+        // Vérifier que l'utilisateur actuel est admin ou instructeur
+        if (!auth()->user()->isAdminOrInstructor()) {
+            abort(403, 'Seuls les administrateurs et instructeurs peuvent débannir des utilisateurs.');
+        }
+
+        // Supprimer les banissements actifs
+        $user->bans()
+            ->where(function ($query) {
+                $query->where('is_permanent', true)
+                    ->orWhere('banned_until', '>', now());
+            })
+            ->delete();
+
+        // Réactiver l'utilisateur
+        $user->is_active = true;
+        $user->save();
+
+        return redirect()->back()
+            ->with('success', 'Utilisateur débanni avec succès.');
+    }
+
+    /**
+     * Obtenir les avertissements d'un utilisateur
+     */
+    public function getWarnings(User $user)
+    {
+        $warnings = $user->warnings()
+            ->with('issuer:id,name,email')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json($warnings);
+    }
+
+    /**
+     * Obtenir l'historique de banissement d'un utilisateur
+     */
+    public function getBanHistory(User $user)
+    {
+        $bans = $user->bans()
+            ->with('banner:id,name,email')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json($bans);
     }
 }

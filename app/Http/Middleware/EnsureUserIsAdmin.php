@@ -33,8 +33,9 @@ class EnsureUserIsAdmin
             return redirect()->route('login');
         }
 
-        if (!$user->isAdmin()) {
-            \Log::warning('Tentative d\'accès admin par un utilisateur non-admin', [
+        // Permettre l'accès aux admins et instructeurs
+        if (!$user->isAdmin() && !$user->isInstructor()) {
+            \Log::warning('Tentative d\'accès admin par un utilisateur non-autorisé', [
                 'user_id' => $user->id,
                 'user_email' => $user->email,
                 'user_role' => $user->role,
@@ -44,12 +45,12 @@ class EnsureUserIsAdmin
             
             if ($request->expectsJson()) {
                 return response()->json([
-                    'message' => 'Accès refusé. Administrateur requis.',
+                    'message' => 'Accès refusé. Administrateur ou instructeur requis.',
                     'error' => 'Forbidden',
                     'user_role' => $user->role,
                 ], 403);
             }
-            abort(403, 'Accès refusé. Vous devez être administrateur pour accéder à cette page.');
+            abort(403, 'Accès refusé. Vous devez être administrateur ou instructeur pour accéder à cette page.');
         }
 
         return $next($request);

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Models\Setting;
 
 // Inclure le SDK officiel CinetPay
 if (!class_exists('CinetPay')) {
@@ -23,18 +24,27 @@ class CinetPayService
 
     public function __construct()
     {
+        // Lire depuis la base de données avec fallback sur .env
         $config = config('services.cinetpay');
-        $this->apiKey = $config['api_key'];
-        $this->siteId = $config['site_id'];
+        
+        $this->apiKey = Setting::get('cinetpay.api_key', $config['api_key'] ?? env('CINETPAY_API_KEY', ''));
+        $this->siteId = Setting::get('cinetpay.site_id', $config['site_id'] ?? env('CINETPAY_SITE_ID', ''));
+        
+        // URLs avec priorité : base de données > config > .env > génération automatique
+        $notifyUrl = Setting::get('cinetpay.notify_url', $config['notify_url'] ?? env('CINETPAY_NOTIFY_URL'));
+        $returnUrl = Setting::get('cinetpay.return_url', $config['return_url'] ?? env('CINETPAY_RETURN_URL'));
+        $cancelUrl = Setting::get('cinetpay.cancel_url', $config['cancel_url'] ?? env('CINETPAY_CANCEL_URL'));
         
         // Utiliser url() helper pour générer les URLs absolues si non définies
         // Cela garantit que les URLs fonctionnent même si l'IP/port change
-        $this->notifyUrl = $config['notify_url'] ?? url('/api/payments/cinetpay/webhook');
-        $this->returnUrl = $config['return_url'] ?? url('/api/payments/return');
-        $this->cancelUrl = $config['cancel_url'] ?? url('/api/payments/cancel');
+        $this->notifyUrl = $notifyUrl ?? url('/api/payments/cinetpay/webhook');
+        $this->returnUrl = $returnUrl ?? url('/api/payments/return');
+        $this->cancelUrl = $cancelUrl ?? url('/api/payments/cancel');
+        
+        // Mode avec priorité : base de données > config > .env > sandbox par défaut
+        $mode = Setting::get('cinetpay.mode', $config['mode'] ?? env('CINETPAY_MODE', 'sandbox'));
         
         // Nettoyer le mode pour gérer les cas où il est collé avec d'autres variables
-        $mode = $config['mode'] ?? 'sandbox';
         // Extraire uniquement le mode valide (sandbox, production, test, prod)
         $mode = strtolower(trim($mode));
         if (strpos($mode, 'production') !== false || strpos($mode, 'prod') !== false) {
@@ -480,18 +490,24 @@ class CinetPayService
             'overall_health' => 'unknown',
         ];
 
-        // 1. Vérifier la configuration
-        $config = config('services.cinetpay');
+        // 1. Vérifier la configuration (depuis la base de données avec fallback)
+        $apiKey = Setting::get('cinetpay.api_key', config('services.cinetpay.api_key') ?? env('CINETPAY_API_KEY', ''));
+        $siteId = Setting::get('cinetpay.site_id', config('services.cinetpay.site_id') ?? env('CINETPAY_SITE_ID', ''));
+        $mode = Setting::get('cinetpay.mode', config('services.cinetpay.mode') ?? env('CINETPAY_MODE', 'sandbox'));
+        $notifyUrl = Setting::get('cinetpay.notify_url', config('services.cinetpay.notify_url') ?? env('CINETPAY_NOTIFY_URL', url('/api/payments/cinetpay/webhook')));
+        $returnUrl = Setting::get('cinetpay.return_url', config('services.cinetpay.return_url') ?? env('CINETPAY_RETURN_URL', url('/api/payments/return')));
+        $cancelUrl = Setting::get('cinetpay.cancel_url', config('services.cinetpay.cancel_url') ?? env('CINETPAY_CANCEL_URL', url('/api/payments/cancel')));
+        
         $health['configuration'] = [
-            'api_key' => !empty($config['api_key']) ? '✓ Défini (' . substr($config['api_key'], 0, 8) . '...)' : '✗ Manquant',
-            'site_id' => !empty($config['site_id']) ? '✓ Défini (' . $config['site_id'] . ')' : '✗ Manquant',
-            'mode' => $config['mode'] ?? 'non défini',
-            'notify_url' => $config['notify_url'] ?? url('/api/payments/cinetpay/webhook'),
-            'return_url' => $config['return_url'] ?? url('/api/payments/return'),
-            'cancel_url' => $config['cancel_url'] ?? url('/api/payments/cancel'),
+            'api_key' => !empty($apiKey) ? '✓ Défini (' . substr($apiKey, 0, 8) . '...)' : '✗ Manquant',
+            'site_id' => !empty($siteId) ? '✓ Défini (' . $siteId . ')' : '✗ Manquant',
+            'mode' => $mode ?? 'non défini',
+            'notify_url' => $notifyUrl ?? url('/api/payments/cinetpay/webhook'),
+            'return_url' => $returnUrl ?? url('/api/payments/return'),
+            'cancel_url' => $cancelUrl ?? url('/api/payments/cancel'),
         ];
 
-        $configValid = !empty($config['api_key']) && !empty($config['site_id']) && !empty($config['mode']);
+        $configValid = !empty($apiKey) && !empty($siteId) && !empty($mode);
 
         // 2. Vérifier la connectivité réseau
         $signatureUrl = $this->getSignatureUrl();

@@ -34,7 +34,7 @@ class RegisteredUserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'role' => ['nullable', 'in:admin,instructor,student,user'],
+            'role' => ['nullable', 'in:admin,instructor,student'],
             'phone' => ['nullable', 'string', 'max:20'],
             'organization' => ['nullable', 'string', 'max:255'],
             'department' => ['nullable', 'string', 'max:255'],

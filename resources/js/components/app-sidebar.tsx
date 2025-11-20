@@ -17,7 +17,7 @@ import {
 import { dashboard } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, SendToBackIcon, Zap, ExternalLink, Users, Shield, Settings, FlaskConical, Calendar, Activity } from 'lucide-react';
+import { LayoutGrid, SendToBackIcon, Zap, ExternalLink, Users, Shield, Settings, FlaskConical, Calendar, Activity, CreditCard } from 'lucide-react';
 import AppLogo from './app-logo';
 import { Badge } from '@/components/ui/badge';
 import { router } from '@inertiajs/react';
@@ -97,6 +97,11 @@ export function AppSidebar() {
             title: 'Configuration CML',
             href: '/admin/cml-config',
             icon: Settings,
+        },
+        {
+            title: 'Configuration CinetPay',
+            href: '/admin/cinetpay-config',
+            icon: CreditCard,
         },
         {
             title: 'Santé API Paiement',

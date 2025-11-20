@@ -12,11 +12,21 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // Gestion des utilisateurs
     Route::resource('users', UserController::class);
     Route::patch('users/{user}/toggle-status', [UserController::class, 'toggleStatus'])->name('users.toggle-status');
+    Route::post('users/{user}/warn', [UserController::class, 'issueWarning'])->name('users.warn');
+    Route::post('users/{user}/ban', [UserController::class, 'banUser'])->name('users.ban');
+    Route::post('users/{user}/unban', [UserController::class, 'unbanUser'])->name('users.unban');
+    Route::get('users/{user}/warnings', [UserController::class, 'getWarnings'])->name('users.warnings');
+    Route::get('users/{user}/ban-history', [UserController::class, 'getBanHistory'])->name('users.ban-history');
 
     // Configuration CML
     Route::get('cml-config', [CmlConfigController::class, 'index'])->name('cml-config.index');
     Route::put('cml-config', [CmlConfigController::class, 'update'])->name('cml-config.update');
     Route::post('cml-config/test', [CmlConfigController::class, 'testConnection'])->name('cml-config.test');
+
+    // Configuration CinetPay
+    Route::get('cinetpay-config', [\App\Http\Controllers\Admin\CinetPayConfigController::class, 'index'])->name('cinetpay-config.index');
+    Route::put('cinetpay-config', [\App\Http\Controllers\Admin\CinetPayConfigController::class, 'update'])->name('cinetpay-config.update');
+    Route::post('cinetpay-config/test', [\App\Http\Controllers\Admin\CinetPayConfigController::class, 'testConnection'])->name('cinetpay-config.test');
 
     // Santé de l'API de paiement
     Route::get('payments/health', [PaymentHealthController::class, 'index'])->name('payments.health');
