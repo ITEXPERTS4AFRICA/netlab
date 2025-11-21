@@ -86,6 +86,13 @@ class CinetPayConfigController extends Controller
             $mode = 'sandbox';
         }
 
+        // Vérifier qu'une clé secrète existe déjà si aucune nouvelle n'est fournie
+        $hasExistingSecretKey = Setting::where('key', 'cinetpay.secret_key')->exists();
+        if (empty($validated['secret_key']) && !$hasExistingSecretKey) {
+            return redirect()->back()
+                ->withErrors(['secret_key' => 'La clé secrète est requise pour la première configuration.']);
+        }
+
         // Sauvegarder dans la base de données
         Setting::set('cinetpay.api_key', $validated['api_key'], 'string', 'Clé API CinetPay');
         Setting::set('cinetpay.site_id', $validated['site_id'], 'string', 'ID du site CinetPay');
