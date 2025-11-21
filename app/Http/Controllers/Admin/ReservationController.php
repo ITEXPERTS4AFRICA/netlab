@@ -258,9 +258,9 @@ class ReservationController extends Controller
             'lab_description' => $reservation->lab->lab_description,
             'short_description' => $reservation->lab->short_description,
             'state' => $reservation->lab->state,
-            'price_cents' => $reservation->lab->price_cents,
-            'currency' => $reservation->lab->currency,
-            'is_published' => $reservation->lab->is_published,
+            'price_cents' => $reservation->lab->price_cents ?? null,
+            'currency' => $reservation->lab->currency ?? 'XOF',
+            'is_published' => Lab::hasColumn('is_published') ? ($reservation->lab->is_published ?? false) : true,
         ];
 
         $user = [

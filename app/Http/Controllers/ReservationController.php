@@ -120,8 +120,8 @@ class ReservationController extends Controller
             return response()->json(['error' => 'Lab non trouvé'], 404);
         }
 
-        // Vérifier que le lab est publié
-        if (!$lab->is_published) {
+        // Vérifier que le lab est publié (si la colonne existe)
+        if (Lab::hasColumn('is_published') && !$lab->is_published) {
             return response()->json(['error' => 'Ce lab n\'est pas disponible pour la réservation'], 403);
         }
 

@@ -23,26 +23,47 @@ class PaymentHealthController extends Controller
      */
     public function index(): Response
     {
-        // Effectuer un check de santé
-        $health = $this->cinetPayService->checkHealth();
+        // Effectuer un check de santé (avec gestion d'erreur)
+        try {
+            $health = $this->cinetPayService->checkHealth();
+        } catch (\Exception $e) {
+            Log::error('Erreur lors du check de santé CinetPay', [
+                'error' => $e->getMessage(),
+            ]);
+            // Créer une réponse de santé par défaut en cas d'erreur
+            $health = [
+                'status' => 'unknown',
+                'overall_health' => 'unhealthy',
+                'error' => $e->getMessage(),
+                'timestamp' => now()->toIso8601String(),
+            ];
+        }
 
-        // Récupérer les statistiques de paiement récentes
-        $recentPayments = \App\Models\Payment::with(['reservation.lab', 'user'])
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get()
-            ->map(function ($payment) {
-                return [
-                    'id' => $payment->id,
-                    'transaction_id' => $payment->transaction_id,
-                    'amount' => $payment->amount,
-                    'currency' => $payment->currency,
-                    'status' => $payment->status,
-                    'created_at' => $payment->created_at->toIso8601String(),
-                    'lab_title' => $payment->reservation->lab->lab_title ?? 'N/A',
-                    'user_name' => $payment->user->name ?? 'N/A',
-                ];
-            });
+        // Récupérer les statistiques de paiement récentes (avec gestion d'erreur si la relation échoue)
+        $recentPayments = [];
+        try {
+            $recentPayments = \App\Models\Payment::with(['reservation.lab', 'user'])
+                ->orderBy('created_at', 'desc')
+                ->limit(10)
+                ->get()
+                ->map(function ($payment) {
+                    return [
+                        'id' => $payment->id,
+                        'transaction_id' => $payment->transaction_id,
+                        'amount' => $payment->amount,
+                        'currency' => $payment->currency,
+                        'status' => $payment->status,
+                        'created_at' => $payment->created_at->toIso8601String(),
+                        'lab_title' => $payment->reservation?->lab?->lab_title ?? 'N/A',
+                        'user_name' => $payment->user?->name ?? 'N/A',
+                    ];
+                })->toArray();
+        } catch (\Exception $e) {
+            Log::warning('Erreur lors de la récupération des paiements récents', [
+                'error' => $e->getMessage(),
+            ]);
+            $recentPayments = [];
+        }
 
         // Statistiques des paiements
         $paymentStats = [

@@ -2,6 +2,34 @@ import { useCallback, useEffect, useState } from 'react';
 
 export type Appearance = 'light' | 'dark' | 'system';
 
+// Helper pour accéder à localStorage de manière sécurisée
+const getLocalStorage = (key: string, defaultValue: string | null = null): string | null => {
+    try {
+        if (typeof window === 'undefined' || !window.localStorage) {
+            return defaultValue;
+        }
+        return window.localStorage.getItem(key);
+    } catch (error) {
+        // localStorage n'est pas disponible (bloqué par le navigateur, mode privé, etc.)
+        console.warn('localStorage is not available:', error);
+        return defaultValue;
+    }
+};
+
+const setLocalStorage = (key: string, value: string): boolean => {
+    try {
+        if (typeof window === 'undefined' || !window.localStorage) {
+            return false;
+        }
+        window.localStorage.setItem(key, value);
+        return true;
+    } catch (error) {
+        // localStorage n'est pas disponible
+        console.warn('localStorage is not available:', error);
+        return false;
+    }
+};
+
 const prefersDark = () => {
     if (typeof window === 'undefined') {
         return false;
@@ -35,12 +63,12 @@ const mediaQuery = () => {
 };
 
 const handleSystemThemeChange = () => {
-    const currentAppearance = localStorage.getItem('appearance') as Appearance;
-    applyTheme(currentAppearance || 'system');
+    const currentAppearance = (getLocalStorage('appearance') as Appearance) || 'system';
+    applyTheme(currentAppearance);
 };
 
 export function initializeTheme() {
-    const savedAppearance = (localStorage.getItem('appearance') as Appearance) || 'system';
+    const savedAppearance = (getLocalStorage('appearance') as Appearance) || 'system';
 
     applyTheme(savedAppearance);
 
@@ -54,18 +82,18 @@ export function useAppearance() {
     const updateAppearance = useCallback((mode: Appearance) => {
         setAppearance(mode);
 
-        // Store in localStorage for client-side persistence...
-        localStorage.setItem('appearance', mode);
+        // Store in localStorage for client-side persistence (si disponible)...
+        setLocalStorage('appearance', mode);
 
-        // Store in cookie for SSR...
+        // Store in cookie for SSR (toujours disponible)...
         setCookie('appearance', mode);
 
         applyTheme(mode);
     }, []);
 
     useEffect(() => {
-        const savedAppearance = localStorage.getItem('appearance') as Appearance | null;
-        updateAppearance(savedAppearance || 'system');
+        const savedAppearance = (getLocalStorage('appearance') as Appearance | null) || 'system';
+        updateAppearance(savedAppearance);
 
         return () => mediaQuery()?.removeEventListener('change', handleSystemThemeChange);
     }, [updateAppearance]);

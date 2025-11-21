@@ -8,6 +8,21 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Lab extends Model
 {
+    /**
+     * Vérifier si une colonne existe dans la table labs
+     */
+    public static function hasColumn(string $column): bool
+    {
+        try {
+            $connection = static::getConnection();
+            $schemaBuilder = $connection->getSchemaBuilder();
+            return $schemaBuilder->hasColumn(static::getTable(), $column);
+        } catch (\Exception $e) {
+            // En cas d'erreur, retourner false par sécurité
+            return false;
+        }
+    }
+
     protected $fillable = [
         'cml_id',
         'created',

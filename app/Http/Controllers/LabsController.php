@@ -21,14 +21,28 @@ class LabsController extends Controller
     public function index(Request $request, CiscoApiService $cisco)
     {
         try {
-            // Récupérer uniquement les labs publiés depuis la base de données
-            $query = Lab::where('is_published', true)
-                ->withCount(['reservations' => function ($q) {
+            // Vérifier si la colonne is_published existe avant de l'utiliser
+            $hasPublishedColumn = Lab::hasColumn('is_published');
+            
+            // Récupérer les labs depuis la base de données
+            $query = Lab::query();
+            
+            // Filtrer par is_published uniquement si la colonne existe
+            if ($hasPublishedColumn) {
+                $query->where('is_published', true);
+            }
+            
+            $query->withCount(['reservations' => function ($q) {
                     $q->where('status', 'active')
                       ->where('end_at', '>', now());
-                }])
-                ->orderBy('is_featured', 'desc') // Labs en avant en premier
-                ->orderBy('created_at', 'desc');
+                }]);
+            
+            // Trier par is_featured uniquement si la colonne existe
+            if (Lab::hasColumn('is_featured')) {
+                $query->orderBy('is_featured', 'desc'); // Labs en avant en premier
+            }
+            
+            $query->orderBy('created_at', 'desc');
 
             // Recherche par titre ou description
             if ($request->has('search') && $request->search) {

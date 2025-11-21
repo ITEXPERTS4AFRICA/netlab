@@ -48,11 +48,11 @@ class LabController extends Controller
             $query->where('state', $request->state);
         }
 
-        if ($request->has('is_published')) {
+        if ($request->has('is_published') && Lab::hasColumn('is_published')) {
             $query->where('is_published', $request->boolean('is_published'));
         }
 
-        if ($request->has('is_featured')) {
+        if ($request->has('is_featured') && Lab::hasColumn('is_featured')) {
             $query->where('is_featured', $request->boolean('is_featured'));
         }
 
@@ -67,12 +67,27 @@ class LabController extends Controller
 
         // Calculer les stats correctement (is_published peut être null pour les anciens labs)
         $totalLabs = Lab::count();
-        $publishedLabs = Lab::where('is_published', true)->count();
-        $featuredLabs = Lab::where('is_featured', true)->count();
-        $pendingLabs = Lab::where(function($q) {
-            $q->where('is_published', false)
-              ->orWhereNull('is_published');
-        })->count();
+        
+        // Vérifier si les colonnes existent avant de les utiliser
+        $hasPublishedColumn = Lab::hasColumn('is_published');
+        $hasFeaturedColumn = Lab::hasColumn('is_featured');
+        
+        if ($hasPublishedColumn) {
+            $publishedLabs = Lab::where('is_published', true)->count();
+            $pendingLabs = Lab::where(function($q) {
+                $q->where('is_published', false)
+                  ->orWhereNull('is_published');
+            })->count();
+        } else {
+            $publishedLabs = $totalLabs; // Si la colonne n'existe pas, considérer tous les labs comme publiés
+            $pendingLabs = 0;
+        }
+        
+        if ($hasFeaturedColumn) {
+            $featuredLabs = Lab::where('is_featured', true)->count();
+        } else {
+            $featuredLabs = 0;
+        }
 
         return Inertia::render('admin/labs/index', [
             'labs' => $labs,
@@ -367,6 +382,11 @@ class LabController extends Controller
      */
     public function togglePublished(Lab $lab)
     {
+        if (!Lab::hasColumn('is_published')) {
+            return redirect()->back()
+                ->with('error', 'La colonne is_published n\'existe pas. Exécutez les migrations.');
+        }
+        
         $lab->is_published = !$lab->is_published;
         $lab->save();
 

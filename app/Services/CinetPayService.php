@@ -24,51 +24,86 @@ class CinetPayService
 
     public function __construct()
     {
-        // Lire depuis la base de données avec fallback sur .env
-        $config = config('services.cinetpay');
-        
-        $this->apiKey = Setting::get('cinetpay.api_key', $config['api_key'] ?? env('CINETPAY_API_KEY', ''));
-        $this->siteId = Setting::get('cinetpay.site_id', $config['site_id'] ?? env('CINETPAY_SITE_ID', ''));
-        
-        // URLs avec priorité : base de données > config > .env > génération automatique
-        $notifyUrl = Setting::get('cinetpay.notify_url', $config['notify_url'] ?? env('CINETPAY_NOTIFY_URL'));
-        $returnUrl = Setting::get('cinetpay.return_url', $config['return_url'] ?? env('CINETPAY_RETURN_URL'));
-        $cancelUrl = Setting::get('cinetpay.cancel_url', $config['cancel_url'] ?? env('CINETPAY_CANCEL_URL'));
-        
-        // Utiliser url() helper pour générer les URLs absolues si non définies
-        // Cela garantit que les URLs fonctionnent même si l'IP/port change
-        $this->notifyUrl = $notifyUrl ?? url('/api/payments/cinetpay/webhook');
-        $this->returnUrl = $returnUrl ?? url('/api/payments/return');
-        $this->cancelUrl = $cancelUrl ?? url('/api/payments/cancel');
-        
-        // Mode avec priorité : base de données > config > .env > sandbox par défaut
-        $mode = Setting::get('cinetpay.mode', $config['mode'] ?? env('CINETPAY_MODE', 'sandbox'));
-        
-        // Nettoyer le mode pour gérer les cas où il est collé avec d'autres variables
-        // Extraire uniquement le mode valide (sandbox, production, test, prod)
-        $mode = strtolower(trim($mode));
-        if (strpos($mode, 'production') !== false || strpos($mode, 'prod') !== false) {
-            $this->mode = 'production';
-        } elseif (strpos($mode, 'sandbox') !== false || strpos($mode, 'test') !== false) {
-            $this->mode = 'sandbox';
-        } else {
-            $this->mode = 'sandbox'; // Par défaut
-        }
-        
-        $this->version = 'V2';
+        try {
+            // Lire depuis la base de données avec fallback sur .env
+            $config = config('services.cinetpay', []);
+            
+            $this->apiKey = Setting::get('cinetpay.api_key', $config['api_key'] ?? env('CINETPAY_API_KEY', ''));
+            $this->siteId = Setting::get('cinetpay.site_id', $config['site_id'] ?? env('CINETPAY_SITE_ID', ''));
+            
+            // URLs avec priorité : base de données > config > .env > génération automatique
+            $notifyUrl = Setting::get('cinetpay.notify_url', $config['notify_url'] ?? env('CINETPAY_NOTIFY_URL'));
+            $returnUrl = Setting::get('cinetpay.return_url', $config['return_url'] ?? env('CINETPAY_RETURN_URL'));
+            $cancelUrl = Setting::get('cinetpay.cancel_url', $config['cancel_url'] ?? env('CINETPAY_CANCEL_URL'));
+            
+            // Utiliser url() helper pour générer les URLs absolues si non définies
+            // Cela garantit que les URLs fonctionnent même si l'IP/port change
+            $this->notifyUrl = $notifyUrl ?? url('/api/payments/cinetpay/webhook');
+            $this->returnUrl = $returnUrl ?? url('/api/payments/return');
+            $this->cancelUrl = $cancelUrl ?? url('/api/payments/cancel');
+            
+            // Mode avec priorité : base de données > config > .env > sandbox par défaut
+            $mode = Setting::get('cinetpay.mode', $config['mode'] ?? env('CINETPAY_MODE', 'sandbox'));
+            
+            // Nettoyer le mode pour gérer les cas où il est collé avec d'autres variables
+            // Extraire uniquement le mode valide (sandbox, production, test, prod)
+            $mode = strtolower(trim((string)$mode));
+            if (strpos($mode, 'production') !== false || strpos($mode, 'prod') !== false) {
+                $this->mode = 'production';
+            } elseif (strpos($mode, 'sandbox') !== false || strpos($mode, 'test') !== false) {
+                $this->mode = 'sandbox';
+            } else {
+                $this->mode = 'sandbox'; // Par défaut
+            }
+            
+            $this->version = 'V2';
 
-        // Initialiser le SDK officiel CinetPay
-        // Désactiver l'affichage du CSS en passant ['style' => false] comme 5ème paramètre
-        $platform = strtoupper($this->mode) === 'PRODUCTION' ? 'PROD' : 'TEST';
+            // Initialiser le SDK officiel CinetPay seulement si les credentials sont fournis
+            if (!empty($this->apiKey) && !empty($this->siteId) && $this->apiKey !== 'temp_key' && $this->siteId !== 'temp_site') {
+                // Initialiser le SDK officiel CinetPay
+                // Désactiver l'affichage du CSS en passant ['style' => false] comme 5ème paramètre
+                $platform = strtoupper($this->mode) === 'PRODUCTION' ? 'PROD' : 'TEST';
 
-        // Capturer la sortie pour empêcher le SDK d'afficher du CSS
-        ob_start();
-        $this->cinetPay = new \CinetPay($this->siteId, $this->apiKey, $platform, $this->version, ['style' => false]);
-        $output = ob_get_clean(); // Capturer et nettoyer la sortie
+                // Capturer la sortie pour empêcher le SDK d'afficher du CSS
+                ob_start();
+                try {
+                    $this->cinetPay = new \CinetPay($this->siteId, $this->apiKey, $platform, $this->version, ['style' => false]);
+                } catch (\Exception $e) {
+                    // Si le SDK ne peut pas être initialisé, logger mais continuer
+                    Log::warning('CinetPay SDK initialization error', [
+                        'error' => $e->getMessage(),
+                        'site_id' => substr($this->siteId, 0, 4) . '...',
+                    ]);
+                    // Créer un objet null pour éviter les erreurs fatales
+                    $this->cinetPay = null;
+                }
+                $output = ob_get_clean(); // Capturer et nettoyer la sortie
 
-        // Si du CSS a été affiché malgré tout, le logger mais ne pas l'inclure dans la réponse
-        if (!empty($output) && strpos($output, '<style>') !== false) {
-            \Log::warning('CinetPay SDK output captured', ['output_length' => strlen($output)]);
+                // Si du CSS a été affiché malgré tout, le logger mais ne pas l'inclure dans la réponse
+                if (!empty($output) && strpos($output, '<style>') !== false) {
+                    Log::warning('CinetPay SDK output captured', ['output_length' => strlen($output)]);
+                }
+            } else {
+                // Credentials manquants ou invalides, ne pas initialiser le SDK
+                $this->cinetPay = null;
+                Log::debug('CinetPay SDK not initialized - credentials missing or invalid');
+            }
+        } catch (\Exception $e) {
+            // En cas d'erreur lors de l'initialisation (table settings manquante, etc.)
+            // Utiliser les valeurs de .env uniquement
+            Log::debug('CinetPayService initialization fallback to .env', [
+                'error' => $e->getMessage(),
+            ]);
+
+            $config = config('services.cinetpay', []);
+            $this->apiKey = $config['api_key'] ?? env('CINETPAY_API_KEY', '');
+            $this->siteId = $config['site_id'] ?? env('CINETPAY_SITE_ID', '');
+            $this->notifyUrl = $config['notify_url'] ?? env('CINETPAY_NOTIFY_URL', url('/api/payments/cinetpay/webhook'));
+            $this->returnUrl = $config['return_url'] ?? env('CINETPAY_RETURN_URL', url('/api/payments/return'));
+            $this->cancelUrl = $config['cancel_url'] ?? env('CINETPAY_CANCEL_URL', url('/api/payments/cancel'));
+            $this->mode = $config['mode'] ?? env('CINETPAY_MODE', 'sandbox');
+            $this->version = 'V2';
+            $this->cinetPay = null;
         }
     }
 
