@@ -44,7 +44,7 @@ class LabRuntimeController extends Controller
         }
 
         // Obtenir ou rafraîchir automatiquement le token CML
-        $token = $this->getOrRefreshCmlToken($apiService);
+        $token = $this->getOrRefreshCmlToken($cisco);
 
         \Log::info('Démarrage du lab', [
             'lab_id' => $labModel->id,
@@ -152,7 +152,7 @@ class LabRuntimeController extends Controller
         }
 
         // Obtenir ou rafraîchir automatiquement le token CML
-        $token = $this->getOrRefreshCmlToken($apiService);
+        $token = $this->getOrRefreshCmlToken($cisco);
         
         // Si toujours pas de token après rafraîchissement, retourner une erreur gracieuse
         if (!$token) {
@@ -236,7 +236,7 @@ class LabRuntimeController extends Controller
         }
 
         // Obtenir ou rafraîchir automatiquement le token CML
-        $token = $this->getOrRefreshCmlToken($apiService);
+        $token = $this->getOrRefreshCmlToken($cisco);
         
         // Si toujours pas de token après rafraîchissement, retourner une erreur gracieuse
         if (!$token) {
@@ -315,7 +315,7 @@ class LabRuntimeController extends Controller
         }
 
         // Obtenir ou rafraîchir automatiquement le token CML
-        $token = $this->getOrRefreshCmlToken($apiService);
+        $token = $this->getOrRefreshCmlToken($cisco);
         
         // Si toujours pas de token après rafraîchissement, retourner une erreur gracieuse
         if (!$token) {

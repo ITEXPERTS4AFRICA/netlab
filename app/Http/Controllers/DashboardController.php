@@ -96,10 +96,8 @@ class DashboardController extends Controller
             $cacheKeyHealth = 'cml_system_health_' . $tokenHash;
             $cmlSystemHealth = Cache::remember($cacheKeyHealth, now()->addMinutes(5), function () use ($token) {
                 try {
-                    if ($this->apiService->setToken($token)) {
-                        return $this->apiService->getSystemHealth($token);
-                    }
-                    return null;
+                    $this->apiService->setToken($token);
+                    return $this->apiService->system->getSystemHealth();
                 } catch (\Exception $e) {
                     Log::warning('Failed to fetch CML system health: ' . $e->getMessage());
                     return null;
@@ -110,10 +108,8 @@ class DashboardController extends Controller
             $cacheKeyStats = 'cml_system_stats_' . $tokenHash;
             $systemStats = Cache::remember($cacheKeyStats, now()->addMinutes(5), function () use ($token) {
                 try {
-                    if ($this->apiService->setToken($token)) {
-                        return $this->apiService->getSystemStats($token);
-                    }
-                    return null;
+                    $this->apiService->setToken($token);
+                    return $this->apiService->system->getSystemStats();
                 } catch (\Exception $e) {
                     Log::warning('Failed to fetch CML system stats: ' . $e->getMessage());
                     return null;
