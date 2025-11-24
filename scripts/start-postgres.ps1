@@ -55,3 +55,4 @@ if (Test-Path $psqlPath) {
     Write-Host "[ATTENTION] psql.exe non trouve" -ForegroundColor Yellow
 }
 
+

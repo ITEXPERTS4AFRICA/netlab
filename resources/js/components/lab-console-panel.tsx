@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { Loader2, Power, RefreshCcw, Terminal, Code } from 'lucide-react';
 import { useConsole } from '@/hooks/useConsole';
+import { useIntelligentPolling } from '@/hooks/useIntelligentPolling';
 import IOSConsole from '@/components/IOSConsole';
 import { useActionLogs } from '@/contexts/ActionLogsContext';
 import ConsoleCommandTester from '@/components/ConsoleCommandTester';
@@ -84,7 +85,7 @@ const MAX_LOG_LINES = 500;
 export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labTitle }: Props) {
     // Mode d'affichage : 'iframe' (console CML native) ou 'ios' (console intelligente IOS)
     const [consoleMode, setConsoleMode] = useState<'iframe' | 'ios'>('ios');
-    
+
     // Trouver le premier node valide avec un id - utiliser useMemo pour éviter les re-calculs
     const firstValidNodeId = useMemo(() => {
         if (!nodes || nodes.length === 0) return '';
@@ -108,24 +109,40 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
     const [error, setError] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const sessionRef = useRef<SessionState | null>(null);
-    
+
     // Utiliser le contexte partagé pour les logs d'actions
     const { actionLogs, addActionLog, updateActionLogStatus } = useActionLogs();
-    
+
     // Utiliser le hook useConsole pour les appels API typés
     const consoleApi = useConsole();
-    
+
     // Utiliser useRef pour garder des références stables aux méthodes de consoleApi
     // Mettre à jour les références directement dans le corps du composant (pas dans useEffect)
     const getNodeConsolesRef = useRef(consoleApi.getNodeConsoles);
     const createSessionRef = useRef(consoleApi.createSession);
     const closeSessionRef = useRef(consoleApi.closeSession);
     const getConsoleLogRef = useRef(consoleApi.getConsoleLog);
-    
+
     getNodeConsolesRef.current = consoleApi.getNodeConsoles;
     createSessionRef.current = consoleApi.createSession;
     closeSessionRef.current = consoleApi.closeSession;
     getConsoleLogRef.current = consoleApi.getConsoleLog;
+
+    // Hook de polling intelligent pour récupérer les logs en temps réel
+    const polling = useIntelligentPolling({
+        labId: cmlLabId,
+        nodeId: selectedNodeId,
+        consoleId: session?.consoleId || session?.sessionId || '',
+        enabled: !!session && consoleMode === 'ios', // Activer uniquement en mode IOS
+        interval: 2000, // Poll toutes les 2 secondes
+    });
+
+    // Synchroniser les logs du polling avec logLines
+    useEffect(() => {
+        if (polling.logs.length > 0 && consoleMode === 'ios') {
+            setLogLines(polling.logs);
+        }
+    }, [polling.logs, consoleMode]);
 
     // Mettre à jour selectedNodeId quand nodes change (seulement si selectedNodeId est vide)
     useEffect(() => {
@@ -176,7 +193,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
 
         const controller = new AbortController();
         let isMounted = true;
-        
+
         const fetchConsoles = async () => {
             setLoadingConsoles(true);
             setError(null);
@@ -264,12 +281,12 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                 headers: { 'Accept': 'application/json' },
                 cache: 'no-store',
             });
-            
+
             if (!response.ok) {
                 console.warn('API console non disponible:', response.status);
                 return false;
             }
-            
+
             const data = await response.json();
             return data.status === 'ok';
         } catch (err) {
@@ -287,11 +304,100 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
             return;
         }
 
-        // CML utilise des URLs de console (iframe), pas de WebSocket
+        // Priorité 1: WebSocket si disponible
+        if (activeSession.wsHref) {
+            console.log('[DEBUG] WebSocket détecté! Tentative de connexion:', {
+                wsHref: activeSession.wsHref,
+                protocol: activeSession.protocol
+            });
+            setConnectionState('connecting');
+            teardownWebsocket({ silent: true });
+
+            let ws: WebSocket;
+            try {
+                if (activeSession.protocol) {
+                    ws = new WebSocket(activeSession.wsHref, [activeSession.protocol]);
+                } else {
+                    ws = new WebSocket(activeSession.wsHref);
+                }
+            } catch (err) {
+                console.error('Unable to open WebSocket', err);
+                setError('Impossible d\'ouvrir la connexion console.');
+                setConnectionState('error');
+                return;
+            }
+
+            wsRef.current = ws;
+
+            const handleOpen = () => {
+                setConnectionState('open');
+                setError(null);
+                appendLog(`[Console] Session ${activeSession.sessionId} connectée via WebSocket.`);
+                console.log('WebSocket ouvert avec succès');
+            };
+
+            const handleMessage = (event: MessageEvent) => {
+                if (typeof event.data === 'string') {
+                    appendLog(event.data);
+                } else if (event.data instanceof Blob) {
+                    event.data.text().then(appendLog).catch(() => appendLog('[Console] Flux binaire reçu'));
+                } else {
+                    appendLog('[Console] Message non textuel reçu');
+                }
+            };
+
+            const handleError = (event: Event) => {
+                console.error('WebSocket error', event);
+                setConnectionState('error');
+                setError('Erreur de connexion WebSocket. Vérifiez que le serveur CML est accessible.');
+                appendLog('[Console] Erreur de transport WebSocket');
+                toast.error('Erreur de connexion WebSocket. Les commandes peuvent ne pas fonctionner.');
+            };
+
+            const handleClose = (event: CloseEvent) => {
+                if (wsRef.current === ws) {
+                    wsRef.current = null;
+                }
+                if (!event.wasClean) {
+                    appendLog('[Console] Connexion fermée de manière inattendue');
+                    setError('Connexion console interrompue.');
+                } else {
+                    appendLog('[Console] Connexion fermée');
+                }
+                setConnectionState(prev => (prev === 'closing' ? 'closed' : 'closed'));
+            };
+
+            ws.addEventListener('open', handleOpen);
+            ws.addEventListener('message', handleMessage);
+            ws.addEventListener('error', handleError);
+            ws.addEventListener('close', handleClose);
+
+            return () => {
+                ws.removeEventListener('open', handleOpen);
+                ws.removeEventListener('message', handleMessage);
+                ws.removeEventListener('error', handleError);
+                ws.removeEventListener('close', handleClose);
+                if (wsRef.current === ws) {
+                    try {
+                        ws.close();
+                    } catch (err) {
+                        console.error('WebSocket cleanup error', err);
+                    }
+                    wsRef.current = null;
+                }
+            };
+        }
+
+        // Priorité 2: Console URL (iframe) si pas de WebSocket
         if (activeSession.consoleUrl) {
+            console.log('[DEBUG] Pas de wsHref détecté, utilisation de consoleUrl:', {
+                session: activeSession,
+                hasConsoleUrl: !!activeSession.consoleUrl,
+                wsHref: activeSession.wsHref
+            });
             teardownWebsocket({ silent: true });
             setConnectionState('open');
-            
+
             // Vérifier périodiquement que la session est toujours disponible
             const checkInterval = setInterval(async () => {
                 try {
@@ -313,91 +419,6 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                 clearInterval(checkInterval);
             };
         }
-        
-        // Fallback pour WebSocket (si jamais utilisé dans le futur)
-        if (!activeSession.wsHref) {
-            teardownWebsocket({ silent: true });
-            setConnectionState('open');
-            appendLog('[Console] Session créée sans WebSocket. Les commandes seront envoyées via l\'API.');
-            return;
-        }
-
-        setConnectionState('connecting');
-        teardownWebsocket({ silent: true });
-
-        let ws: WebSocket;
-        try {
-            if (activeSession.protocol) {
-                ws = new WebSocket(activeSession.wsHref, [activeSession.protocol]);
-            } else {
-                ws = new WebSocket(activeSession.wsHref);
-            }
-        } catch (err) {
-            console.error('Unable to open WebSocket', err);
-            setError('Impossible d\'ouvrir la connexion console.');
-            setConnectionState('error');
-            return;
-        }
-
-        wsRef.current = ws;
-
-        const handleOpen = () => {
-            setConnectionState('open');
-            setError(null);
-            appendLog(`[Console] Session ${activeSession.sessionId} connectée via WebSocket.`);
-            console.log('WebSocket ouvert avec succès');
-        };
-
-        const handleMessage = (event: MessageEvent) => {
-            if (typeof event.data === 'string') {
-                appendLog(event.data);
-            } else if (event.data instanceof Blob) {
-                event.data.text().then(appendLog).catch(() => appendLog('[Console] Flux binaire reçu'));
-            } else {
-                appendLog('[Console] Message non textuel reçu');
-            }
-        };
-
-        const handleError = (event: Event) => {
-            console.error('WebSocket error', event);
-            setConnectionState('error');
-            setError('Erreur de connexion WebSocket. Vérifiez que le serveur CML est accessible.');
-            appendLog('[Console] Erreur de transport WebSocket');
-            toast.error('Erreur de connexion WebSocket. Les commandes peuvent ne pas fonctionner.');
-        };
-
-        const handleClose = (event: CloseEvent) => {
-            if (wsRef.current === ws) {
-                wsRef.current = null;
-            }
-            if (!event.wasClean) {
-                appendLog('[Console] Connexion fermée de manière inattendue');
-                setError('Connexion console interrompue.');
-            } else {
-                appendLog('[Console] Connexion fermée');
-            }
-            setConnectionState(prev => (prev === 'closing' ? 'closed' : 'closed'));
-        };
-
-        ws.addEventListener('open', handleOpen);
-        ws.addEventListener('message', handleMessage);
-        ws.addEventListener('error', handleError);
-        ws.addEventListener('close', handleClose);
-
-        return () => {
-            ws.removeEventListener('open', handleOpen);
-            ws.removeEventListener('message', handleMessage);
-            ws.removeEventListener('error', handleError);
-            ws.removeEventListener('close', handleClose);
-            if (wsRef.current === ws) {
-                try {
-                    ws.close();
-                } catch (err) {
-                    console.error('WebSocket cleanup error', err);
-                }
-                wsRef.current = null;
-            }
-        };
     }, [session, appendLog, teardownWebsocket, checkConnectionAvailability, connectionState]);
 
     const handleCreateSession = useCallback(async (type?: string) => {
@@ -428,15 +449,15 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
 
         try {
             const data = await createSessionRef.current({
-                    lab_id: cmlLabId,
-                    node_id: selectedNodeId,
-                    type,
+                lab_id: cmlLabId,
+                node_id: selectedNodeId,
+                type,
             });
 
             if (!data) {
                 throw new Error('Impossible de créer la session. Aucune réponse du serveur.');
             }
-            
+
             // Vérifier si la réponse contient une erreur
             if ('error' in data && data.error) {
                 const errorMessage = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
@@ -479,45 +500,58 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                     consoleId = foundId;
                 }
             }
-            
+
             const nextSession: SessionState = {
                 sessionId,
                 nodeId: data.node_id ?? selectedNodeId,
                 consoleUrl: consoleUrlString,
                 consoleId: consoleId,
-                wsHref: undefined, // CML n'utilise pas de WebSocket
+                wsHref: data.ws_href ? String(data.ws_href) : undefined,
                 protocol: data.protocol,
                 type: data.type ?? type,
             };
 
+            console.log('[DEBUG] Session créée avec les données:', {
+                raw_data: data,
+                nextSession: nextSession,
+                has_ws_href: !!data.ws_href,
+                ws_href_value: data.ws_href
+            });
+
             sessionRef.current = nextSession;
             setSession(nextSession);
-            setConnectionState('open'); // CML utilise des iframes, pas de connexion WebSocket
-            appendLog('[Console] Session console créée.');
+
+            // TOUJOURS utiliser le mode IOS avec polling intelligent
+            // Pas d'iframe, pas de WebSocket direct - uniquement polling
+            setConsoleMode('ios');
+            setConnectionState('open');
+            appendLog('[Console] Mode IOS Console activé avec polling intelligent.');
+            toast.success('Console IOS activée avec polling intelligent.');
+
             // Masquer l'URL complète, ne garder que l'ID de session
             const urlParts = consoleUrlString.split('/');
             const urlSessionId = urlParts[urlParts.length - 1] || 'N/A';
             appendLog(`[Console] Session ID: ${urlSessionId}`);
-            
+
             // Mettre à jour le log d'action
             const lastLog = actionLogs.find(log => log.type === 'session' && log.status === 'pending' && log.nodeId === selectedNodeId);
             if (lastLog) {
                 updateActionLogStatus(lastLog.id, 'success', `Session créée avec succès. ID: ${urlSessionId}`);
             }
-            
+
             toast.success('Session console créée.');
         } catch (err) {
             console.error('Erreur lors de la création de session:', err);
             const errorMessage = err instanceof Error ? err.message : 'Impossible de créer la session.';
             setError(errorMessage);
             setConnectionState('error');
-            
+
             // Mettre à jour le log d'action avec l'erreur
             const lastLog = actionLogs.find(log => log.type === 'session' && log.status === 'pending' && log.nodeId === selectedNodeId);
             if (lastLog) {
                 updateActionLogStatus(lastLog.id, 'error', `Erreur: ${errorMessage}`);
             }
-            
+
             // Message d'erreur plus détaillé
             let toastMessage = 'Création de session impossible.';
             if (errorMessage.includes('Unable to post')) {
@@ -527,7 +561,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
             } else if (errorMessage.includes('404')) {
                 toastMessage = 'Endpoint console non trouvé. Vérifiez la version de CML.';
             }
-            
+
             toast.error(toastMessage);
         } finally {
             setLoadingSession(false);
@@ -592,7 +626,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                     newLinesCount++;
                 }
             }
-            
+
             if (newLinesCount > 0 && !silent) {
                 appendLog(`[Console] ${newLinesCount} nouvelle(s) ligne(s) ajoutée(s)`);
             }
@@ -632,13 +666,13 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
             appendLog(`> ${trimmed}`);
             updateActionLogStatus(actionLogId, 'sent', `Commande envoyée: ${trimmed}`);
             setCommand('');
-            
+
             // Récupérer le consoleId depuis la session (sessionId = consoleKey pour CML)
             // ou depuis les consoles disponibles
-            const consoleId = activeSession.consoleId 
+            const consoleId = activeSession.consoleId
                 ?? activeSession.sessionId // Pour CML, sessionId = consoleKey
                 ?? (consoles.length > 0 ? (consoles[0]?.id ?? consoles[0]?.console_id) : null);
-            
+
             console.log('Envoi de commande avec consoleUrl:', {
                 hasConsoleUrl: !!activeSession.consoleUrl,
                 consoleId: consoleId,
@@ -646,7 +680,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                 sessionConsoleId: activeSession.consoleId,
                 consolesCount: consoles.length,
             });
-            
+
             if (consoleId) {
                 // Attendre un court délai puis récupérer les logs pour voir les résultats
                 setTimeout(async () => {
@@ -658,7 +692,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                         updateActionLogStatus(actionLogId, 'error', `Erreur lors de la récupération des résultats: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
                     }
                 }, 1500); // Attendre 1.5 secondes pour que la commande s'exécute
-                
+
                 // Mettre en place un polling pour récupérer les logs périodiquement
                 const pollInterval = setInterval(async () => {
                     try {
@@ -668,7 +702,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                         clearInterval(pollInterval);
                     }
                 }, 2000); // Poll toutes les 2 secondes
-                
+
                 // Arrêter le polling après 30 secondes
                 setTimeout(() => {
                     clearInterval(pollInterval);
@@ -677,7 +711,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                 appendLog('[Console] Console ID non disponible. Impossible de récupérer les logs automatiquement.');
                 updateActionLogStatus(actionLogId, 'error', 'Console ID non disponible');
             }
-            
+
             toast.success(`Commande envoyée: ${trimmed}`);
             return;
         }
@@ -685,8 +719,17 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
         // Sinon, essayer d'envoyer via l'API REST si disponible
         // Pour l'instant, on affiche juste un message d'erreur
         updateActionLogStatus(actionLogId, 'error', 'Connexion WebSocket non disponible');
-        toast.error('Connexion WebSocket non disponible. Veuillez attendre que la connexion soit établie.');
-        appendLog(`> ${trimmed} (en attente de connexion...)`);
+
+        // Si on est ici, c'est que le WebSocket n'est pas dispo et qu'on n'a pas pu utiliser l'iframe
+        // On propose de basculer vers l'iframe si l'URL est dispo
+        if (activeSession.consoleUrl) {
+            setConsoleMode('iframe');
+            toast.info('Bascule vers la console standard pour envoyer des commandes.');
+            return;
+        }
+
+        toast.error('Connexion WebSocket non disponible. Veuillez utiliser la console standard.');
+        appendLog(`> ${trimmed} (échec: WebSocket non disponible)`);
         setCommand('');
     }, [appendLog, command, addActionLog, updateActionLogStatus, sessionRef, consoles, handleLoadLog]);
 
@@ -696,11 +739,11 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
     // Pour CML, si on a une consoleUrl, on considère la session comme ouverte même sans WebSocket
     const isSessionOpen = useMemo(() => {
         const open = session !== null && (
-            connectionState === 'open' 
-            || connectionState === 'connecting' 
+            connectionState === 'open'
+            || connectionState === 'connecting'
             || (session.consoleUrl && connectionState !== 'error' && connectionState !== 'closed')
         );
-        
+
         // Debug log
         if (session) {
             console.log('LabConsolePanel: État de la session', {
@@ -710,7 +753,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                 isSessionOpen: open,
             });
         }
-        
+
         return open;
     }, [session, connectionState]);
 
@@ -739,30 +782,30 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                             Aucun nœud disponible. Le lab doit être démarré pour voir les nœuds.
                         </div>
                     ) : (
-                    <Select
-                        value={selectedNodeId}
+                        <Select
+                            value={selectedNodeId}
                             onValueChange={value => {
                                 if (value && value !== selectedNodeId) {
                                     setSelectedNodeId(value);
                                 }
                             }}
-                        disabled={loadingConsoles || loadingSession}
-                    >
+                            disabled={loadingConsoles || loadingSession}
+                        >
                             <SelectTrigger className="w-full lg:w-auto">
-                            <SelectValue placeholder="Sélectionner un nœud" />
-                        </SelectTrigger>
-                        <SelectContent>
+                                <SelectValue placeholder="Sélectionner un nœud" />
+                            </SelectTrigger>
+                            <SelectContent>
                                 {nodes.map(node => {
                                     const nodeId = node.id || '';
                                     if (!nodeId) return null;
                                     return (
                                         <SelectItem key={nodeId} value={nodeId}>
                                             {node.label ?? node.name ?? nodeId}
-                                </SelectItem>
+                                        </SelectItem>
                                     );
                                 })}
-                        </SelectContent>
-                    </Select>
+                            </SelectContent>
+                        </Select>
                     )}
 
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -890,17 +933,40 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                 {/* Section console */}
                 <div className="flex-1 flex flex-col">
                     {/* Sélecteur de mode console */}
-                    <div className="flex items-center gap-2 pb-2">
-                        <span className="text-xs text-muted-foreground">Mode console :</span>
-                        <Button
-                            variant={consoleMode === 'ios' ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setConsoleMode('ios')}
-                            className="h-7"
-                        >
-                            <Code className="h-3 w-3 mr-1" />
-                            IOS Intelligent
-                        </Button>
+                    <div className="flex items-center justify-between pb-2">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Mode console :</span>
+                            <Button
+                                variant={consoleMode === 'ios' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setConsoleMode('ios')}
+                                className="h-7"
+                            >
+                                <Code className="h-3 w-3 mr-1" />
+                                IOS Intelligent
+                            </Button>
+                            <Button
+                                variant={consoleMode === 'iframe' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setConsoleMode('iframe')}
+                                className="h-7"
+                            >
+                                <Terminal className="h-3 w-3 mr-1" />
+                                Standard
+                            </Button>
+                        </div>
+
+                        {session?.consoleUrl && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => window.open(session.consoleUrl, '_blank')}
+                                className="h-7 text-xs"
+                            >
+                                <RefreshCcw className="h-3 w-3 mr-1" />
+                                Ouvrir dans un nouvel onglet
+                            </Button>
+                        )}
                     </div>
 
                     {/* Console intelligente IOS - Toujours afficher, jamais l'iframe CML */}
@@ -917,17 +983,17 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                                     nodeId: sessionRef.current?.nodeId,
                                     details: `Commande: ${cmd}`,
                                 });
-                                
+
                                 // Appeler handleSendCommand avec la commande
                                 const trimmed = cmd.trimEnd();
                                 if (!trimmed) return;
-                                
+
                                 const activeSession = sessionRef.current;
                                 if (!activeSession) {
                                     toast.error('Aucune session console active.');
                                     return;
                                 }
-                                
+
                                 // PRIORITÉ 1: Si on utilise consoleUrl (iframe CML), utiliser handleSendCommand
                                 // qui gère correctement le mode iframe avec polling des logs
                                 if (activeSession.consoleUrl || activeSession.sessionId) {
@@ -935,22 +1001,22 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                                     handleSendCommand();
                                     return;
                                 }
-                                
+
                                 // PRIORITÉ 2: Si on a un WebSocket ouvert, l'utiliser
                                 if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
                                     const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
                                     try {
                                         wsRef.current.send(payload);
                                         appendLog(`> ${trimmed}`);
-                                        
+
                                         // Mettre à jour le statut du log
                                         updateActionLogStatus(actionLogId, 'sent', `Commande envoyée via WebSocket: ${trimmed}`);
-                                        
+
                                         // Mettre à jour le statut après un court délai pour indiquer le succès
                                         setTimeout(() => {
                                             updateActionLogStatus(actionLogId, 'success', `Commande envoyée avec succès: ${trimmed}`);
                                         }, 500);
-                                        
+
                                         toast.success(`Commande envoyée: ${trimmed}`);
                                     } catch (err) {
                                         console.error(err);
@@ -960,7 +1026,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                                     }
                                     return;
                                 }
-                                
+
                                 // Sinon, utiliser handleSendCommand qui gère tous les cas
                                 handleSendCommand();
                             }}
@@ -971,18 +1037,29 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                             className="flex-1"
                         />
                     ) : (
-                        <div className="flex-1 overflow-hidden rounded-lg border border-muted bg-black/95 dark:bg-black">
-                            {logLines.length > 0 ? (
-                                <div className="overflow-y-auto p-3 font-mono text-xs text-emerald-200">
-                                    {logLines.map((line, index) => (
-                                        <pre key={index} className="whitespace-pre-wrap">
-                                            {line}
-                                        </pre>
-                                    ))}
-                                </div>
+                        <div className="flex-1 overflow-hidden rounded-lg border border-muted bg-white dark:bg-black relative flex flex-col">
+                            {session?.consoleUrl ? (
+                                <>
+                                    <iframe
+                                        src={session.consoleUrl}
+                                        className="w-full flex-1 border-0"
+                                        title={`Console ${selectedNodeId}`}
+                                        allow="clipboard-read; clipboard-write"
+                                    />
+                                    <div className="bg-muted/20 p-1 text-center text-[10px] text-muted-foreground">
+                                        Tapez vos commandes directement dans le terminal ci-dessus
+                                    </div>
+                                </>
                             ) : (
-                                <div className="flex h-full items-center justify-center p-3">
+                                <div className="flex h-full items-center justify-center p-3 flex-col gap-2">
                                     <p className="text-muted-foreground">La sortie console apparaîtra ici.</p>
+                                    {logLines.length > 0 && (
+                                        <div className="w-full max-h-40 overflow-y-auto p-2 bg-muted/50 rounded text-xs font-mono">
+                                            {logLines.map((line, index) => (
+                                                <div key={index}>{line}</div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1003,10 +1080,10 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                         }
 
                         // Vérifier que la session est prête
-                        const isReady = activeSession.consoleUrl 
+                        const isReady = activeSession.consoleUrl
                             ? connectionState === 'open'
                             : (wsRef.current !== null && wsRef.current.readyState === WebSocket.OPEN);
-                        
+
                         if (!isReady) {
                             throw new Error('Session non prête. Veuillez attendre que la connexion soit établie.');
                         }
@@ -1104,23 +1181,23 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                         Console IOS intelligente avec auto-complétion, historique et coloration syntaxique.
                     </p>
                 ) : (
-                <div className="flex w-full items-center gap-2">
-                    <Input
-                        placeholder="Entrer une commande (ex. show ip interface brief)"
-                        value={command}
-                        onChange={event => setCommand(event.target.value)}
-                        onKeyDown={event => {
-                            if (event.key === 'Enter' && !event.shiftKey) {
-                                event.preventDefault();
-                                handleSendCommand();
-                            }
-                        }}
-                        disabled={!isSessionOpen}
-                    />
-                    <Button onClick={handleSendCommand} disabled={!isSessionOpen || !command.trim()}>
-                        Envoyer
-                    </Button>
-                </div>
+                    <div className="flex w-full items-center gap-2">
+                        <Input
+                            placeholder="Entrer une commande (ex. show ip interface brief)"
+                            value={command}
+                            onChange={event => setCommand(event.target.value)}
+                            onKeyDown={event => {
+                                if (event.key === 'Enter' && !event.shiftKey) {
+                                    event.preventDefault();
+                                    handleSendCommand();
+                                }
+                            }}
+                            disabled={!isSessionOpen}
+                        />
+                        <Button onClick={handleSendCommand} disabled={!isSessionOpen || !command.trim()}>
+                            Envoyer
+                        </Button>
+                    </div>
                 )}
 
                 {normalizedSessions.length > 0 && (
@@ -1129,7 +1206,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                     </div>
                 )}
             </CardFooter>
-        </Card>
+        </Card >
     );
 }
 

@@ -30,6 +30,11 @@ Route::middleware(['web', 'auth'])->group(function(){
     Route::get('/console/ping', [ConsoleController::class, 'ping']);
     Route::get('/labs/{labId}/nodes/{nodeId}/consoles', [ConsoleController::class, 'index']);
     Route::get('/labs/{labId}/nodes/{nodeId}/consoles/{consoleId}/log', [ConsoleController::class, 'log']);
+    
+    // Polling intelligent des logs console
+    Route::get('/labs/{labId}/nodes/{nodeId}/consoles/{consoleId}/poll', [ConsoleController::class, 'pollLogs']);
+    Route::delete('/labs/{labId}/nodes/{nodeId}/consoles/{consoleId}/cache', [ConsoleController::class, 'clearLogsCache']);
+    
     Route::get('/console/sessions', [ConsoleController::class, 'sessions']);
     Route::post('/console/sessions', [ConsoleController::class, 'store']);
     Route::delete('/console/sessions/{sessionId}', [ConsoleController::class, 'destroy']);

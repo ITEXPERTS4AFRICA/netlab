@@ -579,7 +579,19 @@ class LabsController extends Controller
             ]);
             
             // Récupérer les détails de chaque interface utilisée dans les liens
-            foreach (array_keys($interfaceIdsToFetch) as $interfaceId) {
+            // LIMITATION : Pour éviter les timeouts, on limite à 20 interfaces maximum
+            $interfaceIdsArray = array_keys($interfaceIdsToFetch);
+            $maxInterfaces = 20;
+            $limitedInterfaceIds = array_slice($interfaceIdsArray, 0, $maxInterfaces);
+            
+            \Log::info('Récupération des interfaces limitée', [
+                'lab_id' => $lab->cml_id,
+                'total_interfaces' => count($interfaceIdsArray),
+                'fetching_count' => count($limitedInterfaceIds),
+                'limited' => count($interfaceIdsArray) > $maxInterfaces,
+            ]);
+            
+            foreach ($limitedInterfaceIds as $interfaceId) {
                 try {
                     $interfaceDetails = $cisco->interfaces->getInterface($lab->cml_id, $interfaceId);
                     if (!isset($interfaceDetails['error']) && is_array($interfaceDetails)) {

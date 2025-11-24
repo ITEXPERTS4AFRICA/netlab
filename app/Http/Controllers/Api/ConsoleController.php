@@ -11,6 +11,7 @@ class ConsoleController extends Controller
 {
     /**
      * Lister les consoles disponibles pour un nœud donné.
+     * Cache: 20 secondes (consoles changent rarement)
      */
     public function index(string $labId, string $nodeId, CiscoApiService $cisco): JsonResponse
     {
@@ -34,8 +35,13 @@ class ConsoleController extends Controller
             ], 401);
         }
 
+        // Cache pour éviter les appels répétés
+        $cacheKey = 'api:console:index:' . md5($labId . $nodeId . $token);
+        
         try {
-        $consoles = $cisco->console->getNodeConsoles($labId, $nodeId);
+        $consoles = \Illuminate\Support\Facades\Cache::remember($cacheKey, 20, function() use ($cisco, $labId, $nodeId) {
+            return $cisco->console->getNodeConsoles($labId, $nodeId);
+        });
 
             \Log::info('Console: Réponse getNodeConsoles', [
                 'lab_id' => $labId,
@@ -47,6 +53,8 @@ class ConsoleController extends Controller
             ]);
 
             if (isset($consoles['error'])) {
+                // En cas d'erreur, invalider le cache
+                \Illuminate\Support\Facades\Cache::forget($cacheKey);
                 \Log::warning('Console: Erreur lors de la récupération des consoles', [
                     'lab_id' => $labId,
                     'node_id' => $nodeId,
@@ -100,7 +108,7 @@ class ConsoleController extends Controller
                     'vnc' => false,
                     'console' => true,
                 ],
-            ]);
+            ])->header('Cache-Control', 'public, max-age=20');
         } catch (\Exception $e) {
             \Log::error('Console: Exception lors de la récupération des consoles', [
                 'lab_id' => $labId,
@@ -236,7 +244,8 @@ class ConsoleController extends Controller
         if ($consoleType === 'vnc') {
             $consoleUrl = "{$baseUrl}/vnc/{$consoleKey}";
         } else {
-            $consoleUrl = "{$baseUrl}/console/{$consoleKey}";
+            // Format correct pour CML 2.x : /console/?id=UUID
+            $consoleUrl = "{$baseUrl}/console/?id={$consoleKey}";
         }
 
         \Log::info('Console: Clé console obtenue avec succès', [
@@ -247,21 +256,29 @@ class ConsoleController extends Controller
             'console_url' => $consoleUrl,
         ]);
 
-        // Retourner une réponse compatible avec l'ancien format de session
-        return response()->json([
-            'session_id' => $consoleKey,
-            'id' => $consoleKey,
-            'console_id' => $consoleKey, // Ajouter console_id pour le polling des logs
-            'console_key' => $consoleKey,
-            'console_url' => $consoleUrl,
-            'url' => $consoleUrl,
-            'lab_id' => $payload['lab_id'],
-            'node_id' => $payload['node_id'],
-            'type' => $consoleType,
-            'protocol' => $consoleType === 'vnc' ? 'vnc' : 'console',
-            // Note: CML n'utilise pas de WebSocket pour les consoles, donc pas de ws_href
-            'ws_href' => null,
-        ]);
+            // NOTE: CML ne semble pas exposer de WebSocket fonctionnel pour les consoles
+            // Les tests montrent que wss://{host}/console/ws?id={key} échoue systématiquement
+            // On utilise donc uniquement l'approche iframe + polling qui fonctionne
+            // Si un jour CML expose un WebSocket, décommenter les lignes ci-dessous :
+            // $wsBaseUrl = str_replace(['http://', 'https://'], ['ws://', 'wss://'], $baseUrl);
+            // $wsHref = "{$wsBaseUrl}/console/ws?id={$consoleKey}";
+
+            // Retourner une réponse compatible avec l'ancien format de session
+            // SANS ws_href pour forcer l'utilisation de l'iframe
+            return response()->json([
+                'session_id' => $consoleKey,
+                'id' => $consoleKey,
+                'console_id' => $consoleKey,
+                'console_key' => $consoleKey,
+                'console_url' => $consoleUrl,
+                'url' => $consoleUrl,
+                'lab_id' => $payload['lab_id'],
+                'node_id' => $payload['node_id'],
+                'type' => $consoleType,
+                'protocol' => $consoleType === 'vnc' ? 'vnc' : 'console',
+                // ws_href désactivé car CML ne l'expose pas
+                // 'ws_href' => null,
+            ]);
     }
 
     /**
@@ -290,6 +307,8 @@ class ConsoleController extends Controller
 
     /**
      * Fermer une session console.
+     * Note: CML n'a pas d'endpoint pour fermer les sessions console.
+     * Les sessions se ferment automatiquement après expiration de la clé.
      */
     public function destroy(string $sessionId, CiscoApiService $cisco): JsonResponse
     {
@@ -304,17 +323,19 @@ class ConsoleController extends Controller
             'has_token' => !empty($token),
         ]);
 
-        $result = $cisco->console->closeConsoleSession($sessionId);
+        // CML n'a pas d'endpoint pour fermer les sessions console
+        // Les sessions se ferment automatiquement après expiration de la clé
+        // On retourne simplement un succès
+        \Log::info('Console: Session fermée (côté client)', [
+            'session_id' => $sessionId,
+            'note' => 'CML n\'a pas d\'endpoint pour fermer les sessions, elles expirent automatiquement',
+        ]);
 
-        if (isset($result['error'])) {
-            \Log::warning('Console: Erreur lors de la fermeture de la session', [
-                'session_id' => $sessionId,
-                'error' => $result['error'],
-            ]);
-            return response()->json($result, $result['status'] ?? 500);
-        }
-
-        return response()->json($result);
+        return response()->json([
+            'success' => true,
+            'message' => 'Session fermée côté client. La session CML expirera automatiquement.',
+            'session_id' => $sessionId,
+        ]);
     }
 
     /**
@@ -349,15 +370,72 @@ class ConsoleController extends Controller
 
     /**
      * Endpoint ping pour vérifier la disponibilité de l'API console.
+     * Cache: 5 secondes (appelé très fréquemment)
      */
     public function ping(): JsonResponse
     {
-        $token = session('cml_token');
+        $cacheKey = 'api:console:ping:' . md5(session('cml_token') ?? 'anonymous');
         
+        $response = \Illuminate\Support\Facades\Cache::remember($cacheKey, 5, function() {
+            $token = session('cml_token');
+            
+            return [
+                'status' => 'ok',
+                'timestamp' => now()->toIso8601String(),
+                'has_token' => !empty($token),
+            ];
+        });
+        
+        return response()->json($response)->header('Cache-Control', 'public, max-age=5');
+    }
+
+    /**
+     * Polling intelligent des logs console avec cache et parsing IOS
+     */
+    public function pollLogs(
+        string $labId,
+        string $nodeId,
+        string $consoleId,
+        CiscoApiService $cisco
+    ): JsonResponse {
+        // S'assurer que le token est disponible
+        $token = session('cml_token');
+        if ($token) {
+            $cisco->setToken($token);
+        }
+
+        if (!$token) {
+            return response()->json([
+                'error' => 'Token CML non disponible',
+                'status' => 401,
+            ], 401);
+        }
+
+        // Utiliser le service de polling intelligent
+        $pollingService = new \App\Services\Console\IntelligentPollingService($cisco);
+        $result = $pollingService->getConsoleLogs($labId, $nodeId, $consoleId);
+
+        if (isset($result['error'])) {
+            return response()->json($result, $result['rate_limited'] ?? false ? 429 : 500);
+        }
+
+        return response()->json($result);
+    }
+
+    /**
+     * Vider le cache des logs pour une console
+     */
+    public function clearLogsCache(
+        string $labId,
+        string $nodeId,
+        string $consoleId
+    ): JsonResponse {
+        $pollingService = new \App\Services\Console\IntelligentPollingService(app(CiscoApiService::class));
+        $pollingService->clearCache($labId, $nodeId, $consoleId);
+
         return response()->json([
-            'status' => 'ok',
-            'timestamp' => now()->toIso8601String(),
-            'has_token' => !empty($token),
+            'success' => true,
+            'message' => 'Cache vidé avec succès',
         ]);
     }
 }

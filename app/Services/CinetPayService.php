@@ -231,7 +231,27 @@ class CinetPayService
                     'mode' => $this->mode,
                 ]);
                 
-                $signature = $this->cinetPay->getSignature();
+                // Utiliser un timeout PHP pour limiter le temps d'attente
+                $startTime = microtime(true);
+                $maxExecutionTime = 10; // Maximum 10 secondes pour obtenir la signature
+                
+                // Appeler getSignature avec gestion de timeout
+                $signature = null;
+                $oldTimeout = ini_get('default_socket_timeout');
+                ini_set('default_socket_timeout', $maxExecutionTime);
+                
+                try {
+                    $signature = $this->cinetPay->getSignature();
+                } finally {
+                    ini_set('default_socket_timeout', $oldTimeout);
+                }
+                
+                $executionTime = microtime(true) - $startTime;
+                
+                // Vérifier si le timeout a été dépassé
+                if ($executionTime >= $maxExecutionTime) {
+                    throw new \Exception('Timeout: L\'appel à getSignature() a pris plus de ' . $maxExecutionTime . ' secondes');
+                }
                 
                 Log::info('CinetPay: Signature obtenue avec succès', [
                     'transaction_id' => $transactionId,

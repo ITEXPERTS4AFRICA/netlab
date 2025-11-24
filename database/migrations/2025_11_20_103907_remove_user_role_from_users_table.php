@@ -20,6 +20,12 @@ return new class extends Migration
         // Pour PostgreSQL, on doit modifier le type ENUM différemment
         $driver = DB::getDriverName();
         
+        // SQLite ne supporte pas MODIFY COLUMN et stocke les ENUMs comme texte
+        // On peut donc ignorer cette migration pour SQLite
+        if ($driver === 'sqlite') {
+            return;
+        }
+        
         if ($driver === 'pgsql') {
             // PostgreSQL : Supprimer la valeur par défaut temporairement
             DB::statement("ALTER TABLE users ALTER COLUMN role DROP DEFAULT");
@@ -48,6 +54,11 @@ return new class extends Migration
     public function down(): void
     {
         $driver = DB::getDriverName();
+        
+        // SQLite ne supporte pas MODIFY COLUMN
+        if ($driver === 'sqlite') {
+            return;
+        }
         
         if ($driver === 'pgsql') {
             // PostgreSQL : Supprimer la valeur par défaut temporairement

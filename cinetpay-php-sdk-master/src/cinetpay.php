@@ -407,7 +407,7 @@ class CinetPay
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_ENCODING => "",
                     CURLOPT_MAXREDIRS => 10,
-                    CURLOPT_TIMEOUT => 15, // Réduire le timeout à 15 secondes
+                    CURLOPT_TIMEOUT => 10, // Réduire le timeout à 10 secondes pour éviter les attentes trop longues
                     CURLOPT_CONNECTTIMEOUT => 5, // Timeout de connexion à 5 secondes
                     CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
                     CURLOPT_CUSTOMREQUEST => $method,

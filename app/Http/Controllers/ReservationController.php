@@ -62,7 +62,8 @@ class ReservationController extends Controller
     public function store(Request $request, $lab = null)
     {
         // Augmenter le timeout pour cette opération (paiement peut prendre du temps)
-        set_time_limit(60); // 1 minute
+        // Mais limiter à 30 secondes pour éviter les attentes trop longues
+        set_time_limit(30); // 30 secondes max
         
         // Log pour déboguer
         \Log::info('Reservation request received', [
@@ -336,7 +337,33 @@ class ReservationController extends Controller
 
         // Si le lab a un prix et que le paiement n'est pas ignoré, initier le paiement
         if ($estimatedCents > 0 && !$skipPayment) {
-            return $this->initiateReservationPayment($request, $reservation, $user, $lab);
+            try {
+                return $this->initiateReservationPayment($request, $reservation, $user, $lab);
+            } catch (\Exception $e) {
+                // En cas d'erreur critique, retourner quand même la réservation créée
+                \Log::error('Critical error during payment initiation', [
+                    'reservation_id' => $reservation->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+                
+                // Mettre à jour la réservation avec l'erreur
+                $reservation->update([
+                    'status' => 'pending',
+                    'notes' => 'Erreur lors de l\'initialisation du paiement: ' . $e->getMessage() . ' - ' . now()->toDateTimeString(),
+                ]);
+                
+                return response()->json([
+                    'reservation' => $reservation->fresh()->load('lab'),
+                    'requires_payment' => true,
+                    'payment_error' => true,
+                    'error' => 'La réservation a été créée mais le paiement n\'a pas pu être initialisé. Vous pouvez réessayer le paiement depuis la page de vos réservations.',
+                    'code' => 'PAYMENT_INIT_ERROR',
+                    'can_retry_payment' => true,
+                    'retry_payment_url' => "/api/reservations/{$reservation->id}/payments/initiate",
+                    'message' => 'Réservation créée. Veuillez compléter le paiement depuis la page de vos réservations.',
+                ], 201); // 201 Created - la réservation existe
+            }
         }
 
         return response()->json([
