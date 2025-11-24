@@ -130,13 +130,26 @@ class DashboardController extends Controller
         $weekReservations = Reservation::whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])->count();
         $monthReservations = Reservation::whereMonth('created_at', now()->month)->count();
 
-        // Calculate average session duration (PostgreSQL compatible)
-        $avgSessionDuration = Reservation::where('status', 'completed')
-            ->whereNotNull('start_at')
-            ->whereNotNull('end_at')
-            ->selectRaw('AVG(EXTRACT(EPOCH FROM (end_at - start_at)) / 60) as avg_duration')
-            ->first()
-            ->avg_duration ?? 0;
+          // Calculate average session duration (compatible with SQLite and PostgreSQL)
+        $driver = \DB::connection()->getDriverName();
+        
+        if ($driver === 'sqlite') {
+            // SQLite: use julianday() to calculate difference in days, then convert to minutes
+            $avgSessionDuration = Reservation::where('status', 'completed')
+                ->whereNotNull('start_at')
+                ->whereNotNull('end_at')
+                ->selectRaw('AVG((julianday(end_at) - julianday(start_at)) * 24 * 60) as avg_duration')
+                ->first()
+                ->avg_duration ?? 0;
+        } else {
+            // PostgreSQL: use EXTRACT(EPOCH FROM ...)
+            $avgSessionDuration = Reservation::where('status', 'completed')
+                ->whereNotNull('start_at')
+                ->whereNotNull('end_at')
+                ->selectRaw('AVG(EXTRACT(EPOCH FROM (end_at - start_at)) / 60) as avg_duration')
+                ->first()
+                ->avg_duration ?? 0;
+        }
 
 
 

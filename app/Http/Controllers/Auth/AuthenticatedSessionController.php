@@ -64,10 +64,19 @@ class AuthenticatedSessionController extends Controller
 
         // Try to revoke CML token via service if available
         try {
-            app(\App\Services\CiscoApiService::class)->logout(session('cml_token'));
-            app(\App\Services\CiscoApiService::class)->revokeToken();
+            $ciscoService = app(\App\Services\CiscoApiService::class);
+            $cmlToken = session('cml_token');
+            
+            if ($cmlToken) {
+                // Utiliser le service auth pour logout et revokeToken
+                $ciscoService->auth->logout($cmlToken);
+                $ciscoService->auth->revokeToken();
+            }
         } catch (\Exception $e) {
-            // ignore revoke errors
+            // ignore revoke errors - best effort
+            \Log::debug('Erreur lors de la révocation du token CML (non bloquant)', [
+                'error' => $e->getMessage(),
+            ]);
         }
 
         Auth::guard('web')->logout();

@@ -159,13 +159,18 @@ class CinetPayConfigController extends Controller
             $cinetPayService = app(CinetPayService::class);
             $health = $cinetPayService->checkHealth();
 
+            // Nettoyer les données de santé pour éviter les problèmes d'encodage JSON
+            $cleanedHealth = $this->cleanHealthData($health);
+
+            $isHealthy = $health['overall_health'] === 'healthy';
+            
             return response()->json([
-                'success' => $health['overall_health'] === 'healthy',
-                'message' => $health['overall_health'] === 'healthy' 
+                'success' => $isHealthy,
+                'message' => $isHealthy
                     ? 'Configuration CinetPay valide et connectée !' 
                     : 'Problème de configuration ou de connexion CinetPay.',
-                'health' => $health,
-            ], $health['overall_health'] === 'healthy' ? 200 : 503);
+                'health' => $cleanedHealth,
+            ], $isHealthy ? 200 : 503)->header('Content-Type', 'application/json; charset=utf-8');
 
         } catch (\Exception $e) {
             Log::error('Erreur lors du test de connexion CinetPay', [
@@ -233,6 +238,37 @@ class CinetPayConfigController extends Controller
 
         // Sinon, l'ajouter à la fin
         return $envContent . "\n{$key}={$escapedValue}\n";
+    }
+
+    /**
+     * Nettoyer les données de santé pour éviter les problèmes d'encodage JSON
+     */
+    private function cleanHealthData(array $health): array
+    {
+        // Remplacer les caractères spéciaux par des équivalents ASCII
+        if (isset($health['configuration'])) {
+            foreach ($health['configuration'] as $key => $value) {
+                if (is_string($value)) {
+                    // Remplacer les caractères Unicode par des équivalents ASCII
+                    $health['configuration'][$key] = str_replace(
+                        ['✓', '✗'],
+                        ['OK', 'KO'],
+                        $value
+                    );
+                }
+            }
+        }
+
+        // Limiter la taille des messages d'erreur si nécessaire
+        if (isset($health['connectivity']['error']) && strlen($health['connectivity']['error']) > 500) {
+            $health['connectivity']['error'] = substr($health['connectivity']['error'], 0, 500) . '...';
+        }
+
+        if (isset($health['api_status']['error']) && strlen($health['api_status']['error']) > 500) {
+            $health['api_status']['error'] = substr($health['api_status']['error'], 0, 500) . '...';
+        }
+
+        return $health;
     }
 }
 

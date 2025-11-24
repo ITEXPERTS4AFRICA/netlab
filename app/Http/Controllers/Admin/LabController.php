@@ -184,6 +184,9 @@ class LabController extends Controller
      */
     public function syncFromCml(Request $request)
     {
+        // Augmenter le timeout pour cette opération longue
+        set_time_limit(300); // 5 minutes
+        
         try {
             $token = session('cml_token');
 
@@ -249,9 +252,29 @@ class LabController extends Controller
             $syncedCount = 0;
             $updatedCount = 0;
             $errorCount = 0;
+            $totalLabs = count($cmlLabs);
+            
+            // Limiter le nombre de labs traités par synchronisation pour éviter le timeout
+            $maxLabsPerSync = 50; // Traiter maximum 50 labs à la fois
+            $labsToProcess = array_slice($cmlLabs, 0, $maxLabsPerSync);
+            
+            if ($totalLabs > $maxLabsPerSync) {
+                \Log::info("Synchronisation CML: {$totalLabs} labs trouvés, traitement des {$maxLabsPerSync} premiers");
+            }
 
             // Si c'est un tableau d'IDs, récupérer les détails
-            foreach ($cmlLabs as $labId) {
+            foreach ($labsToProcess as $index => $labId) {
+                // Vérifier le timeout toutes les 10 itérations
+                if ($index > 0 && $index % 10 === 0) {
+                    if (time() - $_SERVER['REQUEST_TIME'] > 25) {
+                        \Log::warning('Timeout approchant, arrêt de la synchronisation', [
+                            'processed' => $index,
+                            'total' => count($labsToProcess),
+                        ]);
+                        break;
+                    }
+                }
+                
                 // Si c'est juste un ID (UUID), récupérer les détails complets
                 if (is_string($labId)) {
                     $labData = $this->labService->getLab($labId);
@@ -344,6 +367,12 @@ class LabController extends Controller
             }
             if ($errorCount > 0) {
                 $messageParts[] = "{$errorCount} erreur(s) rencontrée(s)";
+            }
+            
+            // Ajouter un avertissement si tous les labs n'ont pas été traités
+            if ($totalLabs > $maxLabsPerSync) {
+                $remaining = $totalLabs - $maxLabsPerSync;
+                $messageParts[] = "{$remaining} lab(s) restant(s) - relancez la synchronisation pour continuer";
             }
 
             if (empty($messageParts)) {

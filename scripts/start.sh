@@ -1,61 +1,43 @@
 #!/bin/bash
 
-echo "🚀 Démarrage du projet Laravel NetLab"
+echo "🚀 Démarrage de NetLab"
+echo "======================"
 echo ""
 
-# Charger nvm si disponible
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" 2>/dev/null
+# Aller dans le répertoire du projet
+cd "$(dirname "$0")/.." || exit 1
 
-# Vérification de PHP
-if ! command -v php &> /dev/null; then
-    echo "❌ PHP n'est pas installé. Veuillez exécuter ./install.sh d'abord."
+# Vérifier que nous sommes dans le bon répertoire
+if [ ! -f "artisan" ]; then
+    echo "❌ Erreur: artisan non trouvé. Êtes-vous dans le répertoire du projet ?"
     exit 1
 fi
 
-# Vérification de Composer
-if ! command -v composer &> /dev/null; then
-    echo "❌ Composer n'est pas installé. Veuillez exécuter ./install.sh d'abord."
-    exit 1
+# Vérifier la base de données
+echo "📊 Vérification de la base de données..."
+if php artisan db:show > /dev/null 2>&1; then
+    echo "✅ Base de données accessible"
+else
+    echo "⚠️  Avertissement: Problème de connexion à la base de données"
 fi
 
-# Vérification de Node.js
-if ! command -v node &> /dev/null; then
-    echo "❌ Node.js n'est pas installé. Veuillez exécuter ./install.sh d'abord."
-    exit 1
-fi
-
-# Vérifier la version de Node.js
-NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-if [ "$NODE_VERSION" -lt 20 ]; then
-    echo "⚠️  Node.js version $(node --version) détectée. Le projet nécessite Node.js 20+."
-    echo "Chargement de Node.js 20 via nvm..."
-    export NVM_DIR="$HOME/.nvm"
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    nvm use 20 2>/dev/null || nvm install 20 && nvm use 20
-fi
-
-# Vérification des dépendances
-if [ ! -d "vendor" ]; then
-    echo "📦 Installation des dépendances PHP..."
-    composer install
-fi
-
-if [ ! -d "node_modules" ]; then
-    echo "📦 Installation des dépendances Node.js..."
-    npm install
-fi
-
-# Vérification de la clé d'application
-if ! grep -q "APP_KEY=" .env 2>/dev/null || grep -q "APP_KEY=$" .env 2>/dev/null || grep -q "^APP_KEY=$" .env 2>/dev/null; then
-    echo "🔑 Génération de la clé d'application..."
-    php artisan key:generate
-fi
-
-# Lancement du projet
+# Nettoyer les caches
 echo ""
-echo "🌟 Lancement du serveur de développement..."
-echo "Le projet sera accessible sur http://localhost:8000"
-echo ""
-composer dev
+echo "🧹 Nettoyage des caches..."
+php artisan config:clear > /dev/null 2>&1
+php artisan cache:clear > /dev/null 2>&1
 
+# Afficher l'URL
+echo ""
+echo "✅ Application prête !"
+echo ""
+echo "🌐 URLs disponibles :"
+echo "   - Production (Apache2): http://10.10.10.20"
+echo "   - Développement: http://10.10.10.20:8000"
+echo ""
+echo "📝 Pour lancer le serveur de développement :"
+echo "   php artisan serve --host=0.0.0.0 --port=8000"
+echo ""
+echo "📝 Pour vérifier Apache2 :"
+echo "   sudo systemctl status apache2"
+echo ""

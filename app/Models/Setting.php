@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 
 class Setting extends Model
 {
@@ -68,9 +69,10 @@ class Setting extends Model
     protected static function tableExists(): bool
     {
         try {
-            $connection = self::getConnection();
+            // Utiliser DB::connection() au lieu de getConnection() sur une instance
+            $connection = DB::connection();
             $schemaBuilder = $connection->getSchemaBuilder();
-            return $schemaBuilder->hasTable(self::getTable());
+            return $schemaBuilder->hasTable((new static)->getTable());
         } catch (\Exception $e) {
             return false;
         }

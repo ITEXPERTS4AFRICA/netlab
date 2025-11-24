@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\DB;
 
 class Lab extends Model
 {
@@ -14,9 +15,10 @@ class Lab extends Model
     public static function hasColumn(string $column): bool
     {
         try {
-            $connection = static::getConnection();
+            // Utiliser DB::connection() au lieu de getConnection() statique
+            $connection = DB::connection();
             $schemaBuilder = $connection->getSchemaBuilder();
-            return $schemaBuilder->hasColumn(static::getTable(), $column);
+            return $schemaBuilder->hasColumn((new static)->getTable(), $column);
         } catch (\Exception $e) {
             // En cas d'erreur, retourner false par sécurité
             return false;

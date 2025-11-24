@@ -105,12 +105,29 @@ export default function CinetPayConfigIndex({ config }: Props) {
                 }),
             });
 
+            let result: TestResult;
+            
             if (!response.ok) {
+                // Essayer de parser le JSON même si le statut n'est pas OK
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    try {
+                        result = await response.json();
+                        // Si on a un JSON valide, l'utiliser même avec un statut d'erreur
+                        if (result.message) {
+                            setTestResult(result);
+                            setIsTesting(false);
+                            return;
+                        }
+                    } catch (e) {
+                        // Si le JSON est invalide, continuer avec l'erreur
+                    }
+                }
                 const text = await response.text();
                 throw new Error(`Réponse non-JSON reçue (${response.status}): ${text.substring(0, 200)}`);
             }
 
-            const result: TestResult = await response.json();
+            result = await response.json();
             
             // Extraire les suggestions et connection_error depuis details si elles existent
             if (result.details && typeof result.details === 'object') {
