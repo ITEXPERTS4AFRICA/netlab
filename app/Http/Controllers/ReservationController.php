@@ -61,6 +61,9 @@ class ReservationController extends Controller
 
     public function store(Request $request, $lab = null)
     {
+        // Augmenter le timeout pour cette opération (paiement peut prendre du temps)
+        set_time_limit(60); // 1 minute
+        
         // Log pour déboguer
         \Log::info('Reservation request received', [
             'data' => $request->all(),
@@ -172,11 +175,67 @@ class ReservationController extends Controller
             }
         }
 
-        // Vérifier les conflits (exclure les réservations annulées et les réservations pending expirées)
+        // Vérifier s'il existe une réservation en attente pour cet utilisateur et ce créneau
+        // Si oui, vérifier le nombre de tentatives échouées
+        $existingPendingReservation = Reservation::where('lab_id', $lab->id)
+            ->where('user_id', $user->id)
+            ->where('status', 'pending')
+            ->where('start_at', $start->format('Y-m-d H:i:s'))
+            ->where('end_at', $end->format('Y-m-d H:i:s'))
+            ->where('created_at', '>', now()->subMinutes(15)) // Pas expirée
+            ->first();
+
+        // Si une réservation en attente existe avec 3 échecs ou plus, l'annuler et permettre de recommencer
+        if ($existingPendingReservation && $existingPendingReservation->failed_attempts >= 3) {
+            \Log::info('Cancelling reservation with 3+ failed attempts', [
+                'reservation_id' => $existingPendingReservation->id,
+                'failed_attempts' => $existingPendingReservation->failed_attempts,
+            ]);
+            
+            $existingPendingReservation->update([
+                'status' => 'cancelled',
+                'notes' => trim(($existingPendingReservation->notes ? $existingPendingReservation->notes . PHP_EOL : '') . 
+                    'Annulée automatiquement après 3 tentatives échouées le ' . now()->format('Y-m-d H:i:s')),
+            ]);
+            
+            // Continuer pour créer une nouvelle réservation
+        } elseif ($existingPendingReservation) {
+            // Si une réservation en attente existe avec moins de 3 échecs, incrémenter les tentatives
+            $newFailedAttempts = $existingPendingReservation->failed_attempts + 1;
+            
+            \Log::info('Incrementing failed attempts for existing pending reservation', [
+                'reservation_id' => $existingPendingReservation->id,
+                'old_failed_attempts' => $existingPendingReservation->failed_attempts,
+                'new_failed_attempts' => $newFailedAttempts,
+            ]);
+            
+            $existingPendingReservation->update([
+                'failed_attempts' => $newFailedAttempts,
+                'notes' => trim(($existingPendingReservation->notes ? $existingPendingReservation->notes . PHP_EOL : '') . 
+                    "Tentative {$newFailedAttempts}/3 échouée (créneau déjà réservé) le " . now()->format('Y-m-d H:i:s')),
+            ]);
+            
+            // Retourner la réservation existante avec les informations de retry
+            return response()->json([
+                'error' => 'Ce créneau horaire est déjà réservé',
+                'code' => 'SLOT_ALREADY_RESERVED',
+                'can_retry' => $newFailedAttempts < 3,
+                'failed_attempts' => $newFailedAttempts,
+                'max_attempts' => 3,
+                'remaining_attempts' => 3 - $newFailedAttempts,
+                'reservation_id' => $existingPendingReservation->id,
+                'message' => $newFailedAttempts >= 3 
+                    ? 'Maximum de 3 tentatives atteint. La réservation a été annulée. Veuillez choisir un autre créneau.'
+                    : "Tentative {$newFailedAttempts}/3 échouée. Il reste " . (3 - $newFailedAttempts) . " tentative(s). Veuillez réessayer avec un autre créneau.",
+            ], 422);
+        }
+
+        // Vérifier les conflits avec d'autres utilisateurs (exclure les réservations annulées et les réservations pending expirées)
         // Les réservations pending de plus de 15 minutes sont considérées comme expirées
         $conflict = Reservation::where('lab_id', $lab->id)
             ->where('status', '!=', 'cancelled')
-            ->where(function($q) use ($user) {
+            ->where('user_id', '!=', $user->id) // Exclure les réservations de l'utilisateur actuel
+            ->where(function($q) {
                 // Exclure les réservations pending expirées (plus de 15 minutes)
                 $q->where(function($q2) {
                     $q2->where('status', '!=', 'pending')
@@ -192,7 +251,30 @@ class ReservationController extends Controller
             })->exists();
 
         if ($conflict) {
-            return response()->json(['error' => 'Ce créneau horaire est déjà réservé'], 422);
+            // Si c'est un conflit avec un autre utilisateur, créer une réservation avec failed_attempts = 1
+            // ou incrémenter si une réservation existe déjà
+            $reservation = Reservation::create([
+                'user_id' => $user->id,
+                'lab_id' => $lab->id,
+                'rate_id' => $request->rate_id,
+                'start_at' => $start->format('Y-m-d H:i:s'),
+                'end_at' => $end->format('Y-m-d H:i:s'),
+                'status' => 'pending',
+                'estimated_cents' => $estimatedCents,
+                'failed_attempts' => 1,
+                'notes' => "Tentative 1/3 échouée (créneau déjà réservé par un autre utilisateur) le " . now()->format('Y-m-d H:i:s'),
+            ]);
+            
+            return response()->json([
+                'error' => 'Ce créneau horaire est déjà réservé',
+                'code' => 'SLOT_ALREADY_RESERVED',
+                'can_retry' => true,
+                'failed_attempts' => 1,
+                'max_attempts' => 3,
+                'remaining_attempts' => 2,
+                'reservation_id' => $reservation->id,
+                'message' => 'Tentative 1/3 échouée. Il reste 2 tentative(s). Veuillez réessayer avec un autre créneau.',
+            ], 422);
         }
 
         // Calculer le prix
@@ -208,7 +290,7 @@ class ReservationController extends Controller
             'will_initiate_payment' => $estimatedCents > 0 && !$skipPayment,
         ]);
 
-        // Créer la réservation
+        // Créer la réservation (failed_attempts = 0 car c'est une nouvelle tentative réussie)
         $reservation = Reservation::create([
             'user_id' => $user->id,
             'lab_id' => $lab->id,
@@ -217,6 +299,7 @@ class ReservationController extends Controller
             'end_at' => $end->format('Y-m-d H:i:s'),
             'status' => ($isInstant && $skipPayment) ? 'active' : 'pending',
             'estimated_cents' => $estimatedCents,
+            'failed_attempts' => 0,
         ]);
 
         \Log::info('Reservation created', [
@@ -296,8 +379,43 @@ class ReservationController extends Controller
             'end_at' => $reservation->end_at,
         ]);
 
-        // Initialiser le paiement avec CinetPay
-        $result = $this->cinetPayService->initiatePayment($paymentData);
+        // Initialiser le paiement avec CinetPay avec gestion de timeout
+        try {
+            $result = $this->cinetPayService->initiatePayment($paymentData);
+        } catch (\Exception $e) {
+            // Gérer les exceptions (timeout, erreurs réseau, etc.)
+            \Log::error('CinetPay payment initiation exception in ReservationController', [
+                'error' => $e->getMessage(),
+                'reservation_id' => $reservation->id,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
+            // Vérifier si c'est un timeout
+            $isTimeout = strpos($e->getMessage(), 'timeout') !== false || 
+                        strpos($e->getMessage(), 'timed out') !== false ||
+                        strpos($e->getMessage(), 'Maximum execution time') !== false;
+            
+            // Si c'est un timeout, retourner 201 (créé) car la réservation existe
+            // L'utilisateur pourra réessayer le paiement plus tard
+            $reservation->update([
+                'status' => 'pending',
+                'notes' => 'Paiement non initialisé - ' . ($isTimeout ? 'Timeout' : 'Erreur SDK') . ' - ' . now()->toDateTimeString(),
+            ]);
+            
+            return response()->json([
+                'reservation' => $reservation->fresh(),
+                'requires_payment' => true,
+                'payment_error' => true,
+                'error' => $isTimeout 
+                    ? 'L\'API de paiement ne répond pas dans les temps. Veuillez réessayer plus tard.'
+                    : 'Erreur lors de l\'initialisation du paiement: ' . $e->getMessage(),
+                'code' => $isTimeout ? 'TIMEOUT' : 'SDK_ERROR',
+                'is_timeout' => $isTimeout,
+                'can_retry_payment' => true,
+                'retry_payment_url' => "/api/reservations/{$reservation->id}/payments/initiate",
+                'message' => 'La réservation a été créée mais le paiement n\'a pas pu être initialisé. Vous pouvez réessayer le paiement depuis la page de vos réservations. Note: La réservation sera automatiquement annulée après 15 minutes si le paiement n\'est pas réussi.',
+            ], 201); // 201 Created au lieu de 500
+        }
 
         if (!$result['success']) {
             \Log::error('CinetPay payment initiation failed in ReservationController', [

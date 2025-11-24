@@ -251,6 +251,7 @@ class ConsoleController extends Controller
         return response()->json([
             'session_id' => $consoleKey,
             'id' => $consoleKey,
+            'console_id' => $consoleKey, // Ajouter console_id pour le polling des logs
             'console_key' => $consoleKey,
             'console_url' => $consoleUrl,
             'url' => $consoleUrl,

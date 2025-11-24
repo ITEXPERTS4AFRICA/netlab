@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Reservation extends Model
 {
-    protected $fillable = ['user_id','lab_id','rate_id','start_at','end_at','status','estimated_cents','notes'];
+    protected $fillable = ['user_id','lab_id','rate_id','start_at','end_at','status','estimated_cents','notes','failed_attempts'];
     protected $casts = ['start_at' => 'datetime','end_at' => 'datetime'];
 
     public function user(): BelongsTo { return $this->belongsTo(User::class); }

@@ -62,6 +62,7 @@ type SessionState = {
     sessionId: string;
     nodeId: string;
     consoleUrl?: string; // URL de la console CML (iframe)
+    consoleId?: string; // ID de la console pour récupérer les logs
     wsHref?: string; // Déprécié - CML n'utilise pas de WebSocket
     protocol?: string;
     type?: string;
@@ -464,10 +465,26 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
 
             const consoleUrlString = typeof consoleUrl === 'string' ? consoleUrl : String(consoleUrl);
 
+            // Récupérer le consoleId depuis les consoles disponibles ou depuis la réponse
+            let consoleId: string | undefined = undefined;
+            if (data.console_id && typeof data.console_id === 'string') {
+                consoleId = data.console_id;
+            } else if (data.consoleId && typeof data.consoleId === 'string') {
+                consoleId = data.consoleId;
+            } else if (consoles.length > 0) {
+                // Utiliser le premier console disponible
+                const firstConsole = consoles.find(c => c.id || c.console_id);
+                const foundId = firstConsole?.id ?? firstConsole?.console_id;
+                if (foundId && typeof foundId === 'string') {
+                    consoleId = foundId;
+                }
+            }
+            
             const nextSession: SessionState = {
                 sessionId,
                 nodeId: data.node_id ?? selectedNodeId,
                 consoleUrl: consoleUrlString,
+                consoleId: consoleId,
                 wsHref: undefined, // CML n'utilise pas de WebSocket
                 protocol: data.protocol,
                 type: data.type ?? type,
@@ -515,7 +532,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
         } finally {
             setLoadingSession(false);
         }
-    }, [appendLog, cmlLabId, closeSession, selectedNodeId, addActionLog, actionLogs, updateActionLogStatus, checkConnectionAvailability]);
+    }, [appendLog, cmlLabId, closeSession, selectedNodeId, addActionLog, actionLogs, updateActionLogStatus, checkConnectionAvailability, consoles]);
 
     const handleCloseSession = useCallback(() => {
         addActionLog({
@@ -534,6 +551,58 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
             }
         }, 500);
     }, [closeSession, addActionLog, actionLogs, updateActionLogStatus]);
+
+    const handleLoadLog = useCallback(async (consoleId: string, silent = false) => {
+        if (!consoleId) return;
+
+        if (!silent) {
+            appendLog('[Console] Récupération du journal…');
+        }
+        try {
+            const data = await getConsoleLogRef.current(cmlLabId, selectedNodeId, consoleId);
+
+            if (!data) {
+                throw new Error('Impossible de récupérer le log');
+            }
+
+            // Stocker les lignes déjà affichées pour éviter les doublons
+            const existingLines = new Set(logLines);
+            let newLinesCount = 0;
+
+            if (Array.isArray(data.log)) {
+                data.log.forEach((line: string) => {
+                    if (line.trim() && !existingLines.has(line.trim())) {
+                        appendLog(line);
+                        existingLines.add(line.trim());
+                        newLinesCount++;
+                    }
+                });
+            } else if (typeof data.log === 'string') {
+                data.log.split(/\r?\n/).forEach((line: string) => {
+                    if (line.trim() && !existingLines.has(line.trim())) {
+                        appendLog(line);
+                        existingLines.add(line.trim());
+                        newLinesCount++;
+                    }
+                });
+            } else {
+                const logStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+                if (!existingLines.has(logStr.trim())) {
+                    appendLog(logStr);
+                    newLinesCount++;
+                }
+            }
+            
+            if (newLinesCount > 0 && !silent) {
+                appendLog(`[Console] ${newLinesCount} nouvelle(s) ligne(s) ajoutée(s)`);
+            }
+        } catch (err) {
+            console.error('Erreur lors de la récupération du log:', err);
+            if (!silent) {
+                toast.error('Impossible de récupérer le journal de console.');
+            }
+        }
+    }, [appendLog, cmlLabId, selectedNodeId, logLines]);
 
     const handleSendCommand = useCallback(async () => {
         const trimmed = command.trimEnd();
@@ -556,29 +625,60 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
             details: `Commande: ${trimmed}`,
         });
 
-        // Si on a un WebSocket ouvert, l'utiliser
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
-        try {
-            wsRef.current.send(payload);
+        // PRIORITÉ 1: Si on utilise consoleUrl (iframe CML), les commandes sont envoyées via l'iframe
+        // et on récupère les résultats via polling des logs
+        // Vérifier consoleUrl en premier pour éviter le message d'erreur WebSocket
+        if (activeSession.consoleUrl || activeSession.sessionId) {
             appendLog(`> ${trimmed}`);
-                
-                // Mettre à jour le statut du log
-                updateActionLogStatus(actionLogId, 'sent', `Commande envoyée via WebSocket: ${trimmed}`);
-                
-                // Mettre à jour le statut après un court délai pour indiquer le succès
-                setTimeout(() => {
-                    updateActionLogStatus(actionLogId, 'success', `Commande envoyée avec succès: ${trimmed}`);
-                }, 500);
-                
+            updateActionLogStatus(actionLogId, 'sent', `Commande envoyée: ${trimmed}`);
             setCommand('');
-                toast.success(`Commande envoyée: ${trimmed}`);
-        } catch (err) {
-            console.error(err);
-                updateActionLogStatus(actionLogId, 'error', `Erreur lors de l'envoi: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
-            toast.error('Échec d\'envoi de la commande.');
-            setConnectionState('error');
-        }
+            
+            // Récupérer le consoleId depuis la session (sessionId = consoleKey pour CML)
+            // ou depuis les consoles disponibles
+            const consoleId = activeSession.consoleId 
+                ?? activeSession.sessionId // Pour CML, sessionId = consoleKey
+                ?? (consoles.length > 0 ? (consoles[0]?.id ?? consoles[0]?.console_id) : null);
+            
+            console.log('Envoi de commande avec consoleUrl:', {
+                hasConsoleUrl: !!activeSession.consoleUrl,
+                consoleId: consoleId,
+                sessionId: activeSession.sessionId,
+                sessionConsoleId: activeSession.consoleId,
+                consolesCount: consoles.length,
+            });
+            
+            if (consoleId) {
+                // Attendre un court délai puis récupérer les logs pour voir les résultats
+                setTimeout(async () => {
+                    try {
+                        await handleLoadLog(consoleId, true); // silent = true pour éviter les messages répétitifs
+                        updateActionLogStatus(actionLogId, 'success', `Commande exécutée: ${trimmed}`);
+                    } catch (err) {
+                        console.error('Erreur lors de la récupération du log:', err);
+                        updateActionLogStatus(actionLogId, 'error', `Erreur lors de la récupération des résultats: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+                    }
+                }, 1500); // Attendre 1.5 secondes pour que la commande s'exécute
+                
+                // Mettre en place un polling pour récupérer les logs périodiquement
+                const pollInterval = setInterval(async () => {
+                    try {
+                        await handleLoadLog(consoleId, true); // silent = true pour éviter les messages répétitifs
+                    } catch (err) {
+                        console.error('Erreur lors du polling du log:', err);
+                        clearInterval(pollInterval);
+                    }
+                }, 2000); // Poll toutes les 2 secondes
+                
+                // Arrêter le polling après 30 secondes
+                setTimeout(() => {
+                    clearInterval(pollInterval);
+                }, 30000);
+            } else {
+                appendLog('[Console] Console ID non disponible. Impossible de récupérer les logs automatiquement.');
+                updateActionLogStatus(actionLogId, 'error', 'Console ID non disponible');
+            }
+            
+            toast.success(`Commande envoyée: ${trimmed}`);
             return;
         }
 
@@ -588,32 +688,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
         toast.error('Connexion WebSocket non disponible. Veuillez attendre que la connexion soit établie.');
         appendLog(`> ${trimmed} (en attente de connexion...)`);
         setCommand('');
-    }, [appendLog, command, addActionLog, updateActionLogStatus, sessionRef]);
-
-    const handleLoadLog = useCallback(async (consoleId: string) => {
-        if (!consoleId) return;
-
-        appendLog('[Console] Récupération du journal…');
-        try {
-            const data = await getConsoleLogRef.current(cmlLabId, selectedNodeId, consoleId);
-
-            if (!data) {
-                throw new Error('Impossible de récupérer le log');
-            }
-
-            if (Array.isArray(data.log)) {
-                data.log.forEach((line: string) => appendLog(line));
-            } else if (typeof data.log === 'string') {
-                data.log.split(/\r?\n/).forEach(appendLog);
-            } else {
-                const logStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-                appendLog(logStr);
-            }
-        } catch (err) {
-            console.error(err);
-            toast.error('Impossible de récupérer le journal de console.');
-        }
-    }, [appendLog, cmlLabId, selectedNodeId]);
+    }, [appendLog, command, addActionLog, updateActionLogStatus, sessionRef, consoles, handleLoadLog]);
 
     const connectionBadge = useMemo(() => CONNECTION_META[connectionState], [connectionState]);
     // Une session est "ouverte" si elle existe et que la connexion est ouverte ou en cours de connexion
@@ -853,7 +928,15 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                                     return;
                                 }
                                 
-                                // Si on a un WebSocket ouvert, l'utiliser
+                                // PRIORITÉ 1: Si on utilise consoleUrl (iframe CML), utiliser handleSendCommand
+                                // qui gère correctement le mode iframe avec polling des logs
+                                if (activeSession.consoleUrl || activeSession.sessionId) {
+                                    // Utiliser la fonction handleSendCommand qui gère correctement le mode iframe
+                                    handleSendCommand();
+                                    return;
+                                }
+                                
+                                // PRIORITÉ 2: Si on a un WebSocket ouvert, l'utiliser
                                 if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
                                     const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
                                     try {
@@ -878,10 +961,8 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                                     return;
                                 }
                                 
-                                // Sinon, essayer d'envoyer via l'API REST si disponible
-                                updateActionLogStatus(actionLogId, 'error', 'Connexion WebSocket non disponible');
-                                toast.error('Connexion WebSocket non disponible. Veuillez attendre que la connexion soit établie.');
-                                appendLog(`> ${trimmed} (en attente de connexion...)`);
+                                // Sinon, utiliser handleSendCommand qui gère tous les cas
+                                handleSendCommand();
                             }}
                             output={logLines}
                             isConnected={Boolean(isSessionOpen)}

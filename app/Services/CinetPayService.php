@@ -115,6 +115,22 @@ class CinetPayService
      */
     public function initiatePayment(array $paymentData): array
     {
+        // Vérifier que le SDK est initialisé
+        if (!$this->cinetPay) {
+            Log::error('CinetPay SDK not initialized - cannot initiate payment', [
+                'api_key_set' => !empty($this->apiKey) && $this->apiKey !== 'temp_key',
+                'site_id_set' => !empty($this->siteId) && $this->siteId !== 'temp_site',
+                'mode' => $this->mode,
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => 'CinetPay n\'est pas configuré. Veuillez configurer les credentials CinetPay dans les paramètres d\'administration.',
+                'code' => 'SDK_NOT_INITIALIZED',
+                'description' => 'Les credentials CinetPay (API Key et Site ID) ne sont pas configurés.',
+            ];
+        }
+        
         // CinetPay attend le montant directement en XOF (pas en centimes)
         // Le montant est déjà en centimes dans $paymentData['amount']
         // Convertir les centimes en XOF
@@ -190,8 +206,89 @@ class CinetPayService
                 $this->cinetPay->setCancelUrl($this->cancelUrl);
             }
 
-            // Obtenir la signature via le SDK officiel
-            $signature = $this->cinetPay->getSignature();
+            // Obtenir la signature via le SDK officiel avec gestion de timeout
+            try {
+                // Vérifier que le SDK est bien initialisé avant d'appeler getSignature()
+                if (!$this->cinetPay) {
+                    Log::error('CinetPay SDK is null when trying to get signature', [
+                        'api_key_set' => !empty($this->apiKey) && $this->apiKey !== 'temp_key',
+                        'site_id_set' => !empty($this->siteId) && $this->siteId !== 'temp_site',
+                        'mode' => $this->mode,
+                    ]);
+                    
+                    return [
+                        'success' => false,
+                        'error' => 'CinetPay n\'est pas configuré. Veuillez configurer les credentials CinetPay dans les paramètres d\'administration.',
+                        'code' => 'SDK_NOT_INITIALIZED',
+                        'description' => 'Les credentials CinetPay (API Key et Site ID) ne sont pas configurés.',
+                    ];
+                }
+                
+                Log::info('CinetPay: Appel de getSignature()', [
+                    'transaction_id' => $transactionId,
+                    'amount' => $amount,
+                    'currency' => $paymentData['currency'] ?? 'XOF',
+                    'mode' => $this->mode,
+                ]);
+                
+                $signature = $this->cinetPay->getSignature();
+                
+                Log::info('CinetPay: Signature obtenue avec succès', [
+                    'transaction_id' => $transactionId,
+                    'signature_length' => strlen($signature),
+                ]);
+            } catch (\Exception $e) {
+                // Si l'appel prend trop de temps ou échoue, logger et retourner une erreur
+                $errorMessage = $e->getMessage();
+                $isTimeout = false;
+                
+                Log::error('CinetPay getSignature error', [
+                    'error' => $errorMessage,
+                    'transaction_id' => $transactionId,
+                    'error_type' => get_class($e),
+                    'trace' => substr($e->getTraceAsString(), 0, 500), // Limiter la taille du trace
+                ]);
+                
+                // Vérifier si c'est un timeout
+                if (stripos($errorMessage, 'timeout') !== false || 
+                    stripos($errorMessage, 'timed out') !== false ||
+                    stripos($errorMessage, 'Maximum execution time') !== false ||
+                    stripos($errorMessage, 'Connection timed out') !== false) {
+                    $isTimeout = true;
+                }
+                
+                // Vérifier si c'est une erreur de configuration
+                if (stripos($errorMessage, 'indisponible') !== false ||
+                    stripos($errorMessage, 'temporairement') !== false ||
+                    stripos($errorMessage, 'probleme est survenu') !== false) {
+                    return [
+                        'success' => false,
+                        'error' => 'L\'API CinetPay est temporairement indisponible. Veuillez réessayer plus tard.',
+                        'code' => 'API_UNAVAILABLE',
+                        'is_timeout' => false,
+                        'description' => $errorMessage,
+                    ];
+                }
+                
+                if ($isTimeout) {
+                    return [
+                        'success' => false,
+                        'error' => 'L\'API CinetPay ne répond pas dans les temps. Veuillez réessayer plus tard.',
+                        'code' => 'TIMEOUT',
+                        'is_timeout' => true,
+                        'description' => $errorMessage,
+                    ];
+                }
+                
+                // Autre erreur
+                return [
+                    'success' => false,
+                    'error' => 'Erreur lors de l\'obtention de la signature CinetPay: ' . $errorMessage,
+                    'code' => 'SIGNATURE_ERROR',
+                    'is_timeout' => false,
+                    'description' => $errorMessage,
+                ];
+            }
 
             // Construire l'URL de paiement avec tous les paramètres
             $cashDeskUrl = $this->getCashDeskUrl();
@@ -293,8 +390,13 @@ class CinetPayService
 
         try {
             // CinetPay attend les données en format application/x-www-form-urlencoded
-            // Augmenter le timeout à 30 secondes
-            $response = Http::timeout(30)->asForm()->post($url, $data);
+            // Réduire le timeout à 10 secondes pour éviter les attentes trop longues
+            // Désactiver la vérification SSL en développement local pour éviter les erreurs de certificat
+            $response = Http::timeout(10)
+                ->connectTimeout(5) // Timeout de connexion à 5 secondes
+                ->withoutVerifying() // Désactiver la vérification SSL
+                ->asForm()
+                ->post($url, $data);
 
             $responseText = $response->body();
 

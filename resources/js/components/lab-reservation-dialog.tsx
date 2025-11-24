@@ -289,18 +289,65 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
         lab_id_length: lab.id?.length,
       });
 
+      // Récupérer le token CSRF de manière plus robuste
+      const getCsrfToken = (): string => {
+        // Méthode 1: Depuis le meta tag (méthode principale)
+        const metaTag = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]');
+        if (metaTag?.content) {
+          return metaTag.content;
+        }
+        
+        // Méthode 2: Depuis le cookie XSRF-TOKEN (Laravel stocke aussi le token dans les cookies)
+        const cookies = document.cookie.split(';');
+        for (const cookie of cookies) {
+          const [name, value] = cookie.trim().split('=');
+          if (name === 'XSRF-TOKEN') {
+            return decodeURIComponent(value);
+          }
+        }
+        
+        return '';
+      };
+
+      const csrfToken = getCsrfToken();
+      
+      if (!csrfToken) {
+        console.error('CSRF token not found. Please refresh the page.');
+        alert('Erreur: Token de sécurité introuvable. Veuillez rafraîchir la page.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      console.log('CSRF token retrieved:', csrfToken ? `${csrfToken.substring(0, 20)}...` : 'missing');
+
       // Utiliser cml_id pour trouver le lab
+      // Laravel accepte le token CSRF dans X-CSRF-TOKEN ou X-XSRF-TOKEN
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      };
+      
+      // Ajouter le token CSRF dans les deux headers possibles
+      headers['X-CSRF-TOKEN'] = csrfToken;
+      headers['X-XSRF-TOKEN'] = csrfToken;
+
       const response = await fetch(`/api/labs/reserve`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-          'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-        },
+        headers,
         credentials: 'same-origin', // Inclure les cookies de session pour l'authentification
         body: JSON.stringify(requestData),
       });
+
+      // Vérifier le statut de la réponse avant de parser
+      if (response.status === 419) {
+        console.error('CSRF token mismatch. Token present:', !!csrfToken);
+        const errorText = await response.text();
+        console.error('CSRF error response:', errorText);
+        alert('Erreur de sécurité: Le token de session a expiré. Veuillez rafraîchir la page et réessayer.');
+        setIsSubmitting(false);
+        return;
+      }
 
       let result;
       let responseText = '';
@@ -325,6 +372,32 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
         console.error('Response headers:', Object.fromEntries(response.headers.entries()));
         console.error('Response text:', responseText);
         throw new Error(`Réponse invalide du serveur (${response.status}): ${responseText.substring(0, 200)}`);
+      }
+
+      // Gérer les cas où la réservation est créée mais le paiement a échoué (201 avec payment_error)
+      if (response.status === 201 && result.payment_error) {
+        console.log('Reservation created but payment failed:', result);
+        toast.warning(
+          result.message || 'La réservation a été créée mais le paiement n\'a pas pu être initialisé. Vous pourrez réessayer le paiement depuis la page de vos réservations.',
+          {
+            duration: 8000,
+          }
+        );
+        setOpen(false);
+        
+        // Utiliser un petit délai pour permettre au toast de s'afficher
+        setTimeout(() => {
+          router.visit('/labs/my-reserved', {
+            method: 'get',
+            preserveScroll: true,
+            data: {
+              reservation_id: result.reservation?.id,
+              payment_error: true,
+              error_message: result.error || result.message,
+            },
+          });
+        }, 500);
+        return;
       }
 
       if (!response.ok) {
@@ -367,16 +440,64 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
         }
 
         // Gérer les erreurs de validation Laravel (422)
-        if (response.status === 422 && result.errors) {
-          // Erreurs de validation Laravel
-          const validationErrors = Object.entries(result.errors)
-            .map(([field, messages]) => {
-              const msgArray = Array.isArray(messages) ? messages : [messages];
-              return `${field}: ${msgArray.join(', ')}`;
-            })
-            .join('; ');
-          console.error('Validation errors:', result.errors);
-          throw new Error(validationErrors || 'Erreurs de validation');
+        if (response.status === 422) {
+          // Vérifier si c'est une erreur de créneau déjà réservé avec système de retry
+          if (result.code === 'SLOT_ALREADY_RESERVED' && result.can_retry !== undefined) {
+            const failedAttempts = result.failed_attempts || 0;
+            const maxAttempts = result.max_attempts || 3;
+            const remainingAttempts = result.remaining_attempts || (maxAttempts - failedAttempts);
+            
+            console.log('Slot already reserved - retry system:', {
+              failed_attempts: failedAttempts,
+              max_attempts: maxAttempts,
+              remaining_attempts: remainingAttempts,
+              can_retry: result.can_retry,
+            });
+            
+            // Si 3 tentatives échouées, annuler et permettre de recommencer
+            if (failedAttempts >= maxAttempts) {
+              toast.error(
+                result.message || 
+                'Maximum de 3 tentatives atteint. La réservation a été annulée. Veuillez choisir un autre créneau.',
+                { duration: 10000 }
+              );
+              // Réinitialiser le formulaire pour permettre une nouvelle tentative
+              reset();
+              setUploadError(null);
+              return;
+            }
+            
+            // Si moins de 3 tentatives, permettre le retry
+            if (result.can_retry && remainingAttempts > 0) {
+              toast.warning(
+                result.message || 
+                `Tentative ${failedAttempts}/${maxAttempts} échouée. Il reste ${remainingAttempts} tentative(s). Veuillez réessayer avec un autre créneau.`,
+                { duration: 8000 }
+              );
+              // Ne pas fermer le dialog, permettre à l'utilisateur de modifier les dates
+              setUploadError(
+                `Créneau déjà réservé. Tentative ${failedAttempts}/${maxAttempts}. Il reste ${remainingAttempts} tentative(s).`
+              );
+              return;
+            }
+          }
+          
+          // Autres erreurs de validation Laravel
+          if (result.errors) {
+            const validationErrors = Object.entries(result.errors)
+              .map(([field, messages]) => {
+                const msgArray = Array.isArray(messages) ? messages : [messages];
+                return `${field}: ${msgArray.join(', ')}`;
+              })
+              .join('; ');
+            console.error('Validation errors:', result.errors);
+            throw new Error(validationErrors || 'Erreurs de validation');
+          }
+          
+          // Erreur générique 422
+          if (result.error) {
+            throw new Error(result.error || 'Erreur de validation');
+          }
         }
 
         // Gérer les erreurs détaillées de CinetPay
