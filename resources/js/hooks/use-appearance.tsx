@@ -1,33 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
+import { safeGetItem, safeSetItem } from '@/utils/safe-storage';
 
 export type Appearance = 'light' | 'dark' | 'system';
 
-// Helper pour accéder à localStorage de manière sécurisée
+// Helper pour accéder à localStorage de manière sécurisée (utilise le polyfill)
 const getLocalStorage = (key: string, defaultValue: string | null = null): string | null => {
-    try {
-        if (typeof window === 'undefined' || !window.localStorage) {
-            return defaultValue;
-        }
-        return window.localStorage.getItem(key);
-    } catch (error) {
-        // localStorage n'est pas disponible (bloqué par le navigateur, mode privé, etc.)
-        console.warn('localStorage is not available:', error);
-        return defaultValue;
-    }
+    return safeGetItem(key, defaultValue);
 };
 
 const setLocalStorage = (key: string, value: string): boolean => {
-    try {
-        if (typeof window === 'undefined' || !window.localStorage) {
-            return false;
-        }
-        window.localStorage.setItem(key, value);
-        return true;
-    } catch (error) {
-        // localStorage n'est pas disponible
-        console.warn('localStorage is not available:', error);
-        return false;
-    }
+    safeSetItem(key, value);
+    return true; // Toujours retourner true car le fallback mémoire fonctionne toujours
 };
 
 const prefersDark = () => {

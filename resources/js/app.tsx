@@ -4,6 +4,10 @@ import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import { initializeTheme } from './hooks/use-appearance';
+import { setupLocalStoragePolyfill } from './utils/safe-storage';
+
+// Configurer le polyfill localStorage au démarrage (avant tout autre code)
+setupLocalStoragePolyfill();
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
