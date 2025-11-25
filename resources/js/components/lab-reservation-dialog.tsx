@@ -353,7 +353,7 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       let responseText = '';
       try {
         responseText = await response.text();
-        console.log('Raw response:', responseText);
+        console.log('🔍 Raw response (first 500 chars):', responseText.substring(0, 500));
 
         // Nettoyer la réponse si elle contient du CSS du SDK CinetPay
         // Le SDK peut injecter du CSS avant le JSON
@@ -362,16 +362,123 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
           // Extraire le JSON après le </style>
           const jsonStart = responseText.indexOf('</style>') + 8;
           cleanedResponse = responseText.substring(jsonStart).trim();
-          console.log('Cleaned response (removed CSS):', cleanedResponse);
+          console.log('🧹 Cleaned response (removed CSS):', cleanedResponse.substring(0, 500));
+        }
+
+        // Essayer de trouver le JSON dans la réponse (peut être précédé de texte)
+        // Chercher le premier { ou [ qui indique le début du JSON
+        const jsonStartIndex = cleanedResponse.search(/\{|\[/);
+        if (jsonStartIndex > 0) {
+          console.log('⚠️ JSON trouvé après du texte, extraction...');
+          cleanedResponse = cleanedResponse.substring(jsonStartIndex);
         }
 
         result = JSON.parse(cleanedResponse);
+        console.log('✅ JSON parsé avec succès:', {
+          has_payment_url: !!result.payment_url,
+          has_requires_payment: result.requires_payment !== undefined,
+          requires_payment_value: result.requires_payment,
+          payment_url_value: result.payment_url,
+          status_code: result.code,
+          message: result.message,
+          full_result: result,
+        });
+        
+        // VÉRIFICATION ULTRA-PRIORITAIRE: Si payment_url existe, rediriger IMMÉDIATEMENT
+        // (avant même de sortir du try/catch)
+        const immediatePaymentUrl = result.payment_url || result.payment?.payment_url || result.data?.payment_url;
+        if (immediatePaymentUrl) {
+          console.log('🚀🚀🚀🚀🚀 PAYMENT_URL DÉTECTÉ IMMÉDIATEMENT APRÈS PARSING - REDIRECTION ULTRA-RAPIDE:', immediatePaymentUrl);
+          setOpen(false);
+          toast.success('Redirection vers la page de paiement...', {
+            duration: 1000,
+          });
+          // Redirection immédiate
+          setTimeout(() => {
+            window.location.href = immediatePaymentUrl;
+          }, 300);
+          setIsSubmitting(false);
+          return;
+        }
       } catch (e) {
-        console.error('Failed to parse response:', e);
+        console.error('❌ Failed to parse response:', e);
         console.error('Response status:', response.status);
         console.error('Response headers:', Object.fromEntries(response.headers.entries()));
-        console.error('Response text:', responseText);
+        console.error('Response text (first 1000 chars):', responseText.substring(0, 1000));
         throw new Error(`Réponse invalide du serveur (${response.status}): ${responseText.substring(0, 200)}`);
+      }
+
+      // Vérifier d'abord si on a un payment_url (priorité absolue)
+      // Log détaillé pour déboguer
+      console.log('🔍🔍🔍 VÉRIFICATION PAYMENT_URL:', {
+        'result.payment_url': result.payment_url,
+        'result.payment': result.payment,
+        'result.payment?.payment_url': result.payment?.payment_url,
+        'result.data': result.data,
+        'result.data?.payment_url': result.data?.payment_url,
+        'response.ok': response.ok,
+        'response.status': response.status,
+        'result complet': result,
+      });
+      
+      const paymentUrl = result.payment_url || result.payment?.payment_url || result.data?.payment_url;
+      
+      console.log('🔍 paymentUrl final:', paymentUrl);
+      
+      // Si on a un payment_url, rediriger IMMÉDIATEMENT (peu importe le statut)
+      if (paymentUrl) {
+        console.log('✅✅✅✅✅ URL DE PAIEMENT TROUVÉE - REDIRECTION IMMÉDIATE:', paymentUrl);
+        setOpen(false);
+        toast.success('Redirection vers la page de paiement...', {
+          duration: 2000,
+        });
+        // Redirection immédiate sans délai pour être sûr
+        console.log('🚀🚀🚀 REDIRECTION EN COURS VERS:', paymentUrl);
+        window.location.href = paymentUrl;
+        return;
+      }
+      
+      console.log('❌❌❌ AUCUN PAYMENT_URL TROUVÉ dans la réponse');
+
+      // Si réponse 201 mais pas de payment_url, vérifier si c'est un succès avec message "CREATED"
+      if (response.ok && response.status === 201) {
+        // Si le message contient "CREATED" ou "success", c'est un succès, ne pas traiter comme erreur
+        const message = (result.message || '').toLowerCase();
+        const description = (result.description || '').toLowerCase();
+        const combined = (message + ' ' + description).toLowerCase();
+        if (combined.includes('created') || 
+            combined.includes('success') || 
+            combined.includes('transaction created') ||
+            (result.code && (result.code === '0' || result.code === '201' || result.code === 201))) {
+          console.log('✅ Réponse 201 avec message de succès, mais pas de payment_url. Vérification...', {
+            result,
+            has_payment: !!result.payment,
+            has_reservation: !!result.reservation,
+          });
+          
+          // Si on a une réservation mais pas de payment_url, peut-être que le paiement n'est pas requis
+          if (result.reservation && !result.requires_payment) {
+            console.log('✅ Pas de paiement requis, redirection vers /labs/my-reserved');
+            setOpen(false);
+            reset();
+            router.visit('/labs/my-reserved', {
+              method: 'get',
+              preserveScroll: true,
+            });
+            return;
+          }
+          
+          // Sinon, afficher un message d'information
+          toast.info('Réservation créée avec succès. Vérification du paiement...', {
+            duration: 3000,
+          });
+          setOpen(false);
+          router.visit('/labs/my-reserved', {
+            method: 'get',
+            preserveScroll: true,
+          });
+          return;
+        }
       }
 
       // Gérer les cas où la réservation est créée mais le paiement a échoué (201 avec payment_error)
@@ -401,6 +508,38 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       }
 
       if (!response.ok) {
+        // VÉRIFICATION PRIORITAIRE: Si c'est un message de succès (même dans un bloc d'erreur), ne pas traiter comme erreur
+        const successMessage = (result.message || '').toLowerCase();
+        const successDescription = (result.description || '').toLowerCase();
+        const combinedSuccessMessage = (successMessage + ' ' + successDescription).toLowerCase();
+        const hasSuccessIndicators = combinedSuccessMessage.includes('created') || 
+                                   combinedSuccessMessage.includes('success') || 
+                                   combinedSuccessMessage.includes('transaction created') ||
+                                   (result.code && (result.code === '0' || result.code === '201' || result.code === 201));
+        
+        if (hasSuccessIndicators) {
+          console.log('✅✅✅ Message de succès détecté dans bloc !response.ok, vérification payment_url...', result);
+          const paymentUrlCheck = result.payment_url || result.payment?.payment_url || result.data?.payment_url;
+          if (paymentUrlCheck) {
+            console.log('✅✅✅ URL DE PAIEMENT TROUVÉE - Redirection:', paymentUrlCheck);
+            setOpen(false);
+            toast.success('Redirection vers la page de paiement...', {
+              duration: 2000,
+            });
+            setTimeout(() => {
+              window.location.href = paymentUrlCheck;
+            }, 500);
+            return;
+          }
+          // Si pas de payment_url mais succès, rediriger vers réservations
+          setOpen(false);
+          router.visit('/labs/my-reserved', {
+            method: 'get',
+            preserveScroll: true,
+          });
+          return;
+        }
+        
         // Gérer les erreurs de timeout CinetPay
         if (result.error && (result.code === 'CONNECTION_TIMEOUT' || result.is_timeout)) {
           const timeoutMessage = result.error || 'L\'API de paiement CinetPay ne répond pas. Veuillez réessayer plus tard.';
@@ -501,12 +640,47 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
         }
 
         // Gérer les erreurs détaillées de CinetPay
+        // NE PAS traiter les messages de succès comme des erreurs
+        const message = result.message || '';
+        const description = result.description || '';
+        const combinedMessage = (message + ' ' + description).toLowerCase();
+        const isSuccessMessage = combinedMessage.includes('created') || 
+                               combinedMessage.includes('success') || 
+                               combinedMessage.includes('transaction created') ||
+                               (result.code && (result.code === '0' || result.code === '201' || result.code === 201));
+        
+        if (isSuccessMessage) {
+          console.log('⚠️ Message de succès détecté AVANT construction du message d\'erreur, traitement spécial...', result);
+          // Si c'est un message de succès, ne pas le traiter comme une erreur
+          // Vérifier à nouveau si on a un payment_url (peut-être qu'il était dans une structure différente)
+          const paymentUrlRetry = result.payment_url || result.payment?.payment_url || result.data?.payment_url;
+          if (paymentUrlRetry) {
+            console.log('✅✅✅ URL DE PAIEMENT TROUVÉE APRÈS VÉRIFICATION - Redirection:', paymentUrlRetry);
+            setOpen(false);
+            toast.success('Redirection vers la page de paiement...', {
+              duration: 2000,
+            });
+            setTimeout(() => {
+              window.location.href = paymentUrlRetry;
+            }, 500);
+            return;
+          }
+          // Si pas de payment_url mais message de succès, rediriger vers les réservations
+          console.log('✅ Message de succès mais pas de payment_url, redirection vers réservations');
+          setOpen(false);
+          router.visit('/labs/my-reserved', {
+            method: 'get',
+            preserveScroll: true,
+          });
+          return;
+        }
+        
         let errorMessage = typeof result.error === 'string'
           ? result.error
           : result.message || 'Erreur lors de la création de la réservation';
 
-        // Si c'est une erreur CinetPay avec code et description
-        if (result.code && result.description) {
+        // Si c'est une erreur CinetPay avec code et description (ET que ce n'est PAS un succès)
+        if (result.code && result.description && !isSuccessMessage) {
           errorMessage = `${errorMessage} (Code: ${result.code})`;
           if (result.description) {
             errorMessage += ` - ${result.description}`;
@@ -540,40 +714,62 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
           return;
         }
 
+        // DERNIÈRE VÉRIFICATION: Ne pas lancer d'erreur si c'est un message de succès
+        const finalCheckMessage = errorMessage.toLowerCase();
+        const finalCheckDescription = (result.description || '').toLowerCase();
+        const finalCheckCombined = (finalCheckMessage + ' ' + finalCheckDescription).toLowerCase();
+        if (finalCheckCombined.includes('created') || 
+            finalCheckCombined.includes('success') || 
+            finalCheckCombined.includes('transaction created') ||
+            (result.code && (result.code === '0' || result.code === '201' || result.code === 201))) {
+          console.log('✅✅✅ Dernière vérification: Message de succès détecté, redirection au lieu d\'erreur', {
+            errorMessage,
+            result,
+          });
+          const paymentUrlFinal = result.payment_url || result.payment?.payment_url || result.data?.payment_url;
+          if (paymentUrlFinal) {
+            setOpen(false);
+            toast.success('Redirection vers la page de paiement...', {
+              duration: 2000,
+            });
+            setTimeout(() => {
+              window.location.href = paymentUrlFinal;
+            }, 500);
+            return;
+          }
+          // Si pas de payment_url, rediriger vers réservations
+          setOpen(false);
+          router.visit('/labs/my-reserved', {
+            method: 'get',
+            preserveScroll: true,
+          });
+          return;
+        }
+
         throw new Error(errorMessage);
       }
 
       // Log pour déboguer le paiement
-      console.log('Reservation response:', {
+      console.log('📋 Reservation response complète:', {
         requires_payment: result.requires_payment,
         payment_url: result.payment_url,
-        estimated_cents: result.reservation?.estimated_cents,
         payment: result.payment,
+        payment_url_in_payment: result.payment?.payment_url,
+        estimated_cents: result.reservation?.estimated_cents,
         fullResult: result,
       });
 
-      // Si un paiement est requis, rediriger vers CinetPay IMMÉDIATEMENT
-      if (result.requires_payment === true && result.payment_url) {
-        console.log('✅ Redirection vers CinetPay:', result.payment_url);
-        // Fermer le dialog avant la redirection
-        setOpen(false);
-        // Redirection immédiate vers CinetPay
-        globalThis.location.href = result.payment_url;
-        return;
-      }
-
       // Si requires_payment est true mais pas de payment_url, afficher un message
-      if (result.requires_payment === true && !result.payment_url) {
-        console.error('❌ Paiement requis mais pas de payment_url fourni', result);
+      if (result.requires_payment === true && !paymentUrl) {
+        console.error('❌ Paiement requis mais pas de payment_url fourni', {
+          result,
+          payment_url: result.payment_url,
+          payment_object: result.payment,
+        });
         setUploadError('Erreur: URL de paiement non disponible. Veuillez contacter le support.');
-        return;
-      }
-
-      // Si payment_url existe même sans requires_payment explicite, rediriger quand même
-      if (result.payment_url && !result.requires_payment) {
-        console.log('⚠️ payment_url trouvé sans requires_payment, redirection quand même:', result.payment_url);
-        setOpen(false);
-        globalThis.location.href = result.payment_url;
+        toast.error('Erreur: URL de paiement non disponible. Veuillez contacter le support.', {
+          duration: 5000,
+        });
         return;
       }
 
@@ -589,6 +785,25 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       console.error('Reservation error:', error);
       // Afficher l'erreur dans le formulaire
       const errorMessage = error instanceof Error ? error.message : 'Une erreur est survenue';
+      
+      // NE PAS traiter les messages de succès comme des erreurs
+      const errorMessageLower = errorMessage.toLowerCase();
+      if (errorMessageLower.includes('created') || 
+          errorMessageLower.includes('success') || 
+          errorMessageLower.includes('transaction created') ||
+          errorMessageLower.includes('code: 201')) {
+        console.log('⚠️ Message de succès détecté dans le catch, redirection vers les réservations');
+        setOpen(false);
+        toast.success('Réservation créée avec succès !', {
+          duration: 3000,
+        });
+        router.visit('/labs/my-reserved', {
+          method: 'get',
+          preserveScroll: true,
+        });
+        return;
+      }
+      
       // Ne pas utiliser setData pour les erreurs, utiliser un state local
       setUploadError(errorMessage);
 

@@ -6,10 +6,11 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Setting;
 
-// Inclure le SDK officiel CinetPay
-if (!class_exists('CinetPay')) {
-    require_once base_path('cinetpay-php-sdk-master/src/cinetpay.php');
-}
+// L'ancien SDK n'est plus utilisé pour les opérations principales,
+// on le retire pour alléger le code.
+// if (!class_exists('CinetPay')) {
+//    require_once base_path('cinetpay-php-sdk-master/src/cinetpay.php');
+// }
 
 class CinetPayService
 {
@@ -19,8 +20,7 @@ class CinetPayService
     protected string $returnUrl;
     protected string $cancelUrl;
     protected string $mode;
-    protected string $version;
-    protected \CinetPay $cinetPay;
+    protected string $apiUrl; // URL de base pour l'API v2
 
     public function __construct()
     {
@@ -28,6 +28,7 @@ class CinetPayService
             // Lire depuis la base de données avec fallback sur .env
             $config = config('services.cinetpay', []);
             
+            // On ne définit que les credentials ici
             $this->apiKey = Setting::get('cinetpay.api_key', $config['api_key'] ?? env('CINETPAY_API_KEY', ''));
             $this->siteId = Setting::get('cinetpay.site_id', $config['site_id'] ?? env('CINETPAY_SITE_ID', ''));
             
@@ -47,47 +48,17 @@ class CinetPayService
             
             // Nettoyer le mode pour gérer les cas où il est collé avec d'autres variables
             // Extraire uniquement le mode valide (sandbox, production, test, prod)
-            $mode = strtolower(trim((string)$mode));
-            if (strpos($mode, 'production') !== false || strpos($mode, 'prod') !== false) {
+            $this->mode = strtolower(trim((string)$mode));
+            if (strpos($this->mode, 'production') !== false || strpos($this->mode, 'prod') !== false) {
                 $this->mode = 'production';
-            } elseif (strpos($mode, 'sandbox') !== false || strpos($mode, 'test') !== false) {
+            } else {
                 $this->mode = 'sandbox';
-            } else {
-                $this->mode = 'sandbox'; // Par défaut
             }
-            
-            $this->version = 'V2';
 
-            // Initialiser le SDK officiel CinetPay seulement si les credentials sont fournis
-            if (!empty($this->apiKey) && !empty($this->siteId) && $this->apiKey !== 'temp_key' && $this->siteId !== 'temp_site') {
-                // Initialiser le SDK officiel CinetPay
-                // Désactiver l'affichage du CSS en passant ['style' => false] comme 5ème paramètre
-                $platform = strtoupper($this->mode) === 'PRODUCTION' ? 'PROD' : 'TEST';
+            // Centraliser l'URL de l'API, en s'assurant qu'elle ne contient pas le chemin
+            $this->apiUrl = rtrim(config('services.cinetpay.api_url', 'https://api-checkout.cinetpay.com'), '/');
 
-                // Capturer la sortie pour empêcher le SDK d'afficher du CSS
-                ob_start();
-                try {
-                    $this->cinetPay = new \CinetPay($this->siteId, $this->apiKey, $platform, $this->version, ['style' => false]);
-                } catch (\Exception $e) {
-                    // Si le SDK ne peut pas être initialisé, logger mais continuer
-                    Log::warning('CinetPay SDK initialization error', [
-                        'error' => $e->getMessage(),
-                        'site_id' => substr($this->siteId, 0, 4) . '...',
-                    ]);
-                    // Créer un objet null pour éviter les erreurs fatales
-                    $this->cinetPay = null;
-                }
-                $output = ob_get_clean(); // Capturer et nettoyer la sortie
-
-                // Si du CSS a été affiché malgré tout, le logger mais ne pas l'inclure dans la réponse
-                if (!empty($output) && strpos($output, '<style>') !== false) {
-                    Log::warning('CinetPay SDK output captured', ['output_length' => strlen($output)]);
-                }
-            } else {
-                // Credentials manquants ou invalides, ne pas initialiser le SDK
-                $this->cinetPay = null;
-                Log::debug('CinetPay SDK not initialized - credentials missing or invalid');
-            }
+            // On supprime toute l'initialisation de l'ancien SDK
         } catch (\Exception $e) {
             // En cas d'erreur lors de l'initialisation (table settings manquante, etc.)
             // Utiliser les valeurs de .env uniquement
@@ -102,8 +73,7 @@ class CinetPayService
             $this->returnUrl = $config['return_url'] ?? env('CINETPAY_RETURN_URL', url('/api/payments/return'));
             $this->cancelUrl = $config['cancel_url'] ?? env('CINETPAY_CANCEL_URL', url('/api/payments/cancel'));
             $this->mode = $config['mode'] ?? env('CINETPAY_MODE', 'sandbox');
-            $this->version = 'V2';
-            $this->cinetPay = null;
+            $this->apiUrl = rtrim(config('services.cinetpay.api_url', 'https://api-checkout.cinetpay.com'), '/');
         }
     }
 
@@ -115,256 +85,281 @@ class CinetPayService
      */
     public function initiatePayment(array $paymentData): array
     {
-        // Vérifier que le SDK est initialisé
-        if (!$this->cinetPay) {
-            Log::error('CinetPay SDK not initialized - cannot initiate payment', [
+        // Valider que la configuration de base est présente
+        if (empty($this->apiKey) || empty($this->siteId) || $this->apiKey === 'temp_key' || $this->siteId === 'temp_site') {
+            Log::error('CinetPay n\'est pas configuré.', [
                 'api_key_set' => !empty($this->apiKey) && $this->apiKey !== 'temp_key',
                 'site_id_set' => !empty($this->siteId) && $this->siteId !== 'temp_site',
-                'mode' => $this->mode,
             ]);
-            
             return [
                 'success' => false,
-                'error' => 'CinetPay n\'est pas configuré. Veuillez configurer les credentials CinetPay dans les paramètres d\'administration.',
+                'error' => 'CinetPay n\'est pas configuré. Veuillez vérifier l\'API Key et le Site ID dans l\'administration.',
                 'code' => 'SDK_NOT_INITIALIZED',
-                'description' => 'Les credentials CinetPay (API Key et Site ID) ne sont pas configurés.',
+                'is_timeout' => false,
             ];
         }
         
-        // CinetPay attend le montant directement en XOF (pas en centimes)
-        // Le montant est déjà en centimes dans $paymentData['amount']
-        // Convertir les centimes en XOF
+        // CinetPay V2 attend le montant en entier (pas en centimes)
         $amountInCents = $paymentData['amount'];
-
-        // Log pour vérifier le montant reçu
-        Log::info('CinetPayService: Montant reçu', [
-            'amount_in_cents' => $amountInCents,
-            'amount_type' => gettype($amountInCents),
-        ]);
-
-        // Convertir les centimes en XOF (diviser par 100)
-        // Le montant est toujours en centimes depuis ReservationController
-        $amount = $amountInCents / 100;
-        $amount = (int) round($amount); // Arrondir et s'assurer que c'est un entier
+        $amount = (int) round($amountInCents / 100);
 
         // CinetPay requiert un montant minimum de 100 XOF
-        // Vérifier le montant minimum avant de continuer
-        $minAmountXOF = 100; // Montant minimum requis par CinetPay
-        $minAmountCents = $minAmountXOF * 100; // 10000 centimes
-
+        $minAmountXOF = 100;
         if ($amount < $minAmountXOF) {
-            Log::warning('CinetPayService: Montant trop faible', [
-                'amount_in_cents' => $amountInCents,
-                'amount_in_xof' => $amount,
-                'min_amount_xof' => $minAmountXOF,
-                'min_amount_cents' => $minAmountCents,
-            ]);
-
             return [
                 'success' => false,
-                'error' => "Le montant minimum requis est de {$minAmountXOF} XOF (soit {$minAmountCents} centimes). Le montant actuel est de {$amount} XOF.",
-                'code' => '641',
-                'description' => 'ERROR_AMOUNT_TOO_LOW',
+                'error' => "Le montant minimum requis est de {$minAmountXOF} XOF. Le montant actuel est de {$amount} XOF.",
+                'code' => 'AMOUNT_TOO_LOW',
+                'is_timeout' => false,
             ];
         }
+        
+        $transactionId = $paymentData['transaction_id'] ?? $this->generateTransactionId();
 
-        // Log pour vérifier la conversion
-        Log::info('CinetPayService: Montant converti', [
-            'amount_in_cents' => $amountInCents,
-            'amount_in_xof' => $amount,
+        $payload = [
+            'apikey' => $this->apiKey,
+            'site_id' => $this->siteId,
+            'transaction_id' => $transactionId,
+            'amount' => $amount,
             'currency' => $paymentData['currency'] ?? 'XOF',
-        ]);
+            'description' => $paymentData['description'] ?? 'Paiement de réservation',
+            'notify_url' => $this->notifyUrl,
+            'return_url' => $this->returnUrl,
+            'channels' => 'ALL',
+            // Ajouter les détails du client si disponibles
+            'customer_id' => $paymentData['customer_id'] ?? null,
+            'customer_name' => $paymentData['customer_name'] ?? 'N/A',
+            'customer_surname' => $paymentData['customer_surname'] ?? 'N/A',
+            'customer_email' => $paymentData['customer_email'] ?? null,
+            'customer_phone_number' => $paymentData['customer_phone_number'] ?? null,
+        ];
 
-        // Générer un transaction_id si non fourni
-        $transactionId = $paymentData['transaction_id'] ?? \CinetPay::generateTransId();
+        // Construire l'URL de manière fiable et défensive
+        $baseUrl = config('services.cinetpay.api_url', 'https://api-checkout.cinetpay.com');
+        // Remplacer toute occurrence de 'v2/payment' pour éviter les doublons, puis ajouter la bonne fin
+        $cleanedBaseUrl = rtrim(str_replace('/v2/payment', '', $baseUrl), '/');
+        $url = $cleanedBaseUrl . '/v2/payment';
 
-        // Date de transaction au format Y-m-d H:i:s (le SDK la convertira)
-        $transDate = date('Y-m-d H:i:s');
+        Log::debug('CinetPay - FINAL CHECK', ['url' => $url, 'payload' => $payload]);
 
         try {
-            // Utiliser le SDK officiel pour configurer le paiement
-            $this->cinetPay->setTransId($transactionId)
-                ->setDesignation($paymentData['description'] ?? 'Paiement de réservation')
-                ->setTransDate($transDate)
-                ->setAmount($amount)
-                ->setCurrency($paymentData['currency'] ?? 'XOF')
-                ->setDebug(false);
-
-            // Ajouter cpm_custom si fourni
-            if (!empty($paymentData['customer_id'])) {
-                $this->cinetPay->setCustom((string) $paymentData['customer_id']);
-            }
-
-            // Ajouter les URLs
-            if (!empty($this->notifyUrl)) {
-                $this->cinetPay->setNotifyUrl($this->notifyUrl);
-            }
-            if (!empty($this->returnUrl)) {
-                $this->cinetPay->setReturnUrl($this->returnUrl);
-            }
-            if (!empty($this->cancelUrl)) {
-                $this->cinetPay->setCancelUrl($this->cancelUrl);
-            }
-
-            // Obtenir la signature via le SDK officiel avec gestion de timeout
-            try {
-                // Vérifier que le SDK est bien initialisé avant d'appeler getSignature()
-                if (!$this->cinetPay) {
-                    Log::error('CinetPay SDK is null when trying to get signature', [
-                        'api_key_set' => !empty($this->apiKey) && $this->apiKey !== 'temp_key',
-                        'site_id_set' => !empty($this->siteId) && $this->siteId !== 'temp_site',
-                        'mode' => $this->mode,
-                    ]);
-                    
-                    return [
-                        'success' => false,
-                        'error' => 'CinetPay n\'est pas configuré. Veuillez configurer les credentials CinetPay dans les paramètres d\'administration.',
-                        'code' => 'SDK_NOT_INITIALIZED',
-                        'description' => 'Les credentials CinetPay (API Key et Site ID) ne sont pas configurés.',
-                    ];
-                }
-                
-                Log::info('CinetPay: Appel de getSignature()', [
-                    'transaction_id' => $transactionId,
-                    'amount' => $amount,
-                    'currency' => $paymentData['currency'] ?? 'XOF',
-                    'mode' => $this->mode,
+            $response = Http::asJson()->timeout(45)->post($url, $payload);
+            
+            // Log de la réponse brute pour déboguer
+            Log::info('CinetPay raw response', [
+                'status' => $response->status(),
+                'headers' => $response->headers(),
+                'body' => $response->body(),
+            ]);
+            
+            if ($response->failed()) {
+                $errorBody = $response->json() ?? ['message' => $response->body()];
+                Log::error('Erreur API CinetPay (initiatePayment)', [
+                    'status' => $response->status(),
+                    'response' => $errorBody,
+                    'url' => $url,
                 ]);
-                
-                $signature = $this->cinetPay->getSignature();
-                
-                Log::info('CinetPay: Signature obtenue avec succès', [
-                    'transaction_id' => $transactionId,
-                    'signature_length' => strlen($signature),
-                ]);
-            } catch (\Exception $e) {
-                // Si l'appel prend trop de temps ou échoue, logger et retourner une erreur
-                $errorMessage = $e->getMessage();
-                $isTimeout = false;
-                
-                Log::error('CinetPay getSignature error', [
-                    'error' => $errorMessage,
-                    'transaction_id' => $transactionId,
-                    'error_type' => get_class($e),
-                    'trace' => substr($e->getTraceAsString(), 0, 500), // Limiter la taille du trace
-                ]);
-                
-                // Vérifier si c'est un timeout
-                if (stripos($errorMessage, 'timeout') !== false || 
-                    stripos($errorMessage, 'timed out') !== false ||
-                    stripos($errorMessage, 'Maximum execution time') !== false ||
-                    stripos($errorMessage, 'Connection timed out') !== false) {
-                    $isTimeout = true;
-                }
-                
-                // Vérifier si c'est une erreur de configuration
-                if (stripos($errorMessage, 'indisponible') !== false ||
-                    stripos($errorMessage, 'temporairement') !== false ||
-                    stripos($errorMessage, 'probleme est survenu') !== false) {
-                    return [
-                        'success' => false,
-                        'error' => 'L\'API CinetPay est temporairement indisponible. Veuillez réessayer plus tard.',
-                        'code' => 'API_UNAVAILABLE',
-                        'is_timeout' => false,
-                        'description' => $errorMessage,
-                    ];
-                }
-                
-                if ($isTimeout) {
-                    return [
-                        'success' => false,
-                        'error' => 'L\'API CinetPay ne répond pas dans les temps. Veuillez réessayer plus tard.',
-                        'code' => 'TIMEOUT',
-                        'is_timeout' => true,
-                        'description' => $errorMessage,
-                    ];
-                }
-                
-                // Autre erreur
                 return [
                     'success' => false,
-                    'error' => 'Erreur lors de l\'obtention de la signature CinetPay: ' . $errorMessage,
-                    'code' => 'SIGNATURE_ERROR',
+                    'error' => 'L\'API CinetPay a retourné une erreur: ' . ($errorBody['message'] ?? 'Erreur inconnue'),
+                    'code' => 'API_ERROR',
+                    'description' => $errorBody['description'] ?? null,
                     'is_timeout' => false,
-                    'description' => $errorMessage,
+                ];
+            }
+            
+            $data = $response->json();
+            
+            // Log détaillé de la structure de la réponse
+            Log::info('CinetPay parsed response', [
+                'full_data' => $data,
+                'has_data_key' => isset($data['data']),
+                'code' => $data['code'] ?? null,
+                'message' => $data['message'] ?? null,
+            ]);
+            
+            Log::info('CinetPay API response structure', [
+                'full_response' => $data,
+                'has_data_key' => isset($data['data']),
+                'data_structure' => $data['data'] ?? null,
+            ]);
+
+            // Chercher payment_url dans plusieurs emplacements possibles
+            // Vérifier d'abord si data existe et est un tableau
+            $dataData = is_array($data['data'] ?? null) ? $data['data'] : [];
+            $paymentUrl = $dataData['payment_url'] ?? 
+                         $dataData['paymentUrl'] ?? 
+                         $data['payment_url'] ?? 
+                         $data['paymentUrl'] ??
+                         ($dataData['checkout_url'] ?? null) ??
+                         ($data['checkout_url'] ?? null) ??
+                         null;
+            
+            // Log détaillé pour déboguer
+            Log::info('CinetPay payment_url search', [
+                'data_data_payment_url' => $dataData['payment_url'] ?? 'NOT_SET',
+                'data_data_paymentUrl' => $dataData['paymentUrl'] ?? 'NOT_SET',
+                'data_payment_url' => $data['payment_url'] ?? 'NOT_SET',
+                'data_paymentUrl' => $data['paymentUrl'] ?? 'NOT_SET',
+                'found_payment_url' => $paymentUrl,
+                'has_data' => isset($data['data']),
+                'data_is_array' => is_array($data['data'] ?? null),
+                'data_keys' => !empty($dataData) ? array_keys($dataData) : null,
+            ]);
+            
+            // Vérifier les codes de succès (CinetPay peut retourner '0', '201', ou 'SUCCES')
+            $code = $data['code'] ?? null;
+            $isSuccessCode = ($code === '0' || $code === '201' || $code === 201 || $code === 'SUCCES');
+            
+            // Vérifier aussi si le message indique un succès
+            $message = strtolower($data['message'] ?? $data['description'] ?? '');
+            $isSuccessMessage = strpos($message, 'created') !== false || 
+                               strpos($message, 'success') !== false ||
+                               strpos($message, 'succes') !== false;
+            
+            Log::info('CinetPay success check', [
+                'code' => $code,
+                'isSuccessCode' => $isSuccessCode,
+                'message' => $data['message'] ?? null,
+                'isSuccessMessage' => $isSuccessMessage,
+            ]);
+            
+            // Si on a un payment_url, c'est un succès (peu importe le code)
+            if ($paymentUrl) {
+                Log::info('CinetPay payment_url found', [
+                    'payment_url' => $paymentUrl,
+                    'code' => $code,
+                    'message' => $data['message'] ?? null,
+                ]);
+                return [
+                    'success' => true,
+                    'transaction_id' => $transactionId,
+                    'payment_url' => $paymentUrl,
+                    'data' => !empty($dataData) ? $dataData : $data,
+                ];
+            }
+            
+            // Si c'est un code de succès (201) ou un message de succès mais pas de payment_url
+            // C'est un cas anormal, mais on doit quand même retourner les informations
+            if ($isSuccessCode || $isSuccessMessage) {
+                Log::error('CinetPay retourne un succès (code: ' . $code . ') mais pas de payment_url dans la réponse', [
+                    'response' => $data,
+                    'code' => $code,
+                    'message' => $data['message'] ?? null,
+                    'description' => $data['description'] ?? null,
+                    'has_data' => isset($data['data']),
+                    'data_keys' => isset($data['data']) ? array_keys($data['data']) : null,
+                ]);
+                // Retourner une erreur mais avec les informations de succès
+                return [
+                    'success' => false,
+                    'error' => $data['message'] ?? $data['description'] ?? 'Transaction créée mais URL de paiement manquante',
+                    'code' => $code ?? 'INVALID_RESPONSE',
+                    'description' => $data['description'] ?? 'Format de réponse invalide.',
+                    'is_timeout' => false,
                 ];
             }
 
-            // Construire l'URL de paiement avec tous les paramètres
-            $cashDeskUrl = $this->getCashDeskUrl();
-            $paymentUrl = $this->buildPaymentUrlFromSdk($cashDeskUrl, $signature);
-
-            Log::info('CinetPay payment initiated via SDK', [
-                'transaction_id' => $transactionId,
-                'amount' => $amount,
-                'currency' => $paymentData['currency'] ?? 'XOF',
+            // Si le code n'est pas un succès et pas de payment_url, c'est un échec
+            Log::warning('Réponse inattendue ou échec de CinetPay (initiatePayment)', [
+                'response' => $data,
             ]);
-
-            return [
-                'success' => true,
-                'transaction_id' => $transactionId,
-                'payment_url' => $paymentUrl,
-                'data' => [
-                    'transaction_id' => $transactionId,
-                    'amount' => $amount,
-                    'currency' => $paymentData['currency'] ?? 'XOF',
-                ],
-            ];
-        } catch (\Exception $e) {
-            $errorMessage = $e->getMessage();
-            $errorCode = 'SDK_ERROR';
-            $errorDescription = null;
-            $isTimeout = false;
-
-            // Détecter les erreurs de timeout
-            if (stripos($errorMessage, 'timeout') !== false || 
-                stripos($errorMessage, 'Connection timed out') !== false ||
-                stripos($errorMessage, 'timed out after') !== false) {
-                $isTimeout = true;
-                $errorCode = 'CONNECTION_TIMEOUT';
-                $errorDescription = 'TIMEOUT';
-                
-                // Message d'erreur personnalisé pour les timeouts
-                if ($this->mode === 'sandbox' || $this->mode === 'test') {
-                    $errorMessage = 'L\'API sandbox de CinetPay est temporairement indisponible ou ne répond pas. Le timeout de connexion (45 secondes) a été dépassé. Veuillez réessayer plus tard ou contacter le support si le problème persiste.';
-                } else {
-                    $errorMessage = 'Timeout de connexion à l\'API CinetPay. Le serveur ne répond pas dans les délais impartis. Veuillez réessayer plus tard.';
-                }
-            } else {
-                // Extraire le code d'erreur et le message depuis l'exception CinetPay
-                // Format: "Une erreur est survenue, Code: 641, Message: ERROR_AMOUNT_TOO_LOW"
-                if (preg_match('/Code:\s*(\d+)/', $errorMessage, $codeMatches)) {
-                    $errorCode = $codeMatches[1];
-                }
-                if (preg_match('/Message:\s*(.+?)(?:$|,)/', $errorMessage, $messageMatches)) {
-                    $errorDescription = trim($messageMatches[1]);
-                }
-
-                // Message d'erreur personnalisé pour l'erreur 641
-                if ($errorCode === '641' || $errorDescription === 'ERROR_AMOUNT_TOO_LOW') {
-                    $errorMessage = "Le montant minimum requis est de {$minAmountXOF} XOF (soit {$minAmountCents} centimes). Le montant actuel est de {$amount} XOF.";
-                }
-            }
-
-            Log::error('CinetPay payment initiation error via SDK', [
-                'error' => $errorMessage,
-                'code' => $errorCode,
-                'description' => $errorDescription,
-                'is_timeout' => $isTimeout,
-                'transaction_id' => $transactionId,
-                'amount_in_cents' => $amountInCents,
-                'amount_in_xof' => $amount,
-                'mode' => $this->mode,
-                'original_exception' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
             return [
                 'success' => false,
-                'error' => 'Erreur lors de l\'initialisation du paiement: ' . $errorMessage,
-                'code' => $errorCode,
-                'description' => $errorDescription,
-                'is_timeout' => $isTimeout,
+                'error' => $data['message'] ?? 'La réponse de CinetPay ne contient pas de lien de paiement.',
+                'code' => $data['code'] ?? 'INVALID_RESPONSE',
+                'description' => $data['description'] ?? 'Format de réponse invalide.',
+                'is_timeout' => false,
+            ];
+
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::error('Timeout de connexion à CinetPay (initiatePayment)', [
+                'error' => $e->getMessage(),
+                'url' => $url,
+            ]);
+            return [
+                'success' => false,
+                'error' => 'Le service de paiement est indisponible pour le moment. Veuillez réessayer plus tard.',
+                'code' => 'CONNECTION_TIMEOUT',
+                'is_timeout' => true,
+            ];
+        }
+    }
+
+    /**
+     * Nouvelle méthode pour obtenir la signature directement depuis l'API
+     */
+    protected function fetchSignatureFromApi(array $data): array
+    {
+        $url = $this->getSignatureUrl();
+
+        try {
+            // Utiliser le client HTTP de Laravel
+            $response = Http::asForm()->timeout(45)->post($url, $data);
+
+            if ($response->failed()) {
+                Log::error('CinetPay signature API error response', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                    'url' => $url,
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'L\'API CinetPay a retourné une erreur.',
+                    'code' => 'API_ERROR_' . $response->status(),
+                ];
+            }
+
+            // L'API peut retourner du JSON ou une simple chaîne
+            $body = $response->body();
+            $decoded = json_decode($body, true);
+
+            // Si c'est un JSON avec un code d'erreur
+            if (is_array($decoded) && isset($decoded['code'])) {
+                 if ($decoded['code'] !== '0') { // '0' est souvent succès
+                     Log::error('CinetPay signature API returned an error message', [
+                        'response' => $decoded,
+                        'url' => $url,
+                    ]);
+                    return [
+                        'success' => false,
+                        'error' => $decoded['message'] ?? 'Erreur inconnue de CinetPay.',
+                        'code' => $decoded['code'],
+                    ];
+                 }
+                 // Si le code est succès mais la signature est ailleurs dans la réponse
+                 if(isset($decoded['data']['signature'])){
+                    return [
+                        'success' => true,
+                        'signature' => $decoded['data']['signature'],
+                    ];
+                 }
+            }
+            
+            // Si la réponse est la signature directement (chaîne)
+            if (is_string($body) && !empty(trim($body))) {
+                return [
+                    'success' => true,
+                    'signature' => trim($body),
+                ];
+            }
+
+            // Cas inattendu
+            Log::warning('CinetPay signature: unexpected response format', [
+                'body' => $body,
+                'url' => $url,
+            ]);
+            return ['success' => false, 'error' => 'Format de réponse de signature inattendu.'];
+
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::error('CinetPay signature connection timeout', [
+                'error' => $e->getMessage(),
+                'url' => $url,
+            ]);
+            return [
+                'success' => false,
+                'error' => 'Timeout de connexion à l\'API CinetPay.', 
+                'is_timeout' => true,
             ];
         }
     }
@@ -513,72 +508,67 @@ class CinetPayService
     {
         // CinetPay utilise toujours HTTPS
         $host = $this->mode === 'production'
-            ? 'api.cinetpay.com'
+            ? 'api-checkout.cinetpay.com'
             : 'api.sandbox.cinetpay.com';
 
         $version = strtolower($this->version);
-        return 'https://' . $host . '/' . $version . '/?method=getSignatureByPost';
+        // Nouvelle structure d'URL pour le nouvel endpoint
+        return 'https://' . $host . '/' . $version . '/payment/signature';
     }
 
     /**
-     * Vérifier le statut d'un paiement via le SDK officiel
+     * Vérifier le statut d'un paiement via l'API V2
      *
      * @param string $transactionId
      * @return array
      */
     public function checkPaymentStatus(string $transactionId): array
     {
+        $payload = [
+            'apikey' => $this->apiKey,
+            'site_id' => $this->siteId,
+            'transaction_id' => $transactionId,
+        ];
+
+        // Construire l'URL de manière fiable
+        $baseUrl = rtrim(config('services.cinetpay.api_url', 'https://api-checkout.cinetpay.com'), '/');
+        $url = $baseUrl . '/v2/payment/check';
+
         try {
-            // Utiliser le SDK officiel pour vérifier le statut
-            $this->cinetPay->setTransId($transactionId);
-            $this->cinetPay->getPayStatus();
+            $response = Http::asJson()->timeout(30)->post($url, $payload);
 
-            // Récupérer les données de la transaction
-            $transaction = [
-                'cpm_site_id' => $this->cinetPay->_cpm_site_id,
-                'signature' => $this->cinetPay->_signature,
-                'cpm_amount' => $this->cinetPay->_cpm_amount,
-                'cpm_trans_id' => $this->cinetPay->_cpm_trans_id,
-                'cpm_currency' => $this->cinetPay->_cpm_currency,
-                'cpm_payid' => $this->cinetPay->_cpm_payid,
-                'cpm_payment_date' => $this->cinetPay->_cpm_payment_date,
-                'cpm_payment_time' => $this->cinetPay->_cpm_payment_time,
-                'cpm_error_message' => $this->cinetPay->_cpm_error_message,
-                'payment_method' => $this->cinetPay->_payment_method,
-                'cpm_result' => $this->cinetPay->_cpm_result,
-                'cpm_trans_status' => $this->cinetPay->_cpm_trans_status,
-                'cpm_designation' => $this->cinetPay->_cpm_designation,
-                'buyer_name' => $this->cinetPay->_buyer_name,
-            ];
+            if ($response->failed()) {
+                Log::error('Erreur API CinetPay (checkPaymentStatus)', [
+                    'status' => $response->status(),
+                    'response' => $response->json() ?? $response->body(),
+                    'transaction_id' => $transactionId,
+                ]);
+                return ['success' => false, 'error' => 'Erreur lors de la vérification du statut'];
+            }
 
-            // Vérifier que le site_id correspond
-            if ($transaction['cpm_site_id'] != $this->siteId) {
+            $data = $response->json();
+
+            if (isset($data['code']) && $data['code'] === '0') {
+                $paymentData = $data['data'];
                 return [
-                    'success' => false,
-                    'error' => 'Site ID ne correspond pas',
+                    'success' => true,
+                    'data' => $paymentData,
+                    'status' => $paymentData['status'] ?? 'UNKNOWN',
+                    'message' => $data['message'],
                 ];
             }
 
             return [
-                'success' => true,
-                'data' => $transaction,
-                'status' => $transaction['cpm_result'] === '00' ? 'ACCEPTED' : 'REFUSED',
-                'cpm_result' => $transaction['cpm_result'],
-                'cpm_trans_status' => $transaction['cpm_trans_status'],
-                'cpm_amount' => $transaction['cpm_amount'],
-                'payment_method' => $transaction['payment_method'],
-                'buyer_name' => $transaction['buyer_name'],
+                'success' => false,
+                'error' => $data['message'] ?? 'Statut de paiement non valide',
+                'data' => $data,
             ];
-        } catch (\Exception $e) {
-            Log::error('CinetPay payment status check error via SDK', [
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::error('Timeout de connexion à CinetPay (checkPaymentStatus)', [
                 'error' => $e->getMessage(),
                 'transaction_id' => $transactionId,
             ]);
-
-            return [
-                'success' => false,
-                'error' => 'Erreur lors de la vérification du paiement: ' . $e->getMessage(),
-            ];
+            return ['success' => false, 'error' => 'Service de paiement indisponible'];
         }
     }
 
@@ -589,11 +579,12 @@ class CinetPayService
     {
         // CinetPay utilise toujours HTTPS
         $host = $this->mode === 'production'
-            ? 'api.cinetpay.com'
+            ? 'api-checkout.cinetpay.com'
             : 'api.sandbox.cinetpay.com';
 
         $version = strtolower($this->version);
-        return 'https://' . $host . '/' . $version . '/?method=checkPayStatus';
+        // Mettre à jour également ce chemin, en supposant une structure similaire
+        return 'https://' . $host . '/' . $version . '/payment/check';
     }
 
     /**
@@ -646,23 +637,29 @@ class CinetPayService
 
         $configValid = !empty($apiKey) && !empty($siteId) && !empty($mode);
 
-        // 2. Vérifier la connectivité réseau
-        $signatureUrl = $this->getSignatureUrl();
+        // 2. Vérifier la connectivité réseau avec le nouveau endpoint
+        $paymentUrl = rtrim(config('services.cinetpay.api_url', 'https://api-checkout.cinetpay.com'), '/') . '/v2/payment';
         $connectivityStart = microtime(true);
         
         try {
-            $response = Http::timeout(10)->asForm()->post($signatureUrl, [
+            // On envoie une requête simple pour tester la connectivité.
+            // Une erreur 401/422 est attendue si la connexion réussit mais que les données sont mauvaises,
+            // ce qui prouve que le service est joignable.
+            $response = Http::timeout(10)->asJson()->post($paymentUrl, [
                 'apikey' => $this->apiKey,
-                'cpm_site_id' => $this->siteId,
+                'site_id' => $this->siteId,
             ]);
             
             $connectivityDuration = round((microtime(true) - $connectivityStart) * 1000, 2);
             
+            // Une erreur client (4xx) signifie que nous avons bien atteint le service.
+            $isReachable = $response->successful() || $response->clientError();
+
             $health['connectivity'] = [
-                'status' => $response->successful() ? 'reachable' : 'unreachable',
+                'status' => $isReachable ? 'reachable' : 'unreachable',
                 'response_time_ms' => $connectivityDuration,
                 'http_status' => $response->status(),
-                'url' => $signatureUrl,
+                'url' => $paymentUrl,
             ];
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
             $connectivityDuration = round((microtime(true) - $connectivityStart) * 1000, 2);
@@ -670,7 +667,7 @@ class CinetPayService
                 'status' => 'timeout',
                 'response_time_ms' => $connectivityDuration,
                 'error' => 'Timeout de connexion (>10s)',
-                'url' => $signatureUrl,
+                'url' => $paymentUrl,
             ];
         } catch (\Exception $e) {
             $connectivityDuration = round((microtime(true) - $connectivityStart) * 1000, 2);
@@ -678,7 +675,7 @@ class CinetPayService
                 'status' => 'error',
                 'response_time_ms' => $connectivityDuration,
                 'error' => $e->getMessage(),
-                'url' => $signatureUrl,
+                'url' => $paymentUrl,
             ];
         }
 
