@@ -231,6 +231,9 @@ class ReservationController extends Controller
             ], 422);
         }
 
+        // Calculer le prix AVANT de vérifier les conflits (nécessaire pour créer la réservation en cas de conflit)
+        $estimatedCents = $this->calculateReservationPrice($lab, $start, $end);
+
         // Vérifier les conflits avec d'autres utilisateurs (exclure les réservations annulées et les réservations pending expirées)
         // Les réservations pending de plus de 15 minutes sont considérées comme expirées
         $conflict = Reservation::where('lab_id', $lab->id)
@@ -277,9 +280,6 @@ class ReservationController extends Controller
                 'message' => 'Tentative 1/3 échouée. Il reste 2 tentative(s). Veuillez réessayer avec un autre créneau.',
             ], 422);
         }
-
-        // Calculer le prix
-        $estimatedCents = $this->calculateReservationPrice($lab, $start, $end);
         $skipPayment = $request->boolean('skip_payment', false) || $estimatedCents === 0;
 
         // Log pour déboguer le paiement

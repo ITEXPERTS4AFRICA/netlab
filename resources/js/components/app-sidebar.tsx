@@ -59,7 +59,9 @@ export function AppSidebar() {
     const page = usePage<SharedData & { userActiveReservations?: ActiveReservation[] }>();
     const { userActiveReservations = [], auth } = page.props;
     const user = auth.user;
-    const isAdmin = user && 'role' in user && user.role === 'admin';
+    
+    // Améliorer la détection de l'admin
+    const isAdmin = user?.role === 'admin';
 
     // Filter only active (non-expired) reservations
     const now = new Date();
@@ -125,7 +127,8 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={dynamicNavItems} />
+                {/* User Section - Only visible for non-admins */}
+                {!isAdmin && <NavMain items={dynamicNavItems} />}
 
                 {/* Administration Section - Only visible for admins */}
                 {isAdmin && (
@@ -140,8 +143,8 @@ export function AppSidebar() {
                     </SidebarGroup>
                 )}
 
-                {/* Active Labs Section */}
-                {activeLabs.length > 0 && (
+                {/* Active Labs Section - Only visible for non-admins */}
+                {!isAdmin && activeLabs.length > 0 && (
                     <SidebarGroup className="mt-4">
                         <SidebarGroupLabel className="flex items-center justify-between gap-2 px-2 py-1.5">
                             <div className="flex items-center gap-2">
