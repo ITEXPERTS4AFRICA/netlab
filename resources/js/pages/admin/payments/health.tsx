@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import AppLayout from '@/layouts/app-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     Activity, RefreshCw, CheckCircle2, XCircle, AlertCircle, Clock,
-    Server, Settings, Wifi, CreditCard, TrendingUp, TrendingDown
+    Server, Settings, Wifi, CreditCard
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -178,7 +178,7 @@ export default function PaymentHealthIndex({ health: initialHealth, recentPaymen
                 </div>
 
                 {/* Alertes */}
-                {health.issues.length > 0 && (
+                {health.issues && Array.isArray(health.issues) && health.issues.length > 0 && (
                     <Alert variant={health.overall_health === 'unhealthy' ? 'destructive' : 'default'}>
                         <AlertCircle className="h-4 w-4" />
                         <AlertDescription>

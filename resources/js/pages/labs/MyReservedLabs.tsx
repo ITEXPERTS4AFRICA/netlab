@@ -15,12 +15,14 @@ import {
     ExternalLink,
     ArrowRight,
     Network,
-    Activity
+    Activity,
+    DollarSign
 } from 'lucide-react';
 import { motion, Variants } from 'framer-motion';
 import { useState, useEffect, useMemo } from 'react';
 import { router } from '@inertiajs/react';
 import { formatDuration } from '@/lib/utils';
+import { useFeedback } from '@/components/FeedbackManager';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -54,16 +56,25 @@ type ReservedLab = {
     };
     can_access: boolean;
     status: string;
+    requires_payment?: boolean;
+    payment_amount?: number;
 };
 
 type Props = {
     reservedLabs: ReservedLab[];
     error?: string;
+    auth?: {
+        user?: {
+            phone?: string | null;
+        };
+    };
 };
 
 export default function MyReservedLabs() {
-    const { reservedLabs = [], error } = usePage<Props>().props;
+    const { reservedLabs = [], error, auth } = usePage<Props>().props;
     const [isLoading, setIsLoading] = useState(true);
+    const [processingPayment, setProcessingPayment] = useState<string | null>(null);
+    const { showSuccess, showError, showWarning } = useFeedback();
 
     useEffect(() => {
         const timer = setTimeout(() => setIsLoading(false), 500);
@@ -371,6 +382,12 @@ export default function MyReservedLabs() {
                                             {/* Status indicator - Clickable to access lab */}
                                             <motion.button
                                                 onClick={() => {
+                                                    if (lab.requires_payment) {
+                                                        // Si paiement requis, rediriger vers l'initiation de paiement
+                                                        window.location.href = `/api/reservations/${lab.reservation_id}/payments/initiate`;
+                                                        return;
+                                                    }
+                                                    
                                                     if (lab.time_info.status !== 'expired') {
                                                         router.visit(`/labs/${lab.lab_id}/workspace`, {
                                                             method: 'get',
@@ -382,6 +399,8 @@ export default function MyReservedLabs() {
                                                 className={`p-3 rounded-xl transition-all duration-200 ${
                                                     lab.time_info.status === 'expired'
                                                         ? 'bg-destructive/10 border border-destructive/20 cursor-not-allowed opacity-50'
+                                                        : lab.requires_payment
+                                                        ? 'bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 cursor-pointer'
                                                         : lab.time_info.status === 'active' && lab.time_info.can_access
                                                         ? 'bg-[hsl(var(--chart-3)/10)] border border-[hsl(var(--chart-3)/20)] hover:bg-[hsl(var(--chart-3)/20)] cursor-pointer'
                                                         : lab.time_info.status === 'pending'
@@ -391,10 +410,12 @@ export default function MyReservedLabs() {
                                                 whileHover={lab.time_info.status !== 'expired' ? { scale: 1.1 } : {}}
                                                 whileTap={lab.time_info.status !== 'expired' ? { scale: 0.95 } : {}}
                                                 transition={{ duration: 0.2 }}
-                                                title={lab.time_info.status === 'expired' ? 'Reservation expirée' : 'Accéder au lab'}
+                                                title={lab.time_info.status === 'expired' ? 'Reservation expirée' : lab.requires_payment ? 'Paiement requis' : 'Accéder au lab'}
                                             >
                                                 {lab.time_info.status === 'active' && lab.time_info.can_access ? (
                                                     <CheckCircle className="h-6 w-6 text-[hsl(var(--chart-3))]" />
+                                                ) : lab.requires_payment ? (
+                                                    <DollarSign className="h-6 w-6 text-amber-500" />
                                                 ) : lab.time_info.status === 'pending' ? (
                                                     <Clock className="h-6 w-6 text-[hsl(var(--chart-4))]" />
                                                 ) : lab.time_info.status === 'expired' ? (
@@ -476,11 +497,101 @@ export default function MyReservedLabs() {
                                                     <AlertCircle className="h-5 w-5 mr-2" />
                                                     Reservation Expired
                                                 </Button>
+                                            ) : lab.requires_payment ? (
+                                                <Button
+                                                    onClick={async () => {
+                                                        if (processingPayment === lab.reservation_id) return;
+                                                        
+                                                        setProcessingPayment(lab.reservation_id);
+                                                        
+                                                        try {
+                                                            // Récupérer le token CSRF
+                                                            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                                                            
+                                                            if (!csrfToken) {
+                                                                showError('Token CSRF manquant. Veuillez recharger la page.');
+                                                                setProcessingPayment(null);
+                                                                return;
+                                                            }
+                                                            
+                                                            // Préparer les données (numéro de téléphone optionnel)
+                                                            const requestData: Record<string, string> = {};
+                                                            if (auth?.user?.phone) {
+                                                                requestData.customer_phone_number = auth.user.phone;
+                                                            }
+                                                            
+                                                            const response = await fetch(`/api/reservations/${lab.reservation_id}/payments/initiate`, {
+                                                                method: 'POST',
+                                                                headers: {
+                                                                    'Content-Type': 'application/json',
+                                                                    'X-CSRF-TOKEN': csrfToken,
+                                                                    'Accept': 'application/json',
+                                                                },
+                                                                body: JSON.stringify(requestData),
+                                                            });
+                                                            
+                                                            const result = await response.json();
+                                                            
+                                                            if (!response.ok) {
+                                                                // Gérer les erreurs de validation
+                                                                if (response.status === 422 && result.errors) {
+                                                                    const errorMessages = Object.values(result.errors).flat().join(', ');
+                                                                    showError(`Erreur de validation: ${errorMessages}`);
+                                                                } else if (response.status === 503 || result.is_timeout || result.code === 'CONNECTION_TIMEOUT') {
+                                                                    // Timeout - message spécial avec option de réessayer
+                                                                    showWarning(
+                                                                        result.message || result.error || 'Le service de paiement ne répond pas. Veuillez réessayer dans quelques instants.',
+                                                                        { duration: 8000 }
+                                                                    );
+                                                                    // Permettre de réessayer après un court délai
+                                                                    setTimeout(() => {
+                                                                        setProcessingPayment(null);
+                                                                    }, 2000);
+                                                                } else {
+                                                                    // Autres erreurs
+                                                                    showError(result.message || result.error || 'Erreur lors de l\'initialisation du paiement');
+                                                                }
+                                                                setProcessingPayment(null);
+                                                                return;
+                                                            }
+                                                            
+                                                            // Succès - rediriger vers l'URL de paiement
+                                                            if (result.payment_url) {
+                                                                window.location.href = result.payment_url;
+                                                            } else {
+                                                                showWarning('L\'URL de paiement n\'a pas été fournie. Veuillez réessayer.');
+                                                                setProcessingPayment(null);
+                                                            }
+                                                        } catch (error) {
+                                                            console.error('Erreur lors de l\'initiation du paiement:', error);
+                                                            showError('Une erreur est survenue lors de l\'initialisation du paiement. Veuillez réessayer.');
+                                                            setProcessingPayment(null);
+                                                        }
+                                                    }}
+                                                    disabled={processingPayment === lab.reservation_id}
+                                                    className="w-full h-12 bg-amber-600 hover:bg-amber-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    <DollarSign className="h-5 w-5 mr-2" />
+                                                    {processingPayment === lab.reservation_id ? (
+                                                        'Traitement...'
+                                                    ) : (
+                                                        <>
+                                                            Payer ({lab.payment_amount ? (lab.payment_amount / 100).toLocaleString('fr-FR') : ''} XOF)
+                                                            <ArrowRight className="h-5 w-5 ml-2" />
+                                                        </>
+                                                    )}
+                                                </Button>
                                             ) : lab.time_info.can_access ? (
                                                 <Button
                                                     onClick={() => router.visit(`/labs/${lab.lab_id}/workspace`, {
                                                         method: 'get',
                                                         preserveScroll: true,
+                                                        onSuccess: () => {
+                                                            // Optionnel: feedback
+                                                        },
+                                                        onError: (errors) => {
+                                                            console.error('Navigation error:', errors);
+                                                        }
                                                     })}
                                                     className="w-full h-12 bg-gradient-to-r from-[hsl(var(--chart-3))] to-[hsl(var(--chart-3))/90] hover:from-[hsl(var(--chart-3))/90] hover:to-[hsl(var(--chart-3))] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300"
                                                 >

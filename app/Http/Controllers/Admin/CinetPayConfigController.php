@@ -23,7 +23,7 @@ class CinetPayConfigController extends Controller
         $apiKey = Setting::get('cinetpay.api_key', config('services.cinetpay.api_key') ?? env('CINETPAY_API_KEY'));
         $secretKey = Setting::get('cinetpay.secret_key', config('services.cinetpay.secret_key') ?? env('CINETPAY_SECRET_KEY'));
         $siteId = Setting::get('cinetpay.site_id', config('services.cinetpay.site_id') ?? env('CINETPAY_SITE_ID'));
-        $apiUrl = Setting::get('cinetpay.api_url', config('services.cinetpay.api_url') ?? env('CINETPAY_API_URL', 'https://api.cinetpay.com'));
+        $apiUrl = Setting::get('cinetpay.api_url', config('services.cinetpay.api_url') ?? env('CINETPAY_API_URL', 'https://api-checkout.cinetpay.com'));
         $notifyUrl = Setting::get('cinetpay.notify_url', config('services.cinetpay.notify_url') ?? env('CINETPAY_NOTIFY_URL'));
         $returnUrl = Setting::get('cinetpay.return_url', config('services.cinetpay.return_url') ?? env('CINETPAY_RETURN_URL'));
         $cancelUrl = Setting::get('cinetpay.cancel_url', config('services.cinetpay.cancel_url') ?? env('CINETPAY_CANCEL_URL'));
@@ -51,7 +51,7 @@ class CinetPayConfigController extends Controller
                 'api_key' => $apiKey ?? '',
                 'secret_key' => $secretKey ? '••••••••' : null, // Masquer la clé secrète
                 'site_id' => $siteId ?? '',
-                'api_url' => $apiUrl ?? 'https://api.cinetpay.com',
+                'api_url' => $apiUrl ?? 'https://api-checkout.cinetpay.com',
                 'notify_url' => $notifyUrl ?? '',
                 'return_url' => $returnUrl ?? '',
                 'cancel_url' => $cancelUrl ?? '',
@@ -133,7 +133,7 @@ class CinetPayConfigController extends Controller
                     ?? config('services.cinetpay.site_id'),
                 'api_url' => $request->input('api_url')
                     ?? Setting::get('cinetpay.api_url')
-                    ?? config('services.cinetpay.api_url', 'https://api.cinetpay.com'),
+                    ?? config('services.cinetpay.api_url', 'https://api-checkout.cinetpay.com'),
                 'notify_url' => $request->input('notify_url')
                     ?? Setting::get('cinetpay.notify_url')
                     ?? config('services.cinetpay.notify_url'),

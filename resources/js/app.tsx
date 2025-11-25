@@ -5,6 +5,7 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import { initializeTheme } from './hooks/use-appearance';
 import { setupLocalStoragePolyfill } from './utils/safe-storage';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Configurer le polyfill localStorage au démarrage (avant tout autre code)
 setupLocalStoragePolyfill();
@@ -17,7 +18,11 @@ createInertiaApp({
     setup({ el, App, props }) {
         const root = createRoot(el);
 
-        root.render(<App {...props} />);
+        root.render(
+            <ErrorBoundary resetOnNavigation showDetails={import.meta.env.DEV}>
+                <App {...props} />
+            </ErrorBoundary>
+        );
     },
     progress: {
         color: '#4B5563',

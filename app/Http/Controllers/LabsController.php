@@ -172,13 +172,13 @@ class LabsController extends Controller
             ->where(function($query) {
                 // Inclure les réservations actives
                 $query->where('status', 'active')
-                    // Ou les réservations pending qui sont gratuites (estimated_cents = 0)
+                    // Ou les réservations pending récentes (moins de 15 minutes), qu'elles soient payées ou non
+                    // Cela permet à l'utilisateur de voir sa réservation et de réessayer le paiement si nécessaire
                     ->orWhere(function($q) {
                         $q->where('status', 'pending')
-                          ->where('estimated_cents', 0)
                           ->where('created_at', '>', now()->subMinutes(15)); // Non expirées
                     })
-                    // Ou les réservations pending qui ont un paiement réussi
+                    // Ou les réservations pending qui ont un paiement réussi (même si elles datent de plus de 15 min - cas rare)
                     ->orWhereHas('payments', function($q) {
                         $q->where('status', 'completed');
                     });
@@ -259,6 +259,11 @@ class LabsController extends Controller
                 $labDescription = (string) $labDescription;
             }
 
+            // Vérifier si le paiement est requis
+            $requiresPayment = $reservation->status === 'pending' 
+                && $reservation->estimated_cents > 0 
+                && !$reservation->payments()->where('status', 'completed')->exists();
+
             return [
                 'reservation_id' => (string) $reservation->id,
                 'lab_id' => (string) $lab->id,
@@ -273,6 +278,8 @@ class LabsController extends Controller
                 'time_info' => $timeInfo,
                 'can_access' => (bool) $canAccess,
                 'status' => (string) $reservation->status,
+                'requires_payment' => $requiresPayment,
+                'payment_amount' => $reservation->estimated_cents,
             ];
         });
 
@@ -318,6 +325,15 @@ class LabsController extends Controller
         // Check if user has a reservation (active or pending)
         if (!$reservation) {
             return redirect()->route('labs')->with('error', 'You do not have a reservation for this lab.');
+        }
+
+        // SECURE: Verify payment for pending reservations
+        if ($reservation->status === 'pending' && $reservation->estimated_cents > 0) {
+            $hasPayment = $reservation->payments()->where('status', 'completed')->exists();
+            if (!$hasPayment) {
+                return redirect()->route('labs.my-reserved')
+                    ->with('warning', 'Le paiement pour ce lab n\'a pas été validé. Veuillez procéder au paiement.');
+            }
         }
 
         // Get current lab state from CML (only if token is available)

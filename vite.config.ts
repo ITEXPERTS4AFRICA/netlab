@@ -21,11 +21,11 @@ export default defineConfig({
         jsx: 'automatic',
     },
     server: {
-        host: '0.0.0.0',
+        host: '127.0.0.1', // Utiliser 127.0.0.1 au lieu de 0.0.0.0 pour éviter les blocages
         port: 5173,
         strictPort: true,
         hmr: {
-            host: 'localhost',
+            host: '127.0.0.1', // Utiliser 127.0.0.1 au lieu de localhost pour éviter les blocages d'extensions
             port: 5173,
         },
     },

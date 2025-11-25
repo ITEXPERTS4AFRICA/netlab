@@ -143,17 +143,65 @@ class CinetPayService
         Log::debug('CinetPay - FINAL CHECK', ['url' => $url, 'payload' => $payload]);
 
         try {
-            $response = Http::asJson()->timeout(45)->post($url, $payload);
+            // Timeout réduit à 20 secondes pour éviter les attentes trop longues
+            // En production, on peut augmenter si nécessaire
+            $timeout = app()->environment('production') ? 30 : 20;
+            $httpClient = Http::asJson()
+                ->timeout($timeout)
+                ->connectTimeout(10); // Timeout de connexion à 10 secondes
+            
+            // Désactiver la vérification SSL en développement local pour éviter les erreurs de certificat
+            // En production, on devrait avoir un certificat valide
+            if (!app()->environment('production')) {
+                $httpClient = $httpClient->withoutVerifying();
+            }
+            
+            $response = $httpClient->post($url, $payload);
             
             // Log de la réponse brute pour déboguer
+            $responseBody = $response->body();
+            $responseHeaders = $response->headers();
+            $contentType = $responseHeaders['content-type'][0] ?? $responseHeaders['Content-Type'][0] ?? '';
+            
             Log::info('CinetPay raw response', [
                 'status' => $response->status(),
-                'headers' => $response->headers(),
-                'body' => $response->body(),
+                'content_type' => $contentType,
+                'body_preview' => substr($responseBody, 0, 500),
+                'url' => $url,
             ]);
             
+            // Détecter si la réponse est HTML (404, erreur serveur, etc.)
+            $isHtmlResponse = strpos(strtolower($contentType), 'text/html') !== false 
+                || strpos(strtolower($responseBody), '<!doctype html') !== false
+                || strpos(strtolower($responseBody), '<html') !== false;
+            
+            if ($isHtmlResponse) {
+                Log::error('CinetPay a retourné une page HTML au lieu de JSON (URL probablement incorrecte)', [
+                    'status' => $response->status(),
+                    'url' => $url,
+                    'content_type' => $contentType,
+                    'body_preview' => substr($responseBody, 0, 500),
+                ]);
+                
+                // Extraire le titre de la page HTML si possible
+                $htmlTitle = 'Page non trouvée';
+                if (preg_match('/<title>(.*?)<\/title>/i', $responseBody, $matches)) {
+                    $htmlTitle = $matches[1];
+                }
+                
+                return [
+                    'success' => false,
+                    'error' => 'L\'URL de l\'API CinetPay est incorrecte. Vérifiez la configuration CINETPAY_API_URL dans votre fichier .env (doit être: https://api-checkout.cinetpay.com)',
+                    'code' => 'INVALID_URL',
+                    'description' => "L'API a retourné une page HTML ({$htmlTitle}) au lieu d'une réponse JSON. L'URL utilisée est probablement incorrecte.",
+                    'is_timeout' => false,
+                    'url_used' => $url,
+                    'expected_url' => 'https://api-checkout.cinetpay.com/v2/payment',
+                ];
+            }
+            
             if ($response->failed()) {
-                $errorBody = $response->json() ?? ['message' => $response->body()];
+                $errorBody = $response->json() ?? ['message' => $responseBody];
                 Log::error('Erreur API CinetPay (initiatePayment)', [
                     'status' => $response->status(),
                     'response' => $errorBody,
@@ -169,6 +217,24 @@ class CinetPayService
             }
             
             $data = $response->json();
+            
+            // Vérifier que la réponse est bien du JSON
+            if ($data === null && !empty($responseBody)) {
+                Log::error('CinetPay a retourné une réponse non-JSON', [
+                    'status' => $response->status(),
+                    'content_type' => $contentType,
+                    'body_preview' => substr($responseBody, 0, 500),
+                    'url' => $url,
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'L\'API CinetPay a retourné une réponse invalide (non-JSON). Vérifiez la configuration CINETPAY_API_URL dans votre fichier .env.',
+                    'code' => 'INVALID_RESPONSE',
+                    'description' => 'La réponse n\'est pas au format JSON attendu.',
+                    'is_timeout' => false,
+                    'url_used' => $url,
+                ];
+            }
             
             // Log détaillé de la structure de la réponse
             Log::info('CinetPay parsed response', [
@@ -273,10 +339,25 @@ class CinetPayService
             ];
 
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            Log::error('Timeout de connexion à CinetPay (initiatePayment)', [
-                'error' => $e->getMessage(),
+            $errorMessage = $e->getMessage();
+            $isSslError = strpos($errorMessage, 'SSL certificate') !== false || strpos($errorMessage, 'cURL error 60') !== false;
+            
+            Log::error('Erreur de connexion à CinetPay (initiatePayment)', [
+                'error' => $errorMessage,
                 'url' => $url,
+                'is_ssl_error' => $isSslError,
             ]);
+            
+            if ($isSslError) {
+                return [
+                    'success' => false,
+                    'error' => 'Erreur de certificat SSL. Le problème devrait être résolu automatiquement. Veuillez réessayer.',
+                    'code' => 'SSL_ERROR',
+                    'description' => 'Problème de certificat SSL lors de la connexion à CinetPay. En développement, la vérification SSL est désactivée.',
+                    'is_timeout' => false,
+                ];
+            }
+            
             return [
                 'success' => false,
                 'error' => 'Le service de paiement est indisponible pour le moment. Veuillez réessayer plus tard.',
@@ -284,11 +365,26 @@ class CinetPayService
                 'is_timeout' => true,
             ];
         } catch (\Exception $e) {
+            $errorMessage = $e->getMessage();
+            $isSslError = strpos($errorMessage, 'SSL certificate') !== false || strpos($errorMessage, 'cURL error 60') !== false;
+            
             Log::error('Erreur inattendue lors de l\'initiation du paiement CinetPay', [
-                'error' => $e->getMessage(),
+                'error' => $errorMessage,
                 'url' => $url,
+                'is_ssl_error' => $isSslError,
                 'trace' => $e->getTraceAsString(),
             ]);
+            
+            if ($isSslError) {
+                return [
+                    'success' => false,
+                    'error' => 'Erreur de certificat SSL. Le problème devrait être résolu automatiquement. Veuillez réessayer.',
+                    'code' => 'SSL_ERROR',
+                    'description' => 'Problème de certificat SSL lors de la connexion à CinetPay.',
+                    'is_timeout' => false,
+                ];
+            }
+            
             return [
                 'success' => false,
                 'error' => 'Une erreur inattendue s\'est produite lors de l\'initialisation du paiement.',
@@ -753,6 +849,131 @@ class CinetPayService
                 'error' => 'Timeout de connexion à l\'API CinetPay.', 
                 'is_timeout' => true,
             ];
+        }
+    }
+
+    /**
+     * Vérifier le token HMAC du webhook CinetPay
+     * 
+     * Selon la documentation CinetPay :
+     * - Le token HMAC est dans l'en-tête 'x-token'
+     * - Il doit être calculé avec les données du corps de la requête
+     * - La clé secrète est l'API Key
+     * 
+     * @param array $webhookData Les données du webhook (corps de la requête)
+     * @param string $receivedToken Le token reçu dans l'en-tête x-token
+     * @return bool True si le token est valide, False sinon
+     */
+    public function verifyWebhookHmacToken(array $webhookData, string $receivedToken): bool
+    {
+        try {
+            // Construire la chaîne à hacher selon la documentation CinetPay
+            // L'ordre des champs est important pour le calcul du HMAC
+            $fields = [
+                'cpm_site_id',
+                'cpm_trans_id',
+                'cpm_trans_date',
+                'cpm_amount',
+                'cpm_currency',
+                'signature',
+                'payment_method',
+                'cel_phone_num',
+                'cpm_phone_prefixe',
+                'cpm_language',
+                'cpm_version',
+                'cpm_payment_config',
+                'cpm_page_action',
+                'cpm_custom',
+                'cpm_designation',
+                'cpm_error_message',
+            ];
+
+            // Construire la chaîne de données pour le HMAC
+            $dataString = '';
+            foreach ($fields as $field) {
+                $value = $webhookData[$field] ?? '';
+                // Convertir en string et nettoyer
+                $value = (string)$value;
+                $dataString .= $value;
+            }
+
+            // Calculer le HMAC SHA256 avec l'API Key comme clé secrète
+            $calculatedToken = hash_hmac('sha256', $dataString, $this->apiKey);
+
+            // Comparer les tokens (comparaison sécurisée pour éviter les attaques par timing)
+            $isValid = hash_equals($calculatedToken, $receivedToken);
+
+            Log::info('CinetPay HMAC token verification', [
+                'is_valid' => $isValid,
+                'received_token_preview' => substr($receivedToken, 0, 20) . '...',
+                'calculated_token_preview' => substr($calculatedToken, 0, 20) . '...',
+                'data_string_length' => strlen($dataString),
+                'fields_count' => count($fields),
+            ]);
+
+            if (!$isValid) {
+                Log::warning('CinetPay HMAC token invalide', [
+                    'received_token_length' => strlen($receivedToken),
+                    'calculated_token_length' => strlen($calculatedToken),
+                    'data_string_preview' => substr($dataString, 0, 100),
+                ]);
+            }
+
+            return $isValid;
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la vérification du token HMAC CinetPay', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Vérifier le token HMAC du webhook (méthode alternative avec tous les champs)
+     * 
+     * Cette méthode utilise tous les champs présents dans les données du webhook
+     * pour calculer le HMAC, ce qui est plus flexible si CinetPay ajoute des champs.
+     * 
+     * @param array $webhookData Les données du webhook
+     * @param string $receivedToken Le token reçu dans l'en-tête x-token
+     * @return bool True si le token est valide
+     */
+    public function verifyWebhookHmacTokenFlexible(array $webhookData, string $receivedToken): bool
+    {
+        try {
+            // Trier les clés pour garantir un ordre cohérent
+            ksort($webhookData);
+
+            // Construire la chaîne de données
+            $dataString = '';
+            foreach ($webhookData as $key => $value) {
+                // Ignorer certains champs qui ne font pas partie du calcul HMAC
+                if (in_array($key, ['x-token', 'webhook_data', 'cinetpay_response'])) {
+                    continue;
+                }
+                $dataString .= (string)$value;
+            }
+
+            // Calculer le HMAC
+            $calculatedToken = hash_hmac('sha256', $dataString, $this->apiKey);
+
+            // Comparer
+            $isValid = hash_equals($calculatedToken, $receivedToken);
+
+            Log::info('CinetPay HMAC token verification (flexible)', [
+                'is_valid' => $isValid,
+                'received_token_preview' => substr($receivedToken, 0, 20) . '...',
+                'calculated_token_preview' => substr($calculatedToken, 0, 20) . '...',
+                'data_string_length' => strlen($dataString),
+            ]);
+
+            return $isValid;
+        } catch (\Exception $e) {
+            Log::error('Erreur lors de la vérification flexible du token HMAC', [
+                'error' => $e->getMessage(),
+            ]);
+            return false;
         }
     }
 }

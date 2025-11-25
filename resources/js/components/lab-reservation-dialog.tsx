@@ -18,6 +18,7 @@ import { router } from '@inertiajs/react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { useFeedback, FeedbackMessages } from '@/components/FeedbackManager';
 
 interface Lab {
   id: string;
@@ -44,6 +45,7 @@ interface LabReservationDialogProps {
 }
 
 export default function LabReservationDialog({ lab, children }: LabReservationDialogProps) {
+  const { showSuccess, showError, showWarning, showInfo } = useFeedback();
   const [open, setOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
@@ -440,6 +442,42 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
       
       console.log('❌❌❌ AUCUN PAYMENT_URL TROUVÉ dans la réponse');
 
+      // PRIORITÉ 1: Gérer les timeouts CinetPay AVANT tout autre traitement
+      // Si c'est un timeout avec réservation créée, c'est un cas spécial à gérer
+      if ((result.code === 'CONNECTION_TIMEOUT' || result.is_timeout || result.error?.toLowerCase().includes('timeout')) && result.reservation) {
+        const timeoutMessage = result.message || result.error || 'Le service de paiement ne répond pas dans les temps.';
+        console.log('⏱️ CinetPay timeout - Réservation créée, gestion spéciale:', {
+          reservation_id: result.reservation.id,
+          can_retry: result.can_retry_payment,
+          retry_url: result.retry_payment_url,
+        });
+        
+        showWarning(
+          result.message || 'La réservation a été créée avec succès, mais le paiement n\'a pas pu être initialisé. Vous pouvez réessayer le paiement depuis la page de vos réservations.',
+          { duration: 10000 }
+        );
+        
+        setOpen(false);
+        setIsSubmitting(false);
+        
+        // Rediriger vers les réservations avec les informations de retry
+        setTimeout(() => {
+          router.visit('/labs/my-reserved', {
+            method: 'get',
+            preserveScroll: true,
+            data: {
+              reservation_id: result.reservation.id,
+              payment_error: true,
+              payment_timeout: true,
+              can_retry_payment: result.can_retry_payment,
+              retry_payment_url: result.retry_payment_url,
+              error_message: timeoutMessage,
+            },
+          });
+        }, 500);
+        return;
+      }
+
       // Si réponse 201 mais pas de payment_url, vérifier si c'est un succès avec message "CREATED"
       if (response.ok && response.status === 201) {
         // Si le message contient "CREATED" ou "success", c'est un succès, ne pas traiter comme erreur
@@ -540,43 +578,52 @@ export default function LabReservationDialog({ lab, children }: LabReservationDi
           return;
         }
         
-        // Gérer les erreurs de timeout CinetPay
-        if (result.error && (result.code === 'CONNECTION_TIMEOUT' || result.is_timeout)) {
-          const timeoutMessage = result.error || 'L\'API de paiement CinetPay ne répond pas. Veuillez réessayer plus tard.';
-          console.error('CinetPay timeout error:', result);
-          
-          // Si la réservation a été créée, rediriger vers les réservations avec un message
-          if (result.reservation && result.can_retry_payment) {
-            console.log('Redirection vers /labs/my-reserved avec réservation:', result.reservation.id);
-            toast.warning(
-              result.message || 'La réservation a été créée mais le paiement n\'a pas pu être initialisé. Vous pourrez réessayer le paiement depuis la page de vos réservations.',
-              {
-                duration: 8000,
-              }
-            );
-            setOpen(false);
-            
-            // Utiliser un petit délai pour permettre au toast de s'afficher
-            setTimeout(() => {
-              router.visit('/labs/my-reserved', {
-                method: 'get',
-                preserveScroll: true,
-                data: {
-                  reservation_id: result.reservation.id,
-                  payment_error: true,
-                  error_message: timeoutMessage,
-                },
-              });
-            }, 500);
-            return;
-          }
-          
-          // Si pas de réservation, afficher juste l'erreur
-          toast.error(timeoutMessage, {
-            duration: 10000,
+        // Gérer les erreurs de timeout CinetPay (AVANT de vérifier !response.ok)
+      // Vérifier d'abord si c'est un timeout avec réservation créée
+      if ((result.code === 'CONNECTION_TIMEOUT' || result.is_timeout || result.error?.includes('timeout')) && result.reservation) {
+        const timeoutMessage = result.message || result.error || 'Le service de paiement ne répond pas dans les temps.';
+        console.log('⏱️ CinetPay timeout - Réservation créée, redirection vers my-reserved:', {
+          reservation_id: result.reservation.id,
+          can_retry: result.can_retry_payment,
+          retry_url: result.retry_payment_url,
+        });
+        
+        // Utiliser le nouveau système de feedbacks
+        showWarning(
+          result.message || 'La réservation a été créée avec succès, mais le paiement n\'a pas pu être initialisé. Vous pouvez réessayer le paiement depuis la page de vos réservations.',
+          { duration: 10000 }
+        );
+        
+        setOpen(false);
+        setIsSubmitting(false);
+        
+        // Rediriger vers les réservations avec les informations de retry
+        setTimeout(() => {
+          router.visit('/labs/my-reserved', {
+            method: 'get',
+            preserveScroll: true,
+            data: {
+              reservation_id: result.reservation.id,
+              payment_error: true,
+              payment_timeout: true,
+              can_retry_payment: result.can_retry_payment,
+              retry_payment_url: result.retry_payment_url,
+              error_message: timeoutMessage,
+            },
           });
-          return;
-        }
+        }, 500);
+        return;
+      }
+      
+      // Gérer les erreurs de timeout CinetPay (sans réservation créée)
+      if (result.error && (result.code === 'CONNECTION_TIMEOUT' || result.is_timeout)) {
+        const timeoutMessage = result.error || 'L\'API de paiement CinetPay ne répond pas. Veuillez réessayer plus tard.';
+        console.error('CinetPay timeout error (pas de réservation):', result);
+        
+        showError(timeoutMessage, { duration: 10000 });
+        setIsSubmitting(false);
+        return;
+      }
 
         // Gérer les erreurs de validation Laravel (422)
         if (response.status === 422) {

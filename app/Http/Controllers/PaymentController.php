@@ -43,9 +43,9 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        // Valider les données
+        // Valider les données (customer_phone_number est optionnel, on utilisera une valeur par défaut)
         $validator = Validator::make($request->all(), [
-            'customer_phone_number' => 'required|string',
+            'customer_phone_number' => 'nullable|string',
             'customer_address' => 'nullable|string',
             'customer_city' => 'nullable|string',
             'customer_country' => 'nullable|string|size:2',
@@ -64,6 +64,11 @@ class PaymentController extends Controller
             return response()->json(['error' => 'Le montant de la réservation est invalide'], 422);
         }
 
+        // Déterminer le numéro de téléphone (priorité: request > user.phone > valeur par défaut)
+        $phoneNumber = $request->input('customer_phone_number') 
+            ?? $user->phone 
+            ?? '+225000000000';
+
         // Préparer les données pour CinetPay
         $paymentData = [
             'amount' => $amount,
@@ -73,7 +78,7 @@ class PaymentController extends Controller
             'customer_name' => $user->name,
             'customer_surname' => '',
             'customer_email' => $user->email,
-            'customer_phone_number' => $request->input('customer_phone_number', $user->phone ?? '+225000000000'),
+            'customer_phone_number' => $phoneNumber,
             'customer_address' => $request->input('customer_address', ''),
             'customer_city' => $request->input('customer_city', ''),
             'customer_country' => $request->input('customer_country', 'CM'),
@@ -94,15 +99,29 @@ class PaymentController extends Controller
                 'error' => $result['error'] ?? 'Unknown error',
                 'code' => $result['code'] ?? 'UNKNOWN',
                 'description' => $result['description'] ?? null,
+                'is_timeout' => $result['is_timeout'] ?? false,
                 'reservation_id' => $reservation->id,
                 'amount_in_cents' => $amount,
             ]);
+
+            // Utiliser un code HTTP approprié selon le type d'erreur
+            $httpStatus = 500; // Par défaut: erreur serveur
+            if (($result['code'] ?? '') === 'CONNECTION_TIMEOUT' || ($result['is_timeout'] ?? false)) {
+                $httpStatus = 503; // Service Unavailable pour les timeouts
+            } elseif (($result['code'] ?? '') === 'INVALID_URL' || ($result['code'] ?? '') === 'INVALID_CONFIG') {
+                $httpStatus = 502; // Bad Gateway pour les erreurs de configuration
+            }
 
             return response()->json([
                 'error' => $result['error'] ?? 'Erreur lors de l\'initialisation du paiement',
                 'code' => $result['code'] ?? 'UNKNOWN',
                 'description' => $result['description'] ?? null,
-            ], 500);
+                'is_timeout' => $result['is_timeout'] ?? false,
+                'can_retry' => ($result['code'] ?? '') === 'CONNECTION_TIMEOUT' || ($result['is_timeout'] ?? false),
+                'message' => ($result['is_timeout'] ?? false)
+                    ? 'Le service de paiement ne répond pas dans les temps. Veuillez réessayer dans quelques instants.'
+                    : ($result['error'] ?? 'Erreur lors de l\'initialisation du paiement'),
+            ], $httpStatus);
         }
 
         // Créer l'enregistrement de paiement
@@ -176,15 +195,47 @@ class PaymentController extends Controller
      */
     public function webhook(Request $request)
     {
-        Log::info('CinetPay webhook received', $request->all());
+        Log::info('CinetPay webhook received', [
+            'headers' => $request->headers->all(),
+            'body' => $request->all(),
+        ]);
 
         $data = $request->all();
 
-        // Vérifier la signature (si nécessaire selon la doc CinetPay)
-        // $isValid = $this->cinetPayService->verifyWebhookSignature($data);
-        // if (!$isValid) {
-        //     return response()->json(['error' => 'Signature invalide'], 401);
-        // }
+        // Vérifier le token HMAC dans l'en-tête x-token
+        $receivedToken = $request->header('x-token') ?? $request->header('X-TOKEN');
+        
+        if (empty($receivedToken)) {
+            Log::warning('CinetPay webhook: token HMAC manquant dans l\'en-tête x-token', [
+                'headers' => $request->headers->all(),
+            ]);
+            return response()->json([
+                'error' => 'Token HMAC manquant',
+                'message' => 'L\'en-tête x-token est requis pour vérifier l\'authenticité du webhook',
+            ], 401);
+        }
+
+        // Vérifier le token HMAC
+        $isValid = $this->cinetPayService->verifyWebhookHmacToken($data, $receivedToken);
+        
+        // Si la vérification standard échoue, essayer la méthode flexible
+        if (!$isValid) {
+            Log::info('CinetPay webhook: tentative avec méthode flexible de vérification HMAC');
+            $isValid = $this->cinetPayService->verifyWebhookHmacTokenFlexible($data, $receivedToken);
+        }
+
+        if (!$isValid) {
+            Log::error('CinetPay webhook: token HMAC invalide', [
+                'received_token_preview' => substr($receivedToken, 0, 20) . '...',
+                'data_keys' => array_keys($data),
+            ]);
+            return response()->json([
+                'error' => 'Token HMAC invalide',
+                'message' => 'Le token HMAC ne correspond pas. La requête pourrait être frauduleuse.',
+            ], 401);
+        }
+
+        Log::info('CinetPay webhook: token HMAC validé avec succès');
 
         // Trouver le paiement
         $transactionId = $data['cpm_trans_id'] ?? $data['transaction_id'] ?? null;

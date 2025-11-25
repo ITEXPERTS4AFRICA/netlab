@@ -50,7 +50,7 @@ export default function CinetPayConfigIndex({ config }: Props) {
         api_key: config.api_key || '',
         secret_key: config.secret_key === '••••••••' ? '' : (config.secret_key || ''),
         site_id: config.site_id || '',
-        api_url: config.api_url || 'https://api.cinetpay.com',
+        api_url: config.api_url || 'https://api-checkout.cinetpay.com',
         notify_url: config.notify_url || '',
         return_url: config.return_url || '',
         cancel_url: config.cancel_url || '',
@@ -330,7 +330,7 @@ export default function CinetPayConfigIndex({ config }: Props) {
                                     type="url"
                                     value={data.api_url}
                                     onChange={(e) => setData('api_url', e.target.value)}
-                                    placeholder="https://api.cinetpay.com"
+                                    placeholder="https://api-checkout.cinetpay.com"
                                     required
                                 />
                                 <InputError message={errors.api_url} />

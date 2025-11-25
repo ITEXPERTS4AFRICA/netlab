@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\Lab;
 use App\Models\UsageRecord;
+use App\Models\Reservation;
 use App\Services\CiscoApiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -30,6 +31,42 @@ class LabRuntimeController extends Controller
         return Lab::where('cml_id', $labParam)->first();
     }
 
+    /**
+     * Vérifier si l'utilisateur a le droit d'accéder et de contrôler ce lab
+     */
+    private function checkLabAccess($user, Lab $lab): ?string
+    {
+        // Les administrateurs ont toujours accès
+        if ($user->isAdmin()) {
+            return null;
+        }
+
+        // Chercher une réservation active
+        $reservation = Reservation::where('user_id', $user->id)
+            ->where('lab_id', $lab->id)
+            ->where('start_at', '<=', now())
+            ->where('end_at', '>', now())
+            ->where('status', '!=', 'cancelled')
+            ->first();
+
+        if (!$reservation) {
+            return 'Vous n\'avez pas de réservation active pour ce lab en ce moment.';
+        }
+
+        // Vérifier le paiement pour les réservations en attente
+        if ($reservation->status === 'pending') {
+            // Si le lab est payant (prix > 0), le paiement est obligatoire
+            if ($reservation->estimated_cents > 0) {
+                $hasPayment = $reservation->payments()->where('status', 'completed')->exists();
+                if (!$hasPayment) {
+                    return 'Le paiement pour cette réservation n\'a pas été validé. Veuillez procéder au paiement.';
+                }
+            }
+        }
+
+        return null; // Accès autorisé
+    }
+
     public function start(Request $request, string|int $lab, CiscoApiService $cisco)
     {
         $labModel = $this->resolveLab($lab);
@@ -41,6 +78,20 @@ class LabRuntimeController extends Controller
                 return redirect()->back()->withErrors(['error' => $error]);
             }
             return response()->json(['error' => $error], 404);
+        }
+
+        // Vérifier les droits d'accès (réservation + paiement)
+        $accessError = $this->checkLabAccess(Auth::user(), $labModel);
+        if ($accessError) {
+            \Log::warning('Accès refusé au démarrage du lab', [
+                'user_id' => Auth::id(),
+                'lab_id' => $labModel->id,
+                'reason' => $accessError
+            ]);
+            if ($request->header('X-Inertia')) {
+                return redirect()->back()->withErrors(['error' => $accessError]);
+            }
+            return response()->json(['error' => $accessError], 403);
         }
 
         // Obtenir ou rafraîchir automatiquement le token CML
@@ -114,7 +165,7 @@ class LabRuntimeController extends Controller
 
         $user = Auth::user();
         $usage = UsageRecord::create([
-            'reservation_id' => null,
+            'reservation_id' => null, // TODO: Lier à la réservation active trouvée dans checkLabAccess
             'user_id' => $user->id,
             'lab_id' => $labModel->id,
             'started_at' => now(),
@@ -151,6 +202,15 @@ class LabRuntimeController extends Controller
             return response()->json(['error' => $error], 404);
         }
 
+        // Vérifier les droits d'accès
+        $accessError = $this->checkLabAccess(Auth::user(), $labModel);
+        if ($accessError) {
+            if ($request->header('X-Inertia')) {
+                return redirect()->back()->withErrors(['error' => $accessError]);
+            }
+            return response()->json(['error' => $accessError], 403);
+        }
+
         // Obtenir ou rafraîchir automatiquement le token CML
         $token = $this->getOrRefreshCmlToken($cisco);
         
@@ -178,18 +238,14 @@ class LabRuntimeController extends Controller
         // find last usage record for this lab without end
         $usage = UsageRecord::where('lab_id', $labModel->id)->whereNull('ended_at')->latest('started_at')->first();
         if (! $usage) {
-            if ($request->header('X-Inertia')) {
-                return redirect()->back()->withErrors(['error' => 'No running usage record found']);
-            }
-            return response()->json(['error' => 'No running usage record found'], 404);
+            // Ce n'est pas une erreur critique si on ne trouve pas d'usage record, on continue
+            \Log::info('Stop lab: No running usage record found for lab ' . $labModel->id);
+        } else {
+            $usage->ended_at = now();
+            $duration = $usage->ended_at->diffInSeconds($usage->started_at);
+            $usage->duration_seconds = max(1, $duration);
+            $usage->save();
         }
-
-        $usage->ended_at = now();
-        $duration = $usage->ended_at->diffInSeconds($usage->started_at);
-        $usage->duration_seconds = max(1, $duration);
-
-        // cost calculation left to billing step
-        $usage->save();
 
         // Mettre à jour l'état du lab dans la base de données
         $labModel->state = 'STOPPED';
@@ -233,6 +289,15 @@ class LabRuntimeController extends Controller
                 return redirect()->back()->withErrors(['error' => $error]);
             }
             return response()->json(['error' => $error], 404);
+        }
+
+        // Vérifier les droits d'accès
+        $accessError = $this->checkLabAccess(Auth::user(), $labModel);
+        if ($accessError) {
+            if ($request->header('X-Inertia')) {
+                return redirect()->back()->withErrors(['error' => $accessError]);
+            }
+            return response()->json(['error' => $accessError], 403);
         }
 
         // Obtenir ou rafraîchir automatiquement le token CML
@@ -314,6 +379,15 @@ class LabRuntimeController extends Controller
             return response()->json(['error' => $error], 404);
         }
 
+        // Vérifier les droits d'accès
+        $accessError = $this->checkLabAccess(Auth::user(), $labModel);
+        if ($accessError) {
+            if ($request->header('X-Inertia')) {
+                return redirect()->back()->withErrors(['error' => $accessError]);
+            }
+            return response()->json(['error' => $accessError], 403);
+        }
+
         // Obtenir ou rafraîchir automatiquement le token CML
         $token = $this->getOrRefreshCmlToken($cisco);
         
@@ -390,6 +464,12 @@ class LabRuntimeController extends Controller
             return response()->json(['error' => $error], 404);
         }
 
+        // Vérifier les droits d'accès (même pour l'export)
+        $accessError = $this->checkLabAccess(Auth::user(), $labModel);
+        if ($accessError) {
+            return response()->json(['error' => $accessError], 403);
+        }
+
         $token = session('cml_token');
         
         if (!$token) {
@@ -422,5 +502,3 @@ class LabRuntimeController extends Controller
             ->header('Content-Disposition', "attachment; filename=\"{$filename}\"");
     }
 }
-
-

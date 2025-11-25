@@ -8,8 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { ArrowLeft } from 'lucide-react';
 import InputError from '@/components/input-error';
+import { useFeedback, FeedbackMessages } from '@/components/FeedbackManager';
 
 export default function UserCreate() {
+    const { showSuccess, showError } = useFeedback();
     const { data, setData, post, processing, errors } = useForm({
         name: '',
         email: '',
@@ -26,7 +28,18 @@ export default function UserCreate() {
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/admin/users');
+        post('/admin/users', {
+            onSuccess: () => {
+                showSuccess(FeedbackMessages.SUCCESS.CREATED('Utilisateur'));
+            },
+            onError: (errors) => {
+                if (errors.message) {
+                    showError(errors.message);
+                } else {
+                    showError('Impossible de créer l\'utilisateur. Veuillez vérifier les erreurs ci-dessous.');
+                }
+            },
+        });
     };
 
     return (

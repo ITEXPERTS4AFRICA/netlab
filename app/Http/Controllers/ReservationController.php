@@ -471,7 +471,7 @@ class ReservationController extends Controller
                 'can_retry_payment' => true,
                 'retry_payment_url' => "/api/reservations/{$reservation->id}/payments/initiate",
                 'message' => 'La réservation a été créée mais le paiement n\'a pas pu être initialisé. Vous pouvez réessayer le paiement depuis la page de vos réservations. Note: La réservation sera automatiquement annulée après 15 minutes si le paiement n\'est pas réussi.',
-            ], 500);
+            ], 201); // 201 Created car la réservation EST créée, même si le paiement a échoué
         }
 
         // Créer l'enregistrement de paiement

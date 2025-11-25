@@ -37,7 +37,7 @@ class ConsoleController extends Controller
 
         // Cache pour éviter les appels répétés
         $cacheKey = 'api:console:index:' . md5($labId . $nodeId . $token);
-        
+
         try {
         $consoles = \Illuminate\Support\Facades\Cache::remember($cacheKey, 20, function() use ($cisco, $labId, $nodeId) {
             return $cisco->console->getNodeConsoles($labId, $nodeId);
@@ -380,9 +380,9 @@ class ConsoleController extends Controller
             $token = session('cml_token');
             
             return [
-                'status' => 'ok',
-                'timestamp' => now()->toIso8601String(),
-                'has_token' => !empty($token),
+            'status' => 'ok',
+            'timestamp' => now()->toIso8601String(),
+            'has_token' => !empty($token),
             ];
         });
         
