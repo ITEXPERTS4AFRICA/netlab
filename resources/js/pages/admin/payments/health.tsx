@@ -201,14 +201,14 @@ export default function PaymentHealthIndex({ health: initialHealth, recentPaymen
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {health.summary.config_valid ? (
+                                {health.summary?.config_valid ? (
                                     <span className="text-green-600">✓ Valide</span>
                                 ) : (
                                     <span className="text-red-600">✗ Invalide</span>
                                 )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                Mode: {health.configuration.mode}
+                                Mode: {health.configuration?.mode || 'N/A'}
                             </p>
                         </CardContent>
                     </Card>
@@ -220,14 +220,14 @@ export default function PaymentHealthIndex({ health: initialHealth, recentPaymen
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {health.summary.api_reachable ? (
+                                {health.summary?.api_reachable ? (
                                     <span className="text-green-600">✓ Accessible</span>
                                 ) : (
                                     <span className="text-red-600">✗ Inaccessible</span>
                                 )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                {health.connectivity.response_time_ms}ms
+                                {health.connectivity?.response_time_ms || 0}ms
                             </p>
                         </CardContent>
                     </Card>
@@ -239,14 +239,14 @@ export default function PaymentHealthIndex({ health: initialHealth, recentPaymen
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {health.summary.payment_working ? (
+                                {health.summary?.payment_working ? (
                                     <span className="text-green-600">✓ Opérationnel</span>
                                 ) : (
                                     <span className="text-red-600">✗ Erreur</span>
                                 )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                                {health.api_status.response_time_ms}ms
+                                {health.api_status?.response_time_ms || 0}ms
                             </p>
                         </CardContent>
                     </Card>
@@ -262,27 +262,27 @@ export default function PaymentHealthIndex({ health: initialHealth, recentPaymen
                         <div className="grid gap-4 md:grid-cols-2">
                             <div>
                                 <p className="text-sm font-medium">Clé API</p>
-                                <p className="text-sm text-muted-foreground">{health.configuration.api_key}</p>
+                                <p className="text-sm text-muted-foreground">{health.configuration?.api_key || 'N/A'}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium">Site ID</p>
-                                <p className="text-sm text-muted-foreground">{health.configuration.site_id}</p>
+                                <p className="text-sm text-muted-foreground">{health.configuration?.site_id || 'N/A'}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium">Mode</p>
-                                <p className="text-sm text-muted-foreground">{health.configuration.mode}</p>
+                                <p className="text-sm text-muted-foreground">{health.configuration?.mode || 'N/A'}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium">URL Webhook</p>
-                                <p className="text-sm text-muted-foreground break-all">{health.configuration.notify_url}</p>
+                                <p className="text-sm text-muted-foreground break-all">{health.configuration?.notify_url || 'N/A'}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium">URL Return</p>
-                                <p className="text-sm text-muted-foreground break-all">{health.configuration.return_url}</p>
+                                <p className="text-sm text-muted-foreground break-all">{health.configuration?.return_url || 'N/A'}</p>
                             </div>
                             <div>
                                 <p className="text-sm font-medium">URL Cancel</p>
-                                <p className="text-sm text-muted-foreground break-all">{health.configuration.cancel_url}</p>
+                                <p className="text-sm text-muted-foreground break-all">{health.configuration?.cancel_url || 'N/A'}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -301,27 +301,27 @@ export default function PaymentHealthIndex({ health: initialHealth, recentPaymen
                             <div className="space-y-2">
                                 <div className="flex justify-between">
                                     <span className="text-sm">Statut</span>
-                                    <Badge variant={health.connectivity.status === 'reachable' ? 'default' : 'destructive'}>
-                                        {health.connectivity.status}
+                                    <Badge variant={health.connectivity?.status === 'reachable' ? 'default' : 'destructive'}>
+                                        {health.connectivity?.status || 'unknown'}
                                     </Badge>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm">Temps de réponse</span>
-                                    <span className="text-sm font-medium">{health.connectivity.response_time_ms}ms</span>
+                                    <span className="text-sm font-medium">{health.connectivity?.response_time_ms || 0}ms</span>
                                 </div>
-                                {health.connectivity.http_status && (
+                                {health.connectivity?.http_status && (
                                     <div className="flex justify-between">
                                         <span className="text-sm">Code HTTP</span>
                                         <span className="text-sm font-medium">{health.connectivity.http_status}</span>
                                     </div>
                                 )}
-                                {health.connectivity.error && (
+                                {health.connectivity?.error && (
                                     <div className="mt-2">
                                         <p className="text-sm text-red-600">{health.connectivity.error}</p>
                                     </div>
                                 )}
                                 <div className="mt-2">
-                                    <p className="text-xs text-muted-foreground break-all">{health.connectivity.url}</p>
+                                    <p className="text-xs text-muted-foreground break-all">{health.connectivity?.url || 'N/A'}</p>
                                 </div>
                             </div>
                         </CardContent>
@@ -338,15 +338,15 @@ export default function PaymentHealthIndex({ health: initialHealth, recentPaymen
                             <div className="space-y-2">
                                 <div className="flex justify-between">
                                     <span className="text-sm">Statut</span>
-                                    <Badge variant={health.api_status.can_initiate_payment ? 'default' : 'destructive'}>
-                                        {health.api_status.status}
+                                    <Badge variant={health.api_status?.can_initiate_payment ? 'default' : 'destructive'}>
+                                        {health.api_status?.status || 'unknown'}
                                     </Badge>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm">Temps de réponse</span>
-                                    <span className="text-sm font-medium">{health.api_status.response_time_ms}ms</span>
+                                    <span className="text-sm font-medium">{health.api_status?.response_time_ms || 0}ms</span>
                                 </div>
-                                {health.api_status.error && (
+                                {health.api_status?.error && (
                                     <div className="mt-2">
                                         <p className="text-sm text-red-600">{health.api_status.error}</p>
                                         {health.api_status.code && (

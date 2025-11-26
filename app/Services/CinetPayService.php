@@ -21,6 +21,7 @@ class CinetPayService
     protected string $cancelUrl;
     protected string $mode;
     protected string $apiUrl; // URL de base pour l'API v2
+    protected string $version; // Version de l'API CinetPay (v1 par défaut)
 
     public function __construct()
     {
@@ -58,6 +59,9 @@ class CinetPayService
             // Centraliser l'URL de l'API, en s'assurant qu'elle ne contient pas le chemin
             $this->apiUrl = rtrim(config('services.cinetpay.api_url', 'https://api-checkout.cinetpay.com'), '/');
 
+            // Version de l'API CinetPay (v1 par défaut pour les endpoints de signature)
+            $this->version = env('CINETPAY_API_VERSION', 'v1');
+
             // On supprime toute l'initialisation de l'ancien SDK
         } catch (\Exception $e) {
             // En cas d'erreur lors de l'initialisation (table settings manquante, etc.)
@@ -74,6 +78,7 @@ class CinetPayService
             $this->cancelUrl = $config['cancel_url'] ?? env('CINETPAY_CANCEL_URL', url('/api/payments/cancel'));
             $this->mode = $config['mode'] ?? env('CINETPAY_MODE', 'sandbox');
             $this->apiUrl = rtrim(config('services.cinetpay.api_url', 'https://api-checkout.cinetpay.com'), '/');
+            $this->version = env('CINETPAY_API_VERSION', 'v1');
         }
     }
 
