@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'; 
 import { Network } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useLabDetails } from '@/hooks/useLabDetails';
 
 type Node = {
     id: string;
@@ -47,23 +48,132 @@ type Props = {
     readonly links: Link[];
     readonly topology?: Topology | null;
     readonly className?: string;
+    readonly labId?: string;
+    readonly realtimeUpdate?: boolean;
+    readonly updateInterval?: number;
 };
 
-export default function LabTopology({ nodes, links, topology, className = '' }: Props) {
+export default function LabTopology({ 
+    nodes, 
+    links, 
+    topology, 
+    className = '',
+    labId,
+    realtimeUpdate = true,
+    updateInterval = 3000,
+}: Props) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
     const [selectedLink, setSelectedLink] = useState<Link | null>(null);
+    const [hoveredNode, setHoveredNode] = useState<Node | null>(null);
+    const [hoveredLink, setHoveredLink] = useState<Link | null>(null);
+    const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
     const [zoom, setZoom] = useState(1);
     const [pan, setPan] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    const [currentNodes, setCurrentNodes] = useState<Node[]>(nodes);
+    const [currentLinks, setCurrentLinks] = useState<Link[]>(links);
     const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
     const linkPositionsRef = useRef<Map<string, { x1: number; y1: number; x2: number; y2: number }>>(new Map());
+    
+    // Hook pour les mises à jour en temps réel
+    const { getLabDetails, details } = useLabDetails();
+
+    // Mise à jour en temps réel (avec gestion d'erreur silencieuse et rate limiting)
+    useEffect(() => {
+        if (!realtimeUpdate || !labId) return;
+
+        let errorCount = 0;
+        let rateLimitCount = 0;
+        const maxErrors = 3; // Arrêter après 3 erreurs consécutives
+        let isPollingActive = true;
+        let currentInterval = updateInterval;
+
+        const poll = async () => {
+            if (!isPollingActive) return;
+            
+            try {
+                await getLabDetails(labId);
+                // Réinitialiser les compteurs d'erreurs en cas de succès
+                errorCount = 0;
+                rateLimitCount = 0;
+                currentInterval = updateInterval; // Réinitialiser l'intervalle
+            } catch (err) {
+                errorCount++;
+                const errorMessage = err instanceof Error ? err.message : String(err);
+                
+                // Gérer les erreurs 429 (rate limiting)
+                if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
+                    rateLimitCount++;
+                    // Augmenter l'intervalle progressivement
+                    currentInterval = Math.min(currentInterval * 2, 30000); // Maximum 30 secondes
+                    console.warn('LabTopology: Rate limit détecté, intervalle augmenté à', currentInterval, 'ms');
+                    
+                    // Si trop d'erreurs 429, arrêter temporairement
+                    if (rateLimitCount >= 3) {
+                        console.warn('LabTopology: Trop d\'erreurs 429, arrêt temporaire du polling');
+                        isPollingActive = false;
+                        // Redémarrer après 60 secondes
+                        setTimeout(() => {
+                            isPollingActive = true;
+                            rateLimitCount = 0;
+                            currentInterval = updateInterval;
+                            void poll();
+                        }, 60000);
+                        return;
+                    }
+                }
+                
+                // Si l'endpoint n'existe pas (404) ou trop d'erreurs, arrêter le polling silencieusement
+                if (errorMessage.includes('404') || errorCount >= maxErrors) {
+                    if (errorCount === maxErrors) {
+                        console.warn('LabTopology: Arrêt du polling en temps réel', {
+                            reason: errorMessage.includes('404') ? 'Endpoint non disponible' : 'Trop d\'erreurs',
+                            errorCount,
+                        });
+                    }
+                    isPollingActive = false;
+                }
+            }
+        };
+
+        // Récupération initiale avec délai aléatoire pour éviter les requêtes simultanées
+        const initialDelay = Math.random() * 2000; // Délai aléatoire entre 0 et 2 secondes
+        setTimeout(() => {
+            void poll();
+        }, initialDelay);
+
+        const interval = setInterval(() => {
+            if (isPollingActive) {
+                void poll();
+            } else {
+                clearInterval(interval);
+            }
+        }, currentInterval);
+
+        return () => {
+            isPollingActive = false;
+            clearInterval(interval);
+        };
+    }, [realtimeUpdate, labId, updateInterval, getLabDetails]);
+
+    // Mettre à jour les nodes et links depuis les détails
+    useEffect(() => {
+        if (details) {
+            if (details.nodes && Array.isArray(details.nodes)) {
+                setCurrentNodes(details.nodes);
+            }
+            if (details.links && Array.isArray(details.links)) {
+                setCurrentLinks(details.links);
+            }
+        }
+    }, [details]);
 
     // Combine nodes from props and topology
     const allNodes = useMemo(() => {
         const topologyNodes = topology?.nodes || [];
-        const propNodes = nodes || [];
+        const propNodes = currentNodes.length > 0 ? currentNodes : nodes;
         const combined = topologyNodes.length > 0 ? topologyNodes : propNodes;
 
         // Debug log
@@ -74,19 +184,15 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
                 topology,
                 nodes,
             });
-        } else {
-            console.log('LabTopology: Nodes disponibles', {
-                total: combined.length,
-                sample: combined[0],
-            });
         }
+        // Logs de debug désactivés pour réduire le bruit dans la console
 
         return combined;
-    }, [topology, nodes]);
+    }, [topology, nodes, currentNodes]);
 
     const allLinks = useMemo(() => {
         const topologyLinks = topology?.links || [];
-        const propLinks = links || [];
+        const propLinks = currentLinks.length > 0 ? currentLinks : links;
         const combined = topologyLinks.length > 0 ? topologyLinks : propLinks;
 
         // Debug log
@@ -97,23 +203,14 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
                 topology,
                 links,
             });
-        } else {
-            console.log('LabTopology: Links disponibles', {
-                total: combined.length,
-                sample: combined[0],
-            });
         }
+        // Logs de debug désactivés pour réduire le bruit dans la console
 
         return combined;
-    }, [topology, links]);
+    }, [topology, links, currentLinks]);
 
     useEffect(() => {
-        console.log('LabTopology: useEffect déclenché', {
-            allNodesCount: allNodes.length,
-            allLinksCount: allLinks.length,
-            zoom,
-            pan,
-        });
+        // Logs de debug désactivés pour réduire le bruit dans la console
 
         const canvas = canvasRef.current;
         if (!canvas) {
@@ -129,17 +226,7 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
 
         // Set canvas size
         let rect = canvas.getBoundingClientRect();
-        console.log('LabTopology: Canvas rect', {
-            width: rect.width,
-            height: rect.height,
-            left: rect.left,
-            top: rect.top,
-            computedStyle: {
-                width: globalThis.getComputedStyle(canvas).width,
-                height: globalThis.getComputedStyle(canvas).height,
-                display: globalThis.getComputedStyle(canvas).display,
-            },
-        });
+        // Logs de debug désactivés pour réduire le bruit dans la console
 
         // Si le canvas n'a pas de dimensions CSS, forcer des dimensions minimales
         if (rect.width === 0 || rect.height === 0) {
@@ -149,14 +236,9 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
                 const parentRect = parent.getBoundingClientRect();
                 if (parentRect.width > 0 && parentRect.height > 0) {
                     rect = parentRect;
-                    console.log('LabTopology: Utilisation des dimensions du parent', {
-                        width: rect.width,
-                        height: rect.height,
-                    });
                 } else {
                     // Dimensions par défaut
                     rect = { width: 800, height: 600, left: 0, top: 0 } as DOMRect;
-                    console.warn('LabTopology: Utilisation de dimensions par défaut 800x600');
                 }
             }
         }
@@ -173,16 +255,6 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         const cssWidth = rect.width;
         const cssHeight = rect.height;
 
-        console.log('LabTopology: Canvas dimensions définies', {
-            canvasWidth: canvas.width,
-            canvasHeight: canvas.height,
-            cssWidth,
-            cssHeight,
-            dpr,
-            nodesCount: allNodes.length,
-            linksCount: allLinks.length,
-        });
-
         if (canvas.width === 0 || canvas.height === 0) {
             console.error('LabTopology: Canvas a des dimensions 0x0 !', {
                 rect,
@@ -194,7 +266,6 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         // Draw background with grid FIRST - use CSS dimensions
         ctx.fillStyle = '#0f172a'; // Dark background
         ctx.fillRect(0, 0, cssWidth, cssHeight);
-        console.log('LabTopology: Fond dessiné', { cssWidth, cssHeight });
 
         // Draw grid before transformations
         ctx.strokeStyle = '#334155'; // Lighter gray for grid visibility
@@ -217,11 +288,6 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
             ctx.stroke();
         }
         ctx.restore();
-        console.log('LabTopology: Grille dessinée', {
-            gridSize,
-            verticalLines: Math.ceil(cssWidth / gridSize),
-            horizontalLines: Math.ceil(cssHeight / gridSize),
-        });
 
         // Calculate node positions in world coordinates (0,0 at center)
         const nodePositions = new Map<string, { x: number; y: number }>();
@@ -229,14 +295,6 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         // Utiliser un rayon adapté - plus petit pour être sûr de voir (en CSS pixels)
         const radius = Math.min(cssWidth, cssHeight) / 5;
         const angleStep = allNodes.length > 0 ? (2 * Math.PI) / allNodes.length : 0;
-
-        console.log('LabTopology: Calcul positions nodes', {
-            nodesCount: allNodes.length,
-            radius,
-            cssWidth,
-            cssHeight,
-            angleStep,
-        });
 
         for (const [index, node] of allNodes.entries()) {
             if (node.x !== undefined && node.y !== undefined && node.x !== null && node.y !== null) {
@@ -271,35 +329,9 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         // Appliquer le pan
         ctx.translate(pan.x / zoom, pan.y / zoom);
 
-        console.log('LabTopology: Transformations appliquées', {
-            centerX: cssWidth / 2,
-            centerY: cssHeight / 2,
-            zoom,
-            panX: pan.x,
-            panY: pan.y,
-            nodePositionsCount: nodePositions.size,
-            nodePositions: Array.from(nodePositions.entries()).map(([id, pos]) => ({ id, ...pos })),
-        });
-
         // Draw links with interface information
         const linkPositions = new Map<string, { x1: number; y1: number; x2: number; y2: number }>();
         let linksDrawn = 0;
-
-        console.log('LabTopology: Dessin des liens', {
-            totalLinks: allLinks.length,
-            sampleLink: allLinks[0] ? {
-                id: allLinks[0].id,
-                n1: allLinks[0].n1,
-                n2: allLinks[0].n2,
-                i1: allLinks[0].i1,
-                i2: allLinks[0].i2,
-                hasInterface1: !!allLinks[0].interface1,
-                hasInterface2: !!allLinks[0].interface2,
-                interface1: allLinks[0].interface1,
-                interface2: allLinks[0].interface2,
-            } : null,
-            nodePositionsKeys: Array.from(nodePositions.keys()),
-        });
 
         for (const link of allLinks) {
             const node1Id = typeof link.n1 === 'string' ? link.n1 :
@@ -482,14 +514,6 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
             ctx.shadowBlur = 4;
             ctx.fillText(label, pos.x, pos.y);
             ctx.shadowBlur = 0; // Reset shadow
-
-            console.log('LabTopology: Node dessiné', {
-                nodeId: node.id,
-                label,
-                position: pos,
-                radius: nodeRadius,
-                color: fillColor,
-            });
         }
 
         if (allNodes.length > 0 && nodesDrawn === 0) {
@@ -500,17 +524,6 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         }
 
         ctx.restore();
-
-        console.log('LabTopology: Dessin terminé', {
-            nodesDrawn,
-            linksDrawn,
-            totalNodes: allNodes.length,
-            totalLinks: allLinks.length,
-            canvasWidth: canvas.width,
-            canvasHeight: canvas.height,
-            cssWidth,
-            cssHeight,
-        });
     }, [allNodes, allLinks, selectedNode, selectedLink, zoom, pan]);
 
     // Redessiner quand la taille du canvas change
@@ -518,16 +531,7 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const resizeObserver = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                const { width, height } = entry.contentRect;
-                console.log('LabTopology: ResizeObserver déclenché', {
-                    width,
-                    height,
-                    canvasWidth: canvas.width,
-                    canvasHeight: canvas.height,
-                });
-            }
+        const resizeObserver = new ResizeObserver(() => {
             // Le useEffect précédent va redessiner automatiquement
         });
 
@@ -535,13 +539,7 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
 
         // Force un redessin initial après un court délai pour s'assurer que le canvas est monté
         const timeoutId = setTimeout(() => {
-            const rect = canvas.getBoundingClientRect();
-            if (rect.width > 0 && rect.height > 0) {
-                console.log('LabTopology: Redessin forcé après délai', {
-                    width: rect.width,
-                    height: rect.height,
-                });
-            }
+            // Le useEffect précédent va redessiner automatiquement
         }, 100);
 
         return () => {
@@ -568,6 +566,123 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
             canvas.removeEventListener('wheel', wheelHandler);
         };
     }, []);
+
+    const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Mettre à jour la position du survol pour le tooltip
+        setHoverPosition({ x: e.clientX, y: e.clientY });
+
+        // Si on est en train de déplacer, gérer le pan
+        if (isDragging) {
+            setPan({
+                x: pan.x + (mouseX - dragStart.x),
+                y: pan.y + (mouseY - dragStart.y),
+            });
+            setDragStart({ x: mouseX, y: mouseY });
+            return;
+        }
+
+        // Détecter le survol des nodes et links
+        const cssWidth = rect.width;
+        const cssHeight = rect.height;
+        const worldX = (mouseX - cssWidth / 2 - pan.x) / zoom;
+        const worldY = (mouseY - cssHeight / 2 - pan.y) / zoom;
+
+        // Vérifier le survol d'un node
+        const nodeRadius = 30 / zoom;
+        let hovered: Node | null = null;
+
+        const worldNodePositions = new Map<string, { x: number; y: number }>();
+        const radius = Math.min(cssWidth, cssHeight) / 5;
+        const angleStep = allNodes.length > 0 ? (2 * Math.PI) / allNodes.length : 0;
+
+        for (const [index, node] of allNodes.entries()) {
+            let pos: { x: number; y: number };
+            if (node.x !== undefined && node.y !== undefined && node.x !== null && node.y !== null) {
+                pos = { x: node.x, y: node.y };
+            } else {
+                const angle = index * angleStep;
+                pos = {
+                    x: radius * Math.cos(angle),
+                    y: radius * Math.sin(angle),
+                };
+            }
+            worldNodePositions.set(node.id, pos);
+        }
+
+        for (const node of allNodes) {
+            const pos = worldNodePositions.get(node.id);
+            if (!pos) continue;
+
+            const dx = worldX - pos.x;
+            const dy = worldY - pos.y;
+            const distance = Math.hypot(dx, dy);
+
+            if (distance <= nodeRadius) {
+                hovered = node;
+                break;
+            }
+        }
+
+        if (hovered) {
+            setHoveredNode(hovered);
+            setHoveredLink(null);
+            return;
+        }
+
+        // Vérifier le survol d'un link
+        const clickThreshold = 10 / zoom;
+        let hoveredLink: Link | null = null;
+
+        for (const link of allLinks) {
+            const linkPos = linkPositionsRef.current.get(link.id);
+            if (!linkPos) continue;
+
+            const { x1, y1, x2, y2 } = linkPos;
+            const A = worldX - x1;
+            const B = worldY - y1;
+            const C = x2 - x1;
+            const D = y2 - y1;
+
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+
+            if (lenSq !== 0) {
+                param = dot / lenSq;
+            }
+
+            let xx, yy;
+            if (param < 0) {
+                xx = x1;
+                yy = y1;
+            } else if (param > 1) {
+                xx = x2;
+                yy = y2;
+            } else {
+                xx = x1 + param * C;
+                yy = y1 + param * D;
+            }
+
+            const dx = worldX - xx;
+            const dy = worldY - yy;
+            const distance = Math.hypot(dx, dy);
+
+            if (distance <= clickThreshold) {
+                hoveredLink = link;
+                break;
+            }
+        }
+
+        setHoveredNode(null);
+        setHoveredLink(hoveredLink);
+    }, [allNodes, allLinks, isDragging, pan, zoom, dragStart]);
 
     const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
@@ -690,25 +805,14 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
         }
     };
 
-    const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        if (!isDragging) return;
-
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        setPan({
-            x: pan.x + (mouseX - dragStart.x),
-            y: pan.y + (mouseY - dragStart.y),
-        });
-
-        setDragStart({ x: mouseX, y: mouseY });
-    };
 
     const handleMouseUp = () => {
+        setIsDragging(false);
+    };
+
+    const handleMouseLeave = () => {
+        setHoveredNode(null);
+        setHoveredLink(null);
         setIsDragging(false);
     };
 
@@ -758,8 +862,68 @@ export default function LabTopology({ nodes, links, topology, className = '' }: 
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
+                onMouseLeave={handleMouseLeave}
             />
+
+            {/* Tooltip pour les nodes et links au survol */}
+            {(hoveredNode || hoveredLink) && (
+                <div
+                    className="fixed z-50 pointer-events-none"
+                    style={{
+                        left: hoverPosition.x + 10,
+                        top: hoverPosition.y + 10,
+                    }}
+                >
+                    <Card className="border bg-white/95 shadow-lg backdrop-blur-sm dark:bg-gray-900/95">
+                        <CardContent className="p-3">
+                            {hoveredNode && (
+                                <div className="space-y-1 text-xs">
+                                    <div className="font-semibold">{hoveredNode.label || hoveredNode.id}</div>
+                                    {hoveredNode.node_definition && (
+                                        <div className="text-muted-foreground">Type: {hoveredNode.node_definition}</div>
+                                    )}
+                                    {hoveredNode.state && (
+                                        <div>
+                                            <Badge
+                                                variant={
+                                                    hoveredNode.state === 'BOOTED' || hoveredNode.state === 'STARTED'
+                                                        ? 'default'
+                                                        : 'secondary'
+                                                }
+                                            >
+                                                {hoveredNode.state}
+                                            </Badge>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {hoveredLink && (
+                                <div className="space-y-1 text-xs">
+                                    <div className="font-semibold">Lien</div>
+                                    {hoveredLink.interface1 && hoveredLink.interface2 && (
+                                        <div className="text-muted-foreground">
+                                            {hoveredLink.interface1.label || '?'} ↔ {hoveredLink.interface2.label || '?'}
+                                        </div>
+                                    )}
+                                    {hoveredLink.state && (
+                                        <div>
+                                            <Badge
+                                                variant={
+                                                    hoveredLink.state === 'STARTED' || hoveredLink.state === 'BOOTED'
+                                                        ? 'default'
+                                                        : 'secondary'
+                                                }
+                                            >
+                                                {hoveredLink.state}
+                                            </Badge>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             {/* Topology Info Panel */}
             <div className="absolute right-4 top-4 z-10">

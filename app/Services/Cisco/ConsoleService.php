@@ -46,10 +46,98 @@ class ConsoleService extends BaseCiscoApiService
 
     /**
      * Obtenir le log d'une console spécifique
+     * Timeout augmenté à 30 secondes pour les logs qui peuvent être longs
      */
     public function getConsoleLog(string $labId, string $nodeId, string $consoleId): array
     {
-        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}/consoles/{$consoleId}/log");
+        try {
+            // NOTE IMPORTANTE: L'API CML 2.9.x attend un console_id comme ENTIER dans le path
+            // Mais nous avons une clé console (UUID) qui est utilisée pour l'accès web.
+            // Pour l'endpoint /log, CML utilise l'index 0 pour la console principale.
+            // 
+            // Solution: Utiliser 0 comme console_id (console principale par défaut)
+            // La clé console (UUID) est uniquement pour l'accès web via /console/{key}
+            
+            $isUuid = preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $consoleId);
+            
+            // Utiliser 0 comme console_id (console principale par défaut)
+            $consoleIdParam = 0;
+            
+            // Si consoleId est un entier (pas un UUID), l'utiliser directement
+            if (is_numeric($consoleId) && !$isUuid) {
+                $consoleIdParam = (int)$consoleId;
+            }
+            
+            \Log::debug('Console: Récupération du log', [
+                'lab_id' => $labId,
+                'node_id' => $nodeId,
+                'console_id_original' => $consoleId,
+                'console_id_param' => $consoleIdParam,
+                'is_uuid' => $isUuid,
+            ]);
+            
+            // Utiliser un timeout plus long pour les logs console (30 secondes)
+            $response = \Illuminate\Support\Facades\Http::withToken($this->getToken())
+                ->withOptions([
+                    'verify' => false,
+                    'timeout' => 30, // Timeout augmenté pour les logs
+                    'connect_timeout' => 10,
+                ])
+                ->get("{$this->baseUrl}/api/v0/labs/{$labId}/nodes/{$nodeId}/consoles/{$consoleIdParam}/log");
+
+            if (!$response->successful()) {
+                $errorMessage = $response->body();
+                $statusCode = $response->status();
+                
+                \Log::warning('Console: Erreur lors de la récupération du log', [
+                    'lab_id' => $labId,
+                    'node_id' => $nodeId,
+                    'console_id' => $consoleId,
+                    'status' => $statusCode,
+                    'error' => $errorMessage,
+                ]);
+
+                return [
+                    'error' => "Erreur lors de la récupération du log: {$errorMessage}",
+                    'status' => $statusCode,
+                ];
+            }
+
+            $data = $response->json();
+            
+            // Normaliser la réponse si nécessaire
+            if (is_string($data)) {
+                return ['log' => $data];
+            }
+            
+            return $data;
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            \Log::error('Console: Timeout ou erreur de connexion', [
+                'lab_id' => $labId,
+                'node_id' => $nodeId,
+                'console_id' => $consoleId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'error' => 'Timeout ou erreur de connexion au serveur CML. Le serveur ne répond pas dans les délais impartis.',
+                'status' => 504,
+                'is_timeout' => true,
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Console: Exception lors de la récupération du log', [
+                'lab_id' => $labId,
+                'node_id' => $nodeId,
+                'console_id' => $consoleId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return [
+                'error' => 'Erreur lors de la récupération du log: ' . $e->getMessage(),
+                'status' => 500,
+            ];
+        }
     }
 
     /**

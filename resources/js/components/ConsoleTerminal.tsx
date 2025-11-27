@@ -114,9 +114,9 @@ export default function ConsoleTerminal({
         >
             {displayedOutput.length === 0 ? (
                 <div className="text-gray-500">
-                    <p>Console IOS prête. Tapez vos commandes ci-dessous.</p>
+                    <p>Console prête. Tapez vos commandes ci-dessous.</p>
                     <p className="mt-2 text-xs">
-                        Astuce : Utilisez Tab pour l&apos;auto-complétion, ↑↓ pour l&apos;historique
+                        Astuce : Utilisez Enter pour envoyer une commande
                     </p>
                 </div>
             ) : (

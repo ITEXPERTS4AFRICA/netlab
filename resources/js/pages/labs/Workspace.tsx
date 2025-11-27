@@ -26,10 +26,14 @@ import {
     XCircle,
     Send
 } from 'lucide-react';
-import LabConsolePanel, { type ConsoleSession, type ConsoleSessionsResponse } from '@/components/lab-console-panel';
+import LabConsolePanel from '@/components/lab-console-panel';
+import LabDetailsPanel from '@/components/LabDetailsPanel';
+import LabEventsPanel from '@/components/LabEventsPanel';
+import LabConfigEditor from '@/components/LabConfigEditor';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { ActionLogsProvider, useActionLogs, type ActionLogEntry } from '@/contexts/ActionLogsContext';
+import { ActionLogsProvider, useActionLogs } from '@/contexts/ActionLogsContext';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -94,13 +98,13 @@ type Props = {
     links?: LabLink[];
     topology?: unknown;
     tile?: unknown;
-    consoleSessions: ConsoleSession[] | ConsoleSessionsResponse | null;
 };
 
 function WorkspaceContent() {
-    const { lab, reservation, nodes, links = [], topology, consoleSessions } = usePage<Props>().props;
+    const { lab, reservation, nodes, links = [], topology } = usePage<Props>().props;
     const [editMode, setEditMode] = useState(false);
     const [timeLeft, setTimeLeft] = useState<number>(0);
+    const [activeTab, setActiveTab] = useState<'console' | 'details' | 'events' | 'config'>('console');
     const { actionLogs } = useActionLogs();
     const labDescription = useMemo(() => {
         if (!lab.lab_description) return '';
@@ -109,8 +113,9 @@ function WorkspaceContent() {
             return lab.lab_description.join('\n\n');
         }
         if (typeof lab.lab_description === 'object') {
-            if ('description' in lab.lab_description && typeof (lab.lab_description as any).description === 'string') {
-                return (lab.lab_description as any).description;
+            const descObj = lab.lab_description as Record<string, unknown>;
+            if ('description' in descObj && typeof descObj.description === 'string') {
+                return descObj.description;
             }
             return JSON.stringify(lab.lab_description, null, 2);
         }
@@ -232,7 +237,7 @@ function WorkspaceContent() {
                 throw new Error(errorMessage);
             }
 
-            const result = await response.json();
+            await response.json();
             toast.success('Lab démarré avec succès. Chargement de la topologie...');
             
             // Attendre un peu pour que le lab démarre complètement avant de recharger
@@ -240,7 +245,7 @@ function WorkspaceContent() {
             
             // Recharger la page pour obtenir l'état mis à jour du lab
             // Utiliser router.reload() au lieu de window.location.reload() pour éviter les problèmes Inertia
-            router.reload({ only: ['lab', 'nodes', 'links', 'topology', 'consoleSessions'] });
+            router.reload({ only: ['lab', 'nodes', 'links', 'topology'] });
         } catch (error) {
             console.error('Error starting lab:', error);
             toast.error(error instanceof Error ? error.message : 'Erreur lors du démarrage du lab');
@@ -280,7 +285,7 @@ function WorkspaceContent() {
             
             // Recharger la page pour obtenir l'état mis à jour du lab
             // Utiliser router.reload() au lieu de window.location.reload() pour éviter les problèmes Inertia
-            router.reload({ only: ['lab', 'nodes', 'links', 'topology', 'consoleSessions'] });
+            router.reload({ only: ['lab', 'nodes', 'links', 'topology'] });
         } catch (error) {
             console.error('Error stopping lab:', error);
             toast.error(error instanceof Error ? error.message : 'Erreur lors de l\'arrêt du lab');
@@ -351,12 +356,13 @@ function WorkspaceContent() {
                                 {(() => {
                                     // Normaliser l'état pour l'affichage
                                     let normalizedState: string;
-                                    if (typeof lab.state === 'string') {
-                                        normalizedState = lab.state;
-                                    } else if (typeof lab.state === 'object' && lab.state !== null) {
-                                        normalizedState = (lab.state as any).data || (lab.state as any).state || JSON.stringify(lab.state);
+                                    const stateObj = lab.state as Record<string, unknown> | string | null;
+                                    if (typeof stateObj === 'string') {
+                                        normalizedState = stateObj;
+                                    } else if (typeof stateObj === 'object' && stateObj !== null) {
+                                        normalizedState = (stateObj.data as string) || (stateObj.state as string) || JSON.stringify(stateObj);
                                     } else {
-                                        normalizedState = String(lab.state || 'UNKNOWN');
+                                        normalizedState = String(stateObj || 'UNKNOWN');
                                     }
                                     
                                     const upperState = normalizedState.toUpperCase();
@@ -393,10 +399,11 @@ function WorkspaceContent() {
 
                         {(() => {
                             // Normaliser l'état pour vérifier les conditions
-                            const normalizedState = typeof lab.state === 'string' 
-                                ? lab.state.toUpperCase() 
-                                : (typeof lab.state === 'object' && lab.state !== null
-                                    ? (lab.state.data?.toUpperCase() || lab.state.state?.toUpperCase() || 'UNKNOWN')
+                            const stateObj = lab.state as Record<string, unknown> | string | null;
+                            const normalizedState = typeof stateObj === 'string' 
+                                ? stateObj.toUpperCase() 
+                                : (typeof stateObj === 'object' && stateObj !== null
+                                    ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
                                     : 'UNKNOWN');
                             
                             if (normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') {
@@ -550,7 +557,7 @@ function WorkspaceContent() {
                             </p>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                            {descriptionParagraphs.slice(0, 4).map((paragraph, index) => (
+                            {descriptionParagraphs.slice(0, 4).map((paragraph: string, index: number) => (
                                 <p key={index} className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
                                     {paragraph}
                                 </p>
@@ -561,7 +568,7 @@ function WorkspaceContent() {
                                         Voir plus de détails
                                     </summary>
                                     <div className="mt-2 space-y-3 text-gray-700 dark:text-gray-300">
-                                        {descriptionParagraphs.slice(4).map((paragraph, index) => (
+                                        {descriptionParagraphs.slice(4).map((paragraph: string, index: number) => (
                                             <p key={`extra-${index}`} className="text-sm leading-relaxed">
                                                 {paragraph}
                                             </p>
@@ -574,19 +581,27 @@ function WorkspaceContent() {
                 )}
 
                 {/* Workspace Area */}
-                <div className="flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
-                    {/* Console - Priorité principale */}
-                    <div className="min-h-[28rem] w-full flex-[2] overflow-hidden">
-                        <LabConsolePanel
-                            cmlLabId={lab.cml_id}
-                            nodes={nodeList}
-                            initialSessions={consoleSessions}
-                            labTitle={lab.lab_title}
-                        />
-                    </div>
+                <div className="flex flex-1 flex-col gap-4 overflow-hidden">
+                        <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as typeof activeTab)} className="flex-1 flex flex-col">
+                        <TabsList className="grid w-full grid-cols-4">
+                            <TabsTrigger value="console">Console</TabsTrigger>
+                            <TabsTrigger value="details">Détails</TabsTrigger>
+                            <TabsTrigger value="events">Événements</TabsTrigger>
+                            <TabsTrigger value="config">Configuration</TabsTrigger>
+                        </TabsList>
 
-                    {/* Logs & Monitoring - À la place de Topology View */}
-                    <div className="relative flex-[1] min-w-[400px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                        <TabsContent value="console" className="flex-1 flex flex-col gap-4 mt-4 overflow-hidden">
+                            <div className="flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
+                                {/* Console - Priorité principale */}
+                                <div className="min-h-[28rem] w-full flex-[2] overflow-hidden">
+                                    <LabConsolePanel
+                                        cmlLabId={lab.cml_id}
+                                        nodes={nodeList}
+                                    />
+                                </div>
+
+                                {/* Logs & Monitoring */}
+                                <div className="relative flex-[1] min-w-[400px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
                         <div className="h-full flex flex-col">
                             <div className="border-b border-border p-4">
                                 <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -682,15 +697,31 @@ function WorkspaceContent() {
                         </div>
                     </div>
                 </div>
+            </TabsContent>
+
+            <TabsContent value="details" className="flex-1 mt-4 overflow-hidden">
+                <LabDetailsPanel labId={lab.cml_id} className="h-full" />
+            </TabsContent>
+
+            <TabsContent value="events" className="flex-1 mt-4 overflow-hidden">
+                <LabEventsPanel labId={lab.cml_id} className="h-full" />
+            </TabsContent>
+
+            <TabsContent value="config" className="flex-1 mt-4 overflow-hidden min-h-[700px]">
+                <LabConfigEditor labId={lab.cml_id} className="h-full min-h-[700px]" />
+            </TabsContent>
+        </Tabs>
+                </div>
 
                 {/* Topology Graph - En bas avec largeur maximale */}
                 <div className="relative w-full h-[400px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 mt-4">
                         {/* Topology Graph - Show when lab is running - Must be on top */}
                         {(() => {
-                            const normalizedState = typeof lab.state === 'string' 
-                                ? lab.state.toUpperCase() 
-                                : (typeof lab.state === 'object' && lab.state !== null
-                                    ? ((lab.state as any).data?.toUpperCase() || (lab.state as any).state?.toUpperCase() || 'UNKNOWN')
+                            const stateObj = lab.state as Record<string, unknown> | string | null;
+                            const normalizedState = typeof stateObj === 'string' 
+                                ? stateObj.toUpperCase() 
+                                : (typeof stateObj === 'object' && stateObj !== null
+                                    ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
                                     : 'UNKNOWN');
                             
                             const shouldShow = normalizedState === 'RUNNING' || normalizedState === 'STARTED';
@@ -698,16 +729,17 @@ function WorkspaceContent() {
                             // Log uniquement en mode développement et seulement si les valeurs changent
                             if (import.meta.env.DEV) {
                                 const logKey = `${normalizedState}-${shouldShow}-${nodeList.length}-${Array.isArray(links) ? links.length : 0}`;
-                                if (!(window as any).__lastTopologyLog || (window as any).__lastTopologyLog !== logKey) {
+                                const windowObj = window as Record<string, unknown>;
+                                if (!windowObj.__lastTopologyLog || windowObj.__lastTopologyLog !== logKey) {
                                     console.log('Workspace: Rendu topologie', {
                                         normalizedState,
                                         shouldShow,
                                         nodeListCount: nodeList.length,
                                         linksCount: Array.isArray(links) ? links.length : 0,
                                         topologyType: typeof topology,
-                                        hasTopologyNodes: !!(topology && typeof topology === 'object' && (topology as any).nodes),
+                                        hasTopologyNodes: !!(topology && typeof topology === 'object' && 'nodes' in topology),
                                     });
-                                    (window as any).__lastTopologyLog = logKey;
+                                    windowObj.__lastTopologyLog = logKey;
                                 }
                             }
                             
@@ -717,7 +749,10 @@ function WorkspaceContent() {
                                 <LabTopology
                                     nodes={nodeList}
                                     links={Array.isArray(links) ? links : []}
-                                    topology={topology as { nodes?: LabNode[]; links?: LabLink[] } | null}
+                                    topology={topology as { nodes?: LabNode[]; links?: LabLink[] } | null | undefined}
+                                    labId={lab.cml_id}
+                                    realtimeUpdate={true}
+                                    updateInterval={5000}
                                     className="h-full w-full"
                                 />
                             </div>
@@ -732,10 +767,11 @@ function WorkspaceContent() {
                         
                         {/* Annotations Canvas - Show only when lab is NOT running to avoid grid overlap */}
                         {(() => {
-                            const normalizedState = typeof lab.state === 'string' 
-                                ? lab.state.toUpperCase() 
-                                : (typeof lab.state === 'object' && lab.state !== null
-                                    ? (lab.state.data?.toUpperCase() || lab.state.state?.toUpperCase() || 'UNKNOWN')
+                            const stateObj = lab.state as Record<string, unknown> | string | null;
+                            const normalizedState = typeof stateObj === 'string' 
+                                ? stateObj.toUpperCase() 
+                                : (typeof stateObj === 'object' && stateObj !== null
+                                    ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
                                     : 'UNKNOWN');
                             return normalizedState !== 'RUNNING' && normalizedState !== 'STARTED';
                         })() && (
@@ -765,10 +801,11 @@ function WorkspaceContent() {
                         {/* Lab State Overlay */}
                         {(() => {
                             // Normaliser l'état pour vérifier les conditions
-                            const normalizedState = typeof lab.state === 'string' 
-                                ? lab.state.toUpperCase() 
-                                : (typeof lab.state === 'object' && lab.state !== null
-                                    ? (lab.state.data?.toUpperCase() || lab.state.state?.toUpperCase() || 'UNKNOWN')
+                            const stateObj = lab.state as Record<string, unknown> | string | null;
+                            const normalizedState = typeof stateObj === 'string' 
+                                ? stateObj.toUpperCase() 
+                                : (typeof stateObj === 'object' && stateObj !== null
+                                    ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
                                     : 'UNKNOWN');
                             
                             if (!editMode && normalizedState !== 'RUNNING' && normalizedState !== 'STARTED') {

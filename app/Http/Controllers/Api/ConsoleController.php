@@ -244,8 +244,19 @@ class ConsoleController extends Controller
         if ($consoleType === 'vnc') {
             $consoleUrl = "{$baseUrl}/vnc/{$consoleKey}";
         } else {
-            // Format correct pour CML 2.x : /console/?id=UUID
-            $consoleUrl = "{$baseUrl}/console/?id={$consoleKey}";
+            // Format pour CML 2.x : essayer plusieurs formats possibles
+            // Format 1: /console/{console_key} (format standard)
+            // Format 2: /console/?id={console_key} (format avec query param)
+            // Format 3: /console/{console_key} (sans slash)
+            // On retourne le format standard, le frontend peut essayer les autres si nécessaire
+            $consoleUrl = "{$baseUrl}/console/{$consoleKey}";
+            
+            \Log::info('Console: URL générée', [
+                'base_url' => $baseUrl,
+                'console_key' => $consoleKey,
+                'console_url' => $consoleUrl,
+                'note' => 'Si 404, essayer /console/?id={key} ou vérifier la documentation CML',
+            ]);
         }
 
         \Log::info('Console: Clé console obtenue avec succès', [
@@ -353,19 +364,83 @@ class ConsoleController extends Controller
             $cisco->setToken($token);
         }
 
-        $log = $cisco->console->getConsoleLog($labId, $nodeId, $consoleId);
-
-        if (isset($log['error'])) {
-            \Log::warning('Console: Erreur lors de la récupération du log', [
+        if (!$token) {
+            \Log::error('Console: Token CML non disponible pour récupération du log', [
                 'lab_id' => $labId,
                 'node_id' => $nodeId,
                 'console_id' => $consoleId,
-                'error' => $log['error'],
             ]);
-            return response()->json($log, $log['status'] ?? 500);
+            return response()->json([
+                'error' => 'Token CML non disponible. Veuillez vous reconnecter.',
+                'status' => 401,
+            ], 401);
         }
 
-        return response()->json($log);
+        \Log::info('Console: Tentative de récupération du log', [
+            'lab_id' => $labId,
+            'node_id' => $nodeId,
+            'console_id' => $consoleId,
+        ]);
+
+        // Valider les paramètres
+        if (empty($labId) || empty($nodeId) || empty($consoleId)) {
+            \Log::error('Console: Paramètres manquants', [
+                'lab_id' => $labId,
+                'node_id' => $nodeId,
+                'console_id' => $consoleId,
+            ]);
+            return response()->json([
+                'error' => 'Paramètres manquants: labId, nodeId et consoleId sont requis',
+                'status' => 400,
+            ], 400);
+        }
+
+        try {
+            $log = $cisco->console->getConsoleLog($labId, $nodeId, $consoleId);
+
+            if (isset($log['error'])) {
+                \Log::warning('Console: Erreur lors de la récupération du log', [
+                    'lab_id' => $labId,
+                    'node_id' => $nodeId,
+                    'console_id' => $consoleId,
+                    'error' => $log['error'],
+                    'status' => $log['status'] ?? null,
+                    'is_timeout' => $log['is_timeout'] ?? false,
+                ]);
+                
+                $statusCode = $log['status'] ?? 500;
+                
+                // Message d'erreur plus explicite pour les timeouts
+                if (isset($log['is_timeout']) && $log['is_timeout']) {
+                    $log['error'] = 'Le serveur CML ne répond pas dans les délais impartis. Le lab est peut-être en cours de démarrage ou surchargé.';
+                }
+                
+                return response()->json($log, $statusCode);
+            }
+
+            \Log::info('Console: Log récupéré avec succès', [
+                'lab_id' => $labId,
+                'node_id' => $nodeId,
+                'console_id' => $consoleId,
+                'has_log' => isset($log['log']),
+                'log_type' => gettype($log['log'] ?? null),
+            ]);
+
+            return response()->json($log);
+        } catch (\Exception $e) {
+            \Log::error('Console: Exception lors de la récupération du log', [
+                'lab_id' => $labId,
+                'node_id' => $nodeId,
+                'console_id' => $consoleId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'error' => 'Erreur lors de la récupération du log: ' . $e->getMessage(),
+                'status' => 500,
+            ], 500);
+        }
     }
 
     /**
@@ -411,15 +486,40 @@ class ConsoleController extends Controller
             ], 401);
         }
 
-        // Utiliser le service de polling intelligent
-        $pollingService = new \App\Services\Console\IntelligentPollingService($cisco);
-        $result = $pollingService->getConsoleLogs($labId, $nodeId, $consoleId);
+        try {
+            // Utiliser le service de polling intelligent
+            $pollingService = new \App\Services\Console\IntelligentPollingService($cisco);
+            $result = $pollingService->getConsoleLogs($labId, $nodeId, $consoleId);
 
-        if (isset($result['error'])) {
-            return response()->json($result, $result['rate_limited'] ?? false ? 429 : 500);
+            if (isset($result['error'])) {
+                \Log::warning('Console: Erreur lors du polling', [
+                    'lab_id' => $labId,
+                    'node_id' => $nodeId,
+                    'console_id' => $consoleId,
+                    'error' => $result['error'],
+                    'status' => $result['status'] ?? null,
+                    'is_timeout' => $result['is_timeout'] ?? false,
+                ]);
+                
+                $statusCode = $result['rate_limited'] ?? false ? 429 : ($result['status'] ?? 500);
+                return response()->json($result, $statusCode);
+            }
+
+            return response()->json($result);
+        } catch (\Exception $e) {
+            \Log::error('Console: Exception lors du polling', [
+                'lab_id' => $labId,
+                'node_id' => $nodeId,
+                'console_id' => $consoleId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'error' => 'Exception lors du polling: ' . $e->getMessage(),
+                'status' => 500,
+            ], 500);
         }
-
-        return response()->json($result);
     }
 
     /**

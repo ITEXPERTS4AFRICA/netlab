@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Loader2, Power, RefreshCcw, Terminal, Code } from 'lucide-react';
+import { Loader2, Power, RefreshCcw, Terminal, Network, Link2, ChevronDown, Plug, PlugZap } from 'lucide-react';
 import { useConsole } from '@/hooks/useConsole';
 import { useIntelligentPolling } from '@/hooks/useIntelligentPolling';
-import IOSConsole from '@/components/IOSConsole';
+import ConsoleTerminal from '@/components/ConsoleTerminal';
 import { useActionLogs } from '@/contexts/ActionLogsContext';
-import ConsoleCommandTester from '@/components/ConsoleCommandTester';
+import { useNodeInterfaces } from '@/hooks/useNodeInterfaces';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import HiddenConsoleIframe from '@/components/HiddenConsoleIframe';
 
 type LabNode = {
     id: string;
@@ -45,26 +46,17 @@ export type ConsoleSession = {
     [key: string]: unknown;
 };
 
-type AvailableConsoleTypes = {
-    serial?: boolean;
-    vnc?: boolean;
-    console?: boolean;
-    [key: string]: boolean | undefined;
-};
 
 type Props = {
     cmlLabId: string;
     nodes: LabNode[];
-    initialSessions: ConsoleSessionsResponse | ConsoleSession[] | null;
-    labTitle?: string;
 };
 
 type SessionState = {
     sessionId: string;
     nodeId: string;
-    consoleUrl?: string; // URL de la console CML (iframe)
     consoleId?: string; // ID de la console pour récupérer les logs
-    wsHref?: string; // Déprécié - CML n'utilise pas de WebSocket
+    consoleUrl?: string; // URL de la console pour l'iframe caché
     protocol?: string;
     type?: string;
 };
@@ -82,9 +74,7 @@ const CONNECTION_META: Record<ConnectionState, { label: string; variant: 'outlin
 
 const MAX_LOG_LINES = 500;
 
-export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labTitle }: Props) {
-    // Mode d'affichage : 'iframe' (console CML native) ou 'ios' (console intelligente IOS)
-    const [consoleMode, setConsoleMode] = useState<'iframe' | 'ios'>('ios');
+export default function LabConsolePanel({ cmlLabId, nodes }: Props) {
 
     // Trouver le premier node valide avec un id - utiliser useMemo pour éviter les re-calculs
     const firstValidNodeId = useMemo(() => {
@@ -98,17 +88,32 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
         const firstNode = nodes.find(node => node.id && node.id.trim() !== '');
         return firstNode?.id ?? '';
     });
-    const [availableTypes, setAvailableTypes] = useState<AvailableConsoleTypes>({});
     const [consoles, setConsoles] = useState<ConsoleInfo[]>([]);
     const [loadingConsoles, setLoadingConsoles] = useState(false);
     const [loadingSession, setLoadingSession] = useState(false);
     const [session, setSession] = useState<SessionState | null>(null);
     const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
-    const [command, setCommand] = useState('');
     const [logLines, setLogLines] = useState<string[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const wsRef = useRef<WebSocket | null>(null);
+    const [selectedInterface, setSelectedInterface] = useState<string | null>(null);
+    const [selectedLink, setSelectedLink] = useState<string | null>(null);
+    const [showInterfaces, setShowInterfaces] = useState(false);
+    const [showLinks, setShowLinks] = useState(false);
+    const [pendingCommand, setPendingCommand] = useState<string | null>(null);
     const sessionRef = useRef<SessionState | null>(null);
+    
+    // Hook pour récupérer les interfaces et liens
+    const { 
+        interfaces, 
+        links, 
+        getNodeInterfaces, 
+        getNodeLinks,
+        connectInterface,
+        disconnectInterface,
+        connectLink,
+        disconnectLink,
+        loading: loadingInterfaces
+    } = useNodeInterfaces();
 
     // Utiliser le contexte partagé pour les logs d'actions
     const { actionLogs, addActionLog, updateActionLogStatus } = useActionLogs();
@@ -129,20 +134,21 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
     getConsoleLogRef.current = consoleApi.getConsoleLog;
 
     // Hook de polling intelligent pour récupérer les logs en temps réel
+    // Intervalle augmenté à 4 secondes pour éviter les erreurs 429
     const polling = useIntelligentPolling({
         labId: cmlLabId,
         nodeId: selectedNodeId,
         consoleId: session?.consoleId || session?.sessionId || '',
-        enabled: !!session && consoleMode === 'ios', // Activer uniquement en mode IOS
-        interval: 2000, // Poll toutes les 2 secondes
+        enabled: !!session, // Toujours activer si session existe
+        interval: 4000, // Poll toutes les 4 secondes pour éviter le rate limiting
     });
 
     // Synchroniser les logs du polling avec logLines
     useEffect(() => {
-        if (polling.logs.length > 0 && consoleMode === 'ios') {
+        if (polling.logs.length > 0) {
             setLogLines(polling.logs);
         }
-    }, [polling.logs, consoleMode]);
+    }, [polling.logs]);
 
     // Mettre à jour selectedNodeId quand nodes change (seulement si selectedNodeId est vide)
     useEffect(() => {
@@ -152,12 +158,27 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [firstValidNodeId]); // Ne pas inclure selectedNodeId pour éviter les boucles
 
-    const normalizedSessions = useMemo<ConsoleSession[]>(() => {
-        if (!initialSessions) return [];
-        if (Array.isArray(initialSessions)) return initialSessions;
-        if (Array.isArray(initialSessions.sessions)) return initialSessions.sessions;
-        return [];
-    }, [initialSessions]);
+    // Ouvrir automatiquement une session après sélection d'un node
+    useEffect(() => {
+        if (selectedNodeId && !session && !loadingSession && !loadingConsoles) {
+            // Attendre un court délai pour que les consoles soient chargées
+            const timer = setTimeout(() => {
+                handleCreateSession();
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedNodeId]); // Ne pas inclure session pour éviter les boucles
+
+    // Charger les interfaces et liens quand un node est sélectionné
+    useEffect(() => {
+        if (selectedNodeId && cmlLabId) {
+            getNodeInterfaces(cmlLabId, selectedNodeId);
+            getNodeLinks(cmlLabId, selectedNodeId);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedNodeId, cmlLabId]);
+
 
     const appendLog = useCallback((line: string) => {
         setLogLines(prev => {
@@ -170,19 +191,6 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
     }, []);
 
 
-    const teardownWebsocket = useCallback((options?: { reason?: string; silent?: boolean }) => {
-        if (wsRef.current) {
-            try {
-                wsRef.current.close();
-            } catch (err) {
-                console.error('WebSocket close error', err);
-            }
-            wsRef.current = null;
-        }
-        if (options?.reason && !options.silent) {
-            appendLog(`[Console] ${options.reason}`);
-        }
-    }, [appendLog]);
 
     useEffect(() => {
         sessionRef.current = session;
@@ -201,18 +209,15 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                 const data = await getNodeConsolesRef.current(cmlLabId, selectedNodeId);
                 if (data && !controller.signal.aborted && isMounted) {
                     setConsoles(Array.isArray(data.consoles) ? data.consoles : []);
-                    setAvailableTypes(data.available_types || {});
                 } else if (!data && !controller.signal.aborted && isMounted) {
                     // Si data est null, c'est qu'il y a eu une erreur (gérée par useConsole)
                     setConsoles([]);
-                    setAvailableTypes({});
                 }
             } catch (err) {
                 if (controller.signal.aborted || !isMounted) return;
                 console.error(err);
                 setError("Impossible de charger les consoles pour ce nœud.");
                 setConsoles([]);
-                setAvailableTypes({});
             } finally {
                 if (!controller.signal.aborted && isMounted) {
                     setLoadingConsoles(false);
@@ -234,7 +239,6 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
             if (reason) {
                 appendLog(`[Console] ${reason}`);
             }
-            teardownWebsocket({ silent: true });
             setSession(null);
             setConnectionState('closed');
             return;
@@ -245,7 +249,6 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
         }
 
         setConnectionState('closing');
-        teardownWebsocket({ silent: true });
 
         if (!skipApi && closeSessionRef.current) {
             const success = await closeSessionRef.current(activeSession.sessionId);
@@ -257,7 +260,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
         sessionRef.current = null;
         setSession(null);
         setConnectionState('closed');
-    }, [appendLog, teardownWebsocket]);
+    }, [appendLog]);
 
     useEffect(() => {
         return () => {
@@ -299,127 +302,35 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
         const activeSession = session;
 
         if (!activeSession) {
-            teardownWebsocket({ silent: true });
             setConnectionState('idle');
             return;
         }
 
-        // Priorité 1: WebSocket si disponible
-        if (activeSession.wsHref) {
-            console.log('[DEBUG] WebSocket détecté! Tentative de connexion:', {
-                wsHref: activeSession.wsHref,
-                protocol: activeSession.protocol
-            });
-            setConnectionState('connecting');
-            teardownWebsocket({ silent: true });
-
-            let ws: WebSocket;
+        // Pour CML, on utilise uniquement le polling des logs
+        // Pas de WebSocket, pas d'iframe visible
+        setConnectionState('open');
+        
+        // Vérifier périodiquement que la session est toujours disponible
+        const checkInterval = setInterval(async () => {
             try {
-                if (activeSession.protocol) {
-                    ws = new WebSocket(activeSession.wsHref, [activeSession.protocol]);
-                } else {
-                    ws = new WebSocket(activeSession.wsHref);
+                const isAvailable = await checkConnectionAvailability();
+                if (!isAvailable && connectionState === 'open') {
+                    console.warn('Connexion perdue, tentative de reconnexion...');
+                    setConnectionState('error');
+                    toast.warning('Connexion perdue. Vérification de la disponibilité...');
+                } else if (isAvailable && connectionState === 'error') {
+                    setConnectionState('open');
+                    toast.success('Connexion rétablie.');
                 }
             } catch (err) {
-                console.error('Unable to open WebSocket', err);
-                setError('Impossible d\'ouvrir la connexion console.');
-                setConnectionState('error');
-                return;
+                console.error('Erreur lors de la vérification de la connexion:', err);
             }
+        }, 30000); // Vérifier toutes les 30 secondes
 
-            wsRef.current = ws;
-
-            const handleOpen = () => {
-                setConnectionState('open');
-                setError(null);
-                appendLog(`[Console] Session ${activeSession.sessionId} connectée via WebSocket.`);
-                console.log('WebSocket ouvert avec succès');
-            };
-
-            const handleMessage = (event: MessageEvent) => {
-                if (typeof event.data === 'string') {
-                    appendLog(event.data);
-                } else if (event.data instanceof Blob) {
-                    event.data.text().then(appendLog).catch(() => appendLog('[Console] Flux binaire reçu'));
-                } else {
-                    appendLog('[Console] Message non textuel reçu');
-                }
-            };
-
-            const handleError = (event: Event) => {
-                console.error('WebSocket error', event);
-                setConnectionState('error');
-                setError('Erreur de connexion WebSocket. Vérifiez que le serveur CML est accessible.');
-                appendLog('[Console] Erreur de transport WebSocket');
-                toast.error('Erreur de connexion WebSocket. Les commandes peuvent ne pas fonctionner.');
-            };
-
-            const handleClose = (event: CloseEvent) => {
-                if (wsRef.current === ws) {
-                    wsRef.current = null;
-                }
-                if (!event.wasClean) {
-                    appendLog('[Console] Connexion fermée de manière inattendue');
-                    setError('Connexion console interrompue.');
-                } else {
-                    appendLog('[Console] Connexion fermée');
-                }
-                setConnectionState(prev => (prev === 'closing' ? 'closed' : 'closed'));
-            };
-
-            ws.addEventListener('open', handleOpen);
-            ws.addEventListener('message', handleMessage);
-            ws.addEventListener('error', handleError);
-            ws.addEventListener('close', handleClose);
-
-            return () => {
-                ws.removeEventListener('open', handleOpen);
-                ws.removeEventListener('message', handleMessage);
-                ws.removeEventListener('error', handleError);
-                ws.removeEventListener('close', handleClose);
-                if (wsRef.current === ws) {
-                    try {
-                        ws.close();
-                    } catch (err) {
-                        console.error('WebSocket cleanup error', err);
-                    }
-                    wsRef.current = null;
-                }
-            };
-        }
-
-        // Priorité 2: Console URL (iframe) si pas de WebSocket
-        if (activeSession.consoleUrl) {
-            console.log('[DEBUG] Pas de wsHref détecté, utilisation de consoleUrl:', {
-                session: activeSession,
-                hasConsoleUrl: !!activeSession.consoleUrl,
-                wsHref: activeSession.wsHref
-            });
-            teardownWebsocket({ silent: true });
-            setConnectionState('open');
-
-            // Vérifier périodiquement que la session est toujours disponible
-            const checkInterval = setInterval(async () => {
-                try {
-                    const isAvailable = await checkConnectionAvailability();
-                    if (!isAvailable && connectionState === 'open') {
-                        console.warn('Connexion perdue, tentative de reconnexion...');
-                        setConnectionState('error');
-                        toast.warning('Connexion perdue. Vérification de la disponibilité...');
-                    } else if (isAvailable && connectionState === 'error') {
-                        setConnectionState('open');
-                        toast.success('Connexion rétablie.');
-                    }
-                } catch (err) {
-                    console.error('Erreur lors de la vérification de la connexion:', err);
-                }
-            }, 30000); // Vérifier toutes les 30 secondes
-
-            return () => {
-                clearInterval(checkInterval);
-            };
-        }
-    }, [session, appendLog, teardownWebsocket, checkConnectionAvailability, connectionState]);
+        return () => {
+            clearInterval(checkInterval);
+        };
+    }, [session, checkConnectionAvailability, connectionState]);
 
     const handleCreateSession = useCallback(async (type?: string) => {
         if (!selectedNodeId) {
@@ -465,26 +376,10 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
             }
 
             const sessionId = data.session_id ?? data.id ?? '';
-            // CML utilise des URLs de console, pas des WebSockets
-            const consoleUrl = data.console_url ?? data.url ?? data.ws_href ?? null;
-
-            console.log('Session créée:', {
-                sessionId,
-                hasConsoleUrl: !!consoleUrl,
-                consoleUrl,
-                dataKeys: Object.keys(data),
-                fullData: data,
-            });
 
             if (!sessionId) {
                 throw new Error('Réponse invalide du serveur (session_id manquant).');
             }
-
-            if (!consoleUrl) {
-                throw new Error('URL de console non fournie par le serveur.');
-            }
-
-            const consoleUrlString = typeof consoleUrl === 'string' ? consoleUrl : String(consoleUrl);
 
             // Récupérer le consoleId depuis les consoles disponibles ou depuis la réponse
             let consoleId: string | undefined = undefined;
@@ -501,42 +396,33 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                 }
             }
 
+            // Récupérer l'URL de la console depuis la réponse
+            const consoleUrl = (typeof data.console_url === 'string' ? data.console_url : null) 
+                ?? (typeof data.url === 'string' ? data.url : null);
+
             const nextSession: SessionState = {
                 sessionId,
                 nodeId: data.node_id ?? selectedNodeId,
-                consoleUrl: consoleUrlString,
-                consoleId: consoleId,
-                wsHref: data.ws_href ? String(data.ws_href) : undefined,
+                consoleId: consoleId ?? sessionId,
+                consoleUrl: consoleUrl ?? undefined,
                 protocol: data.protocol,
                 type: data.type ?? type,
             };
 
-            console.log('[DEBUG] Session créée avec les données:', {
-                raw_data: data,
-                nextSession: nextSession,
-                has_ws_href: !!data.ws_href,
-                ws_href_value: data.ws_href
-            });
-
             sessionRef.current = nextSession;
             setSession(nextSession);
-
-            // TOUJOURS utiliser le mode IOS avec polling intelligent
-            // Pas d'iframe, pas de WebSocket direct - uniquement polling
-            setConsoleMode('ios');
             setConnectionState('open');
-            appendLog('[Console] Mode IOS Console activé avec polling intelligent.');
-            toast.success('Console IOS activée avec polling intelligent.');
-
-            // Masquer l'URL complète, ne garder que l'ID de session
-            const urlParts = consoleUrlString.split('/');
-            const urlSessionId = urlParts[urlParts.length - 1] || 'N/A';
-            appendLog(`[Console] Session ID: ${urlSessionId}`);
+            appendLog('[Console] Session console connectée avec succès.');
+            const nodeLabel = (() => {
+                const node = nodes.find(n => n.id === selectedNodeId);
+                return node?.label || node?.name || selectedNodeId;
+            })();
+            appendLog(`[Console] Node: ${nodeLabel}`);
 
             // Mettre à jour le log d'action
             const lastLog = actionLogs.find(log => log.type === 'session' && log.status === 'pending' && log.nodeId === selectedNodeId);
             if (lastLog) {
-                updateActionLogStatus(lastLog.id, 'success', `Session créée avec succès. ID: ${urlSessionId}`);
+                updateActionLogStatus(lastLog.id, 'success', `Session créée avec succès. ID: ${sessionId.slice(0, 8)}`);
             }
 
             toast.success('Session console créée.');
@@ -566,7 +452,7 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
         } finally {
             setLoadingSession(false);
         }
-    }, [appendLog, cmlLabId, closeSession, selectedNodeId, addActionLog, actionLogs, updateActionLogStatus, checkConnectionAvailability, consoles]);
+    }, [appendLog, cmlLabId, closeSession, selectedNodeId, addActionLog, actionLogs, updateActionLogStatus, checkConnectionAvailability, consoles, nodes]);
 
     const handleCloseSession = useCallback(() => {
         addActionLog({
@@ -638,136 +524,27 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
         }
     }, [appendLog, cmlLabId, selectedNodeId, logLines]);
 
-    const handleSendCommand = useCallback(async () => {
-        const trimmed = command.trimEnd();
-        if (!trimmed) return;
-
-        const activeSession = sessionRef.current;
-        if (!activeSession) {
-            toast.error('Aucune session console active.');
-            return;
-        }
-
-        // Créer un log d'action pour cette commande
-        const actionLogId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        addActionLog({
-            type: 'command',
-            action: 'Envoi de commande',
-            command: trimmed,
-            status: 'pending',
-            nodeId: activeSession.nodeId,
-            details: `Commande: ${trimmed}`,
-        });
-
-        // PRIORITÉ 1: Si on utilise consoleUrl (iframe CML), les commandes sont envoyées via l'iframe
-        // et on récupère les résultats via polling des logs
-        // Vérifier consoleUrl en premier pour éviter le message d'erreur WebSocket
-        if (activeSession.consoleUrl || activeSession.sessionId) {
-            appendLog(`> ${trimmed}`);
-            updateActionLogStatus(actionLogId, 'sent', `Commande envoyée: ${trimmed}`);
-            setCommand('');
-
-            // Récupérer le consoleId depuis la session (sessionId = consoleKey pour CML)
-            // ou depuis les consoles disponibles
-            const consoleId = activeSession.consoleId
-                ?? activeSession.sessionId // Pour CML, sessionId = consoleKey
-                ?? (consoles.length > 0 ? (consoles[0]?.id ?? consoles[0]?.console_id) : null);
-
-            console.log('Envoi de commande avec consoleUrl:', {
-                hasConsoleUrl: !!activeSession.consoleUrl,
-                consoleId: consoleId,
-                sessionId: activeSession.sessionId,
-                sessionConsoleId: activeSession.consoleId,
-                consolesCount: consoles.length,
-            });
-
-            if (consoleId) {
-                // Attendre un court délai puis récupérer les logs pour voir les résultats
-                setTimeout(async () => {
-                    try {
-                        await handleLoadLog(consoleId, true); // silent = true pour éviter les messages répétitifs
-                        updateActionLogStatus(actionLogId, 'success', `Commande exécutée: ${trimmed}`);
-                    } catch (err) {
-                        console.error('Erreur lors de la récupération du log:', err);
-                        updateActionLogStatus(actionLogId, 'error', `Erreur lors de la récupération des résultats: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
-                    }
-                }, 1500); // Attendre 1.5 secondes pour que la commande s'exécute
-
-                // Mettre en place un polling pour récupérer les logs périodiquement
-                const pollInterval = setInterval(async () => {
-                    try {
-                        await handleLoadLog(consoleId, true); // silent = true pour éviter les messages répétitifs
-                    } catch (err) {
-                        console.error('Erreur lors du polling du log:', err);
-                        clearInterval(pollInterval);
-                    }
-                }, 2000); // Poll toutes les 2 secondes
-
-                // Arrêter le polling après 30 secondes
-                setTimeout(() => {
-                    clearInterval(pollInterval);
-                }, 30000);
-            } else {
-                appendLog('[Console] Console ID non disponible. Impossible de récupérer les logs automatiquement.');
-                updateActionLogStatus(actionLogId, 'error', 'Console ID non disponible');
-            }
-
-            toast.success(`Commande envoyée: ${trimmed}`);
-            return;
-        }
-
-        // Sinon, essayer d'envoyer via l'API REST si disponible
-        // Pour l'instant, on affiche juste un message d'erreur
-        updateActionLogStatus(actionLogId, 'error', 'Connexion WebSocket non disponible');
-
-        // Si on est ici, c'est que le WebSocket n'est pas dispo et qu'on n'a pas pu utiliser l'iframe
-        // On propose de basculer vers l'iframe si l'URL est dispo
-        if (activeSession.consoleUrl) {
-            setConsoleMode('iframe');
-            toast.info('Bascule vers la console standard pour envoyer des commandes.');
-            return;
-        }
-
-        toast.error('Connexion WebSocket non disponible. Veuillez utiliser la console standard.');
-        appendLog(`> ${trimmed} (échec: WebSocket non disponible)`);
-        setCommand('');
-    }, [appendLog, command, addActionLog, updateActionLogStatus, sessionRef, consoles, handleLoadLog]);
 
     const connectionBadge = useMemo(() => CONNECTION_META[connectionState], [connectionState]);
     // Une session est "ouverte" si elle existe et que la connexion est ouverte ou en cours de connexion
-    // ou si la session existe sans WebSocket (mode sans WebSocket)
-    // Pour CML, si on a une consoleUrl, on considère la session comme ouverte même sans WebSocket
     const isSessionOpen = useMemo(() => {
-        const open = session !== null && (
+        return session !== null && (
             connectionState === 'open'
             || connectionState === 'connecting'
-            || (session.consoleUrl && connectionState !== 'error' && connectionState !== 'closed')
         );
-
-        // Debug log
-        if (session) {
-            console.log('LabConsolePanel: État de la session', {
-                hasSession: !!session,
-                hasConsoleUrl: !!session.consoleUrl,
-                connectionState,
-                isSessionOpen: open,
-            });
-        }
-
-        return open;
     }, [session, connectionState]);
 
     const selectedNode = useMemo(() => nodes.find(node => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId]);
 
     return (
-        <Card className="flex h-full min-h-[28rem] flex-col border-0 shadow-sm">
-            <CardHeader className="space-y-1">
+        <Card className="flex h-full min-h-[32rem] flex-col border-0 shadow-sm">
+            <CardHeader className="space-y-3 pb-3">
+                {/* En-tête avec titre et statut */}
                 <div className="flex items-center justify-between gap-3">
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                        <Terminal className="h-5 w-5 text-primary" />
-                        Console
+                    <CardTitle className="flex items-center gap-2 text-xl">
+                        <Terminal className="h-6 w-6 text-primary" />
+                        Console Réseau
                     </CardTitle>
-
                     <Badge
                         variant={connectionBadge.variant}
                         className={connectionBadge.className}
@@ -776,49 +553,113 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                     </Badge>
                 </div>
 
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-                    {nodes.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">
-                            Aucun nœud disponible. Le lab doit être démarré pour voir les nœuds.
-                        </div>
-                    ) : (
-                        <Select
-                            value={selectedNodeId}
-                            onValueChange={value => {
-                                if (value && value !== selectedNodeId) {
-                                    setSelectedNodeId(value);
-                                }
-                            }}
-                            disabled={loadingConsoles || loadingSession}
-                        >
-                            <SelectTrigger className="w-full lg:w-auto">
-                                <SelectValue placeholder="Sélectionner un nœud" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {nodes.map(node => {
-                                    const nodeId = node.id || '';
-                                    if (!nodeId) return null;
-                                    return (
-                                        <SelectItem key={nodeId} value={nodeId}>
-                                            {node.label ?? node.name ?? nodeId}
-                                        </SelectItem>
-                                    );
-                                })}
-                            </SelectContent>
-                        </Select>
-                    )}
+                {/* Sélection du node - Layout amélioré */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 flex-1">
+                        {nodes.length === 0 ? (
+                            <div className="text-sm text-muted-foreground">
+                                Aucun nœud disponible. Le lab doit être démarré pour voir les nœuds.
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 flex-1">
+                                <label className="text-sm font-medium text-muted-foreground whitespace-nowrap">
+                                    Nœud:
+                                </label>
+                                <Select
+                                    value={selectedNodeId}
+                                    onValueChange={value => {
+                                        if (value && value !== selectedNodeId) {
+                                            setSelectedNodeId(value);
+                                        }
+                                    }}
+                                    disabled={loadingConsoles || loadingSession}
+                                >
+                                    <SelectTrigger className="w-full sm:w-[300px]">
+                                        <SelectValue placeholder="Sélectionner un nœud" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {nodes.map(node => {
+                                            const nodeId = node.id || '';
+                                            if (!nodeId) return null;
+                                            return (
+                                                <SelectItem key={nodeId} value={nodeId}>
+                                                    <div className="flex items-center justify-between w-full">
+                                                        <span>{node.label ?? node.name ?? nodeId}</span>
+                                                        {node.state && (
+                                                            <Badge variant="secondary" className="ml-2 text-xs">
+                                                                {node.state}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </SelectItem>
+                                            );
+                                        })}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
 
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        {selectedNode?.state && (
-                            <Badge variant="secondary">{selectedNode.state}</Badge>
-                        )}
-                        {selectedNode?.node_definition && (
-                            <Badge variant="outline">{selectedNode.node_definition}</Badge>
-                        )}
+                        {/* Actions rapides */}
+                        <div className="flex items-center gap-2">
+                            {session && (
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={handleCloseSession}
+                                    className="gap-2"
+                                >
+                                    <Power className="h-4 w-4" />
+                                    Fermer
+                                </Button>
+                            )}
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    if (selectedNodeId) {
+                                        setLoadingConsoles(true);
+                                        setError(null);
+                                        getNodeConsolesRef.current(cmlLabId, selectedNodeId)
+                                            .then(data => {
+                                                if (data) {
+                                                    setConsoles(Array.isArray(data.consoles) ? data.consoles : []);
+                                                }
+                                            })
+                                            .catch(err => {
+                                                console.error(err);
+                                                setError("Impossible de charger les consoles pour ce nœud.");
+                                            })
+                                            .finally(() => {
+                                                setLoadingConsoles(false);
+                                            });
+                                    }
+                                }}
+                                disabled={loadingConsoles || !selectedNodeId}
+                                className="gap-2"
+                            >
+                                <RefreshCcw className={`h-4 w-4 ${loadingConsoles ? 'animate-spin' : ''}`} />
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
-                {error && <p className="text-sm text-red-500">{error}</p>}
+                {/* Informations du node sélectionné */}
+                {selectedNode && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {selectedNode.state && (
+                            <Badge variant="secondary">{selectedNode.state}</Badge>
+                        )}
+                        {selectedNode.node_definition && (
+                            <Badge variant="outline">{selectedNode.node_definition}</Badge>
+                        )}
+                    </div>
+                )}
+
+                {error && (
+                    <div className="p-2 bg-destructive/10 border border-destructive/20 rounded text-sm text-destructive">
+                        {error}
+                    </div>
+                )}
 
                 {loadingConsoles && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -828,384 +669,432 @@ export default function LabConsolePanel({ cmlLabId, nodes, initialSessions, labT
                 )}
             </CardHeader>
 
-            <CardContent className="flex flex-1 flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCreateSession()}
-                        disabled={loadingSession || connectionState === 'connecting' || !selectedNodeId || nodes.length === 0}
-                        className="gap-2"
-                    >
-                        {loadingSession ? <Loader2 className="h-4 w-4 animate-spin" /> : <Terminal className="h-4 w-4" />}
-                        Ouvrir une session
-                    </Button>
+            <CardContent className="flex flex-1 flex-col gap-4 overflow-hidden">
 
-                    {(availableTypes?.serial || availableTypes?.vnc) && (
-                        <>
-                            {availableTypes?.serial && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleCreateSession('serial')}
-                                    disabled={loadingSession || connectionState === 'connecting'}
-                                >
-                                    Série
-                                </Button>
-                            )}
-                            {availableTypes?.vnc && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleCreateSession('vnc')}
-                                    disabled={loadingSession || connectionState === 'connecting'}
-                                >
-                                    VNC
-                                </Button>
-                            )}
-                        </>
-                    )}
+                <Separator />
 
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                            if (selectedNodeId) {
-                                // Recharger les consoles pour le node sélectionné
-                                setLoadingConsoles(true);
-                                setError(null);
-                                getNodeConsolesRef.current(cmlLabId, selectedNodeId)
-                                    .then(data => {
-                                        if (data) {
-                                            setConsoles(Array.isArray(data.consoles) ? data.consoles : []);
-                                            setAvailableTypes(data.available_types || {});
-                                        }
-                                    })
-                                    .catch(err => {
-                                        console.error(err);
-                                        setError("Impossible de charger les consoles pour ce nœud.");
-                                    })
-                                    .finally(() => {
-                                        setLoadingConsoles(false);
-                                    });
-                            }
-                        }}
-                        disabled={loadingConsoles || !selectedNodeId}
-                        className="gap-2 text-muted-foreground"
-                    >
-                        <RefreshCcw className="h-4 w-4" />
-                        Actualiser
-                    </Button>
+                {/* Section Interfaces et Liens */}
+                {(interfaces.length > 0 || links.length > 0) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Interfaces */}
+                        {interfaces.length > 0 && (
+                            <Collapsible open={showInterfaces} onOpenChange={setShowInterfaces}>
+                                <CollapsibleTrigger asChild>
+                                    <Button variant="outline" className="w-full justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Network className="h-4 w-4" />
+                                            <span>Interfaces ({interfaces.length})</span>
+                                        </div>
+                                        <ChevronDown className={`h-4 w-4 transition-transform ${showInterfaces ? 'rotate-180' : ''}`} />
+                                    </Button>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="mt-2">
+                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        <Select
+                                            value={selectedInterface || ''}
+                                            onValueChange={setSelectedInterface}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Sélectionner une interface" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {interfaces.map((iface) => (
+                                                    <SelectItem key={iface.id} value={iface.id}>
+                                                        <div className="flex items-center justify-between w-full">
+                                                            <span>{iface.label || iface.id}</span>
+                                                            <Badge variant={iface.is_connected ? 'default' : 'secondary'} className="ml-2">
+                                                                {iface.is_connected ? 'Connectée' : 'Déconnectée'}
+                                                            </Badge>
+                                                        </div>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {selectedInterface && (
+                                            <div className="space-y-2">
+                                                <div className="p-3 bg-muted rounded-lg text-sm space-y-2">
+                                                    {(() => {
+                                                        const iface = interfaces.find(i => i.id === selectedInterface);
+                                                        if (!iface) {
+                                                            return (
+                                                                <p className="text-muted-foreground">Interface non trouvée</p>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <>
+                                                                <div className="space-y-1">
+                                                                    <p><strong>ID:</strong> <code className="text-xs">{iface.id}</code></p>
+                                                                    <p><strong>Label:</strong> {iface.label || 'N/A'}</p>
+                                                                    <p><strong>Type:</strong> {iface.type || 'N/A'}</p>
+                                                                    <p><strong>État:</strong> 
+                                                                        <Badge variant={iface.is_connected ? 'default' : 'secondary'} className="ml-2">
+                                                                            {iface.state || (iface.is_connected ? 'Connectée' : 'Déconnectée')}
+                                                                        </Badge>
+                                                                    </p>
+                                                                    {iface.mac_address && (
+                                                                        <p><strong>MAC:</strong> <code className="text-xs">{iface.mac_address}</code></p>
+                                                                    )}
+                                                                    {iface.node && (
+                                                                        <p><strong>Node:</strong> <code className="text-xs">{iface.node}</code></p>
+                                                                    )}
+                                                                </div>
+                                                                {/* Debug info (dev only) */}
+                                                                {process.env.NODE_ENV === 'development' && (
+                                                                    <details className="mt-2 text-xs">
+                                                                        <summary className="cursor-pointer text-muted-foreground">Debug (dev only)</summary>
+                                                                        <pre className="mt-1 overflow-auto max-h-32 text-xs bg-background p-2 rounded border">
+                                                                            {JSON.stringify(iface, null, 2)}
+                                                                        </pre>
+                                                                    </details>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant={(() => {
+                                                            const iface = interfaces.find(i => i.id === selectedInterface);
+                                                            return iface?.is_connected ? 'destructive' : 'default';
+                                                        })()}
+                                                        onClick={async () => {
+                                                            const iface = interfaces.find(i => i.id === selectedInterface);
+                                                            if (!iface) {
+                                                                console.error('❌ Interface non trouvée:', selectedInterface);
+                                                                toast.error('Interface non trouvée');
+                                                                return;
+                                                            }
+                                                            
+                                                            console.log('🖱️ Clic sur bouton interface:', {
+                                                                interfaceId: selectedInterface,
+                                                                iface,
+                                                                is_connected: iface.is_connected,
+                                                            });
+                                                            
+                                                            const success = iface.is_connected
+                                                                ? await disconnectInterface(cmlLabId, selectedInterface)
+                                                                : await connectInterface(cmlLabId, selectedInterface);
+                                                            
+                                                            if (success) {
+                                                                // Rafraîchir les interfaces après l'action
+                                                                setTimeout(() => {
+                                                                    void getNodeInterfaces(cmlLabId, selectedNodeId);
+                                                                }, 1500);
+                                                            }
+                                                        }}
+                                                        disabled={loadingInterfaces}
+                                                        className="flex-1 gap-2"
+                                                    >
+                                                        {loadingInterfaces ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <>
+                                                                {(() => {
+                                                                    const iface = interfaces.find(i => i.id === selectedInterface);
+                                                                    return iface?.is_connected ? (
+                                                                        <>
+                                                                            <PlugZap className="h-4 w-4" />
+                                                                            Déconnecter
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <Plug className="h-4 w-4" />
+                                                                            Connecter
+                                                                        </>
+                                                                    );
+                                                                })()}
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </CollapsibleContent>
+                            </Collapsible>
+                        )}
 
-                    {session && (
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={handleCloseSession}
-                            className="gap-2"
-                        >
-                            <Power className="h-4 w-4" />
-                            Fermer la session
-                        </Button>
-                    )}
-                </div>
-
-                {consoles.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                        {consoles.map(consoleInfo => {
-                            const consoleId = consoleInfo.id ?? consoleInfo.console_id ?? '';
-                            return (
-                                <Badge
-                                    key={consoleId}
-                                    variant="secondary"
-                                    className="cursor-pointer"
-                                    onClick={() => handleLoadLog(consoleId)}
-                                >
-                                    {consoleInfo.console_type ?? consoleInfo.protocol ?? 'console'} · {consoleId.slice(0, 6)}
-                                </Badge>
-                            );
-                        })}
+                        {/* Liens */}
+                        {links.length > 0 && (
+                            <Collapsible open={showLinks} onOpenChange={setShowLinks}>
+                                <CollapsibleTrigger asChild>
+                                    <Button variant="outline" className="w-full justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Link2 className="h-4 w-4" />
+                                            <span>Liens ({links.length})</span>
+                                        </div>
+                                        <ChevronDown className={`h-4 w-4 transition-transform ${showLinks ? 'rotate-180' : ''}`} />
+                                    </Button>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent className="mt-2">
+                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        <Select
+                                            value={selectedLink || ''}
+                                            onValueChange={setSelectedLink}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Sélectionner un lien" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {links.map((link) => {
+                                                    const nodeA = link.node_a || link.n1;
+                                                    const nodeB = link.node_b || link.n2;
+                                                    const isConnectedToSelected = nodeA === selectedNodeId || nodeB === selectedNodeId;
+                                                    return (
+                                                        <SelectItem key={link.id} value={link.id}>
+                                                            <div className="flex items-center justify-between w-full">
+                                                                <span>
+                                                                    {link.interface1?.label || link.i1 || 'Interface 1'} ↔ {link.interface2?.label || link.i2 || 'Interface 2'}
+                                                                </span>
+                                                                <Badge variant={isConnectedToSelected ? 'default' : 'secondary'} className="ml-2">
+                                                                    {link.state || 'N/A'}
+                                                                </Badge>
+                                                            </div>
+                                                        </SelectItem>
+                                                    );
+                                                })}
+                                            </SelectContent>
+                                        </Select>
+                                        {selectedLink && (
+                                            <div className="space-y-2">
+                                                <div className="p-3 bg-muted rounded-lg text-sm space-y-1">
+                                                    {(() => {
+                                                        const link = links.find(l => l.id === selectedLink);
+                                                        if (!link) return null;
+                                                        return (
+                                                            <>
+                                                                <p><strong>État:</strong> {link.state || 'N/A'}</p>
+                                                                {link.interface1 && (
+                                                                    <p><strong>Interface 1:</strong> {link.interface1.label || link.interface1.id}</p>
+                                                                )}
+                                                                {link.interface2 && (
+                                                                    <p><strong>Interface 2:</strong> {link.interface2.label || link.interface2.id}</p>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant={(() => {
+                                                            const link = links.find(l => l.id === selectedLink);
+                                                            const isActive = link?.state === 'STARTED' || link?.state === 'started' || link?.state === 'up';
+                                                            return isActive ? 'destructive' : 'default';
+                                                        })()}
+                                                        onClick={async () => {
+                                                            const link = links.find(l => l.id === selectedLink);
+                                                            if (!link) return;
+                                                            
+                                                            const isActive = link.state === 'STARTED' || link.state === 'started' || link.state === 'up';
+                                                            
+                                                            const success = isActive
+                                                                ? await disconnectLink(cmlLabId, selectedLink)
+                                                                : await connectLink(cmlLabId, selectedLink);
+                                                            
+                                                            if (success) {
+                                                                // Rafraîchir les liens après l'action
+                                                                setTimeout(() => {
+                                                                    void getNodeLinks(cmlLabId, selectedNodeId);
+                                                                }, 1000);
+                                                            }
+                                                        }}
+                                                        disabled={loadingInterfaces}
+                                                        className="flex-1 gap-2"
+                                                    >
+                                                        {loadingInterfaces ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <>
+                                                                {(() => {
+                                                                    const link = links.find(l => l.id === selectedLink);
+                                                                    const isActive = link?.state === 'STARTED' || link?.state === 'started' || link?.state === 'up';
+                                                                    return isActive ? (
+                                                                        <>
+                                                                            <PlugZap className="h-4 w-4" />
+                                                                            Déconnecter
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <Plug className="h-4 w-4" />
+                                                                            Connecter
+                                                                        </>
+                                                                    );
+                                                                })()}
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </CollapsibleContent>
+                            </Collapsible>
+                        )}
                     </div>
                 )}
 
                 <Separator />
 
                 {/* Section console */}
-                <div className="flex-1 flex flex-col">
-                    {/* Sélecteur de mode console */}
-                    <div className="flex items-center justify-between pb-2">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Mode console :</span>
-                            <Button
-                                variant={consoleMode === 'ios' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setConsoleMode('ios')}
-                                className="h-7"
-                            >
-                                <Code className="h-3 w-3 mr-1" />
-                                IOS Intelligent
-                            </Button>
-                            <Button
-                                variant={consoleMode === 'iframe' ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => setConsoleMode('iframe')}
-                                className="h-7"
-                            >
-                                <Terminal className="h-3 w-3 mr-1" />
-                                Standard
-                            </Button>
-                        </div>
+                <div className="flex-1 flex flex-col min-h-[400px]">
+                    <ConsoleTerminal
+                        output={logLines}
+                        showCursor={Boolean(isSessionOpen)}
+                        className="flex-1"
+                    />
+                    {isSessionOpen && (
+                        <div className="mt-2 flex gap-2">
+                            <input
+                                type="text"
+                                className="flex-1 rounded border border-input bg-background px-3 py-2 text-sm font-mono"
+                                placeholder="Tapez votre commande..."
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        const cmd = e.currentTarget.value.trim();
+                                        if (!cmd) return;
 
-                        {session?.consoleUrl && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => window.open(session.consoleUrl, '_blank')}
-                                className="h-7 text-xs"
-                            >
-                                <RefreshCcw className="h-3 w-3 mr-1" />
-                                Ouvrir dans un nouvel onglet
-                            </Button>
-                        )}
-                    </div>
+                                        const actionLogId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                                        addActionLog({
+                                            type: 'command',
+                                            action: 'Envoi de commande',
+                                            command: cmd,
+                                            status: 'pending',
+                                            nodeId: sessionRef.current?.nodeId,
+                                            details: `Commande: ${cmd}`,
+                                        });
 
-                    {/* Console intelligente IOS - Toujours afficher, jamais l'iframe CML */}
-                    {consoleMode === 'ios' ? (
-                        <IOSConsole
-                            onSendCommand={(cmd) => {
-                                // Créer un log d'action pour cette commande
-                                const actionLogId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                                addActionLog({
-                                    type: 'command',
-                                    action: 'Envoi de commande',
-                                    command: cmd,
-                                    status: 'pending',
-                                    nodeId: sessionRef.current?.nodeId,
-                                    details: `Commande: ${cmd}`,
-                                });
+                                        const activeSession = sessionRef.current;
+                                        if (!activeSession) {
+                                            toast.error('Aucune session console active.');
+                                            return;
+                                        }
 
-                                // Appeler handleSendCommand avec la commande
-                                const trimmed = cmd.trimEnd();
-                                if (!trimmed) return;
+                                        if (activeSession.sessionId) {
+                                            appendLog(`> ${cmd}`);
+                                            updateActionLogStatus(actionLogId, 'sent', `Commande envoyée: ${cmd}`);
 
-                                const activeSession = sessionRef.current;
-                                if (!activeSession) {
-                                    toast.error('Aucune session console active.');
-                                    return;
-                                }
+                                            // Envoyer la commande via l'iframe caché si disponible
+                                            if (activeSession.consoleUrl) {
+                                                setPendingCommand(cmd);
+                                            }
 
-                                // PRIORITÉ 1: Si on utilise consoleUrl (iframe CML), utiliser handleSendCommand
-                                // qui gère correctement le mode iframe avec polling des logs
-                                if (activeSession.consoleUrl || activeSession.sessionId) {
-                                    // Utiliser la fonction handleSendCommand qui gère correctement le mode iframe
-                                    handleSendCommand();
-                                    return;
-                                }
+                                            const consoleId = activeSession.consoleId ?? activeSession.sessionId;
+                                            
+                                            if (consoleId) {
+                                                // Polling amélioré : commencer immédiatement et continuer plusieurs fois
+                                                let pollCount = 0;
+                                                const maxPolls = 8; // Poller 8 fois (32 secondes au total avec intervalle de 4s)
+                                                const initialLogCount = logLines.length;
+                                                let pollInterval = 4000; // Intervalle initial de 4 secondes
+                                                
+                                                const pollLogs = async () => {
+                                                    try {
+                                                        const previousLogCount = logLines.length;
+                                                        await handleLoadLog(consoleId, true);
+                                                        pollCount++;
+                                                        
+                                                        // Vérifier si de nouveaux logs sont apparus
+                                                        const currentLogCount = logLines.length;
+                                                        const hasNewLogs = currentLogCount > previousLogCount;
+                                                        
+                                                        if (hasNewLogs && pollCount >= 2) {
+                                                            // Si on a de nouveaux logs après au moins 2 polls, considérer que la commande a été exécutée
+                                                            updateActionLogStatus(actionLogId, 'success', `Commande exécutée: ${cmd}`);
+                                                        } else if (pollCount < maxPolls) {
+                                                            // Continuer à poller avec intervalle adaptatif
+                                                            setTimeout(pollLogs, pollInterval);
+                                                        } else {
+                                                            // Après maxPolls, considérer terminé (avec ou sans nouveaux logs)
+                                                            updateActionLogStatus(actionLogId, 'success', `Polling terminé pour: ${cmd}`);
+                                                        }
+                                                    } catch (err) {
+                                                        console.error('Erreur lors de la récupération du log:', err);
+                                                        const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
+                                                        
+                                                        // Si erreur 429, augmenter l'intervalle
+                                                        if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
+                                                            pollInterval = Math.min(pollInterval * 2, 10000); // Maximum 10 secondes
+                                                            console.warn('Rate limit détecté, intervalle augmenté à', pollInterval, 'ms');
+                                                        }
+                                                        
+                                                        if (pollCount === 0) {
+                                                            // Seulement mettre à jour le statut si c'est la première tentative
+                                                            updateActionLogStatus(actionLogId, 'error', `Erreur lors de la récupération des résultats: ${errorMessage}`);
+                                                        } else if (pollCount < maxPolls) {
+                                                            // Continuer à poller même en cas d'erreur
+                                                            setTimeout(pollLogs, pollInterval);
+                                                        }
+                                                    }
+                                                };
+                                                
+                                                // Commencer le polling après un délai pour éviter les requêtes simultanées
+                                                setTimeout(pollLogs, 1000);
+                                            }
+                                            
+                                            toast.success(`Commande envoyée: ${cmd}`, {
+                                                description: session.consoleUrl 
+                                                    ? 'Si la commande ne fonctionne pas, ouvrez la console CML dans un nouvel onglet.'
+                                                    : 'Les résultats apparaîtront dans la console.',
+                                            });
+                                            e.currentTarget.value = '';
+                                            return;
+                                        }
 
-                                // PRIORITÉ 2: Si on a un WebSocket ouvert, l'utiliser
-                                if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                                    const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
-                                    try {
-                                        wsRef.current.send(payload);
-                                        appendLog(`> ${trimmed}`);
-
-                                        // Mettre à jour le statut du log
-                                        updateActionLogStatus(actionLogId, 'sent', `Commande envoyée via WebSocket: ${trimmed}`);
-
-                                        // Mettre à jour le statut après un court délai pour indiquer le succès
-                                        setTimeout(() => {
-                                            updateActionLogStatus(actionLogId, 'success', `Commande envoyée avec succès: ${trimmed}`);
-                                        }, 500);
-
-                                        toast.success(`Commande envoyée: ${trimmed}`);
-                                    } catch (err) {
-                                        console.error(err);
-                                        updateActionLogStatus(actionLogId, 'error', `Erreur lors de l'envoi: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
-                                        toast.error('Échec d\'envoi de la commande.');
-                                        setConnectionState('error');
+                                        toast.error('Aucune session console active.');
+                                        updateActionLogStatus(actionLogId, 'error', 'Session non disponible');
                                     }
-                                    return;
-                                }
-
-                                // Sinon, utiliser handleSendCommand qui gère tous les cas
-                                handleSendCommand();
-                            }}
-                            output={logLines}
-                            isConnected={Boolean(isSessionOpen)}
-                            nodeLabel={selectedNode?.label || selectedNode?.name || undefined}
-                            nodeState={selectedNode?.state}
-                            className="flex-1"
-                        />
-                    ) : (
-                        <div className="flex-1 overflow-hidden rounded-lg border border-muted bg-white dark:bg-black relative flex flex-col">
-                            {session?.consoleUrl ? (
-                                <>
-                                    <iframe
-                                        src={session.consoleUrl}
-                                        className="w-full flex-1 border-0"
-                                        title={`Console ${selectedNodeId}`}
-                                        allow="clipboard-read; clipboard-write"
-                                    />
-                                    <div className="bg-muted/20 p-1 text-center text-[10px] text-muted-foreground">
-                                        Tapez vos commandes directement dans le terminal ci-dessus
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="flex h-full items-center justify-center p-3 flex-col gap-2">
-                                    <p className="text-muted-foreground">La sortie console apparaîtra ici.</p>
-                                    {logLines.length > 0 && (
-                                        <div className="w-full max-h-40 overflow-y-auto p-2 bg-muted/50 rounded text-xs font-mono">
-                                            {logLines.map((line, index) => (
-                                                <div key={index}>{line}</div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                                }}
+                            />
                         </div>
                     )}
                 </div>
-
-                {/* Section Tests TDD */}
-                <Separator />
-                <ConsoleCommandTester
-                    onCommandSend={async (command) => {
-                        // Utiliser handleSendCommand pour envoyer la commande
-                        const trimmed = command.trim();
-                        if (!trimmed) return;
-
-                        const activeSession = sessionRef.current;
-                        if (!activeSession) {
-                            throw new Error('Aucune session console active.');
-                        }
-
-                        // Vérifier que la session est prête
-                        const isReady = activeSession.consoleUrl
-                            ? connectionState === 'open'
-                            : (wsRef.current !== null && wsRef.current.readyState === WebSocket.OPEN);
-
-                        if (!isReady) {
-                            throw new Error('Session non prête. Veuillez attendre que la connexion soit établie.');
-                        }
-
-                        // Si on a un WebSocket ouvert, l'utiliser
-                        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                            const payload = trimmed.endsWith('\n') ? trimmed : `${trimmed}\n`;
-                            wsRef.current.send(payload);
-                            appendLog(`> ${trimmed}`);
-                            return;
-                        }
-
-                        // Pour CML avec consoleUrl (iframe), les commandes sont envoyées via l'iframe
-                        if (activeSession.consoleUrl) {
-                            appendLog(`> ${trimmed}`);
-                            return;
-                        }
-
-                        throw new Error('Connexion non disponible');
-                    }}
-                    commandCatalog={{
-                        'Commandes de visualisation': {
-                            'show': [
-                                'running-config', 'startup-config', 'version', 'inventory', 'clock',
-                                'ip', 'interface', 'vlan', 'cdp', 'lldp', 'arp', 'route', 'ospf',
-                                'eigrp', 'bgp', 'access-lists', 'mac', 'spanning-tree', 'trunk',
-                                'port-security', 'users', 'sessions', 'processes', 'memory', 'cpu',
-                                'flash', 'boot', 'redundancy', 'standby', 'logging', 'snmp',
-                            ],
-                        },
-                        'Commandes de configuration': {
-                            'configure': ['terminal', 'memory', 'network'],
-                            'interface': [
-                                'gigabitethernet', 'fastethernet', 'ethernet', 'serial', 'loopback',
-                                'tunnel', 'vlan', 'port-channel', 'tengigabitethernet',
-                            ],
-                            'ip': [
-                                'address', 'route', 'ospf', 'eigrp', 'bgp', 'access-list', 'nat',
-                                'dhcp', 'domain', 'name-server', 'default-gateway',
-                            ],
-                            'vlan': [],
-                            'line': ['console', 'vty', 'aux'],
-                            'hostname': [],
-                            'banner': ['motd', 'login', 'exec'],
-                            'username': [],
-                            'clock': ['set', 'timezone'],
-                            'logging': ['console', 'buffered', 'trap', 'facility'],
-                            'snmp-server': ['community', 'location', 'contact', 'enable'],
-                        },
-                        'Commandes d\'interface': [
-                            'ip address', 'ip access-group', 'shutdown', 'no shutdown',
-                            'description', 'duplex', 'speed', 'switchport', 'switchport mode',
-                            'switchport access vlan', 'switchport trunk', 'spanning-tree',
-                            'port-security', 'cdp', 'lldp',
-                        ],
-                        'Commandes de ligne': [
-                            'password', 'login', 'exec-timeout', 'logging synchronous',
-                            'transport input', 'transport output', 'access-class',
-                        ],
-                        'Commandes système': {
-                            'enable': ['password', 'secret'],
-                            'disable': [],
-                            'exit': [],
-                            'logout': [],
-                            'reload': [],
-                            'copy': ['running-config', 'startup-config', 'flash', 'tftp', 'ftp'],
-                            'write': ['memory', 'erase'],
-                            'erase': ['startup-config', 'flash'],
-                        },
-                        'Commandes réseau': {
-                            'ping': [],
-                            'traceroute': [],
-                            'telnet': [],
-                            'ssh': [],
-                        },
-                        'Commandes de débogage': {
-                            'debug': [],
-                            'undebug': [],
-                        },
-                        'Commandes terminal': {
-                            'terminal': ['length', 'width', 'monitor', 'no', 'history'],
-                            'clear': ['line', 'counters', 'arp', 'mac', 'spanning-tree'],
-                        },
-                        'Commandes de négation': {
-                            'no': ['shutdown'],
-                        },
-                    }}
-                    labName={labTitle}
-                />
             </CardContent>
 
             <CardFooter className="flex flex-col gap-2">
-                {consoleMode === 'ios' ? (
+                <div className="flex items-center justify-between w-full">
                     <p className="text-xs text-muted-foreground">
-                        Console IOS intelligente avec auto-complétion, historique et coloration syntaxique.
+                        Console réseau avec affichage en temps réel des logs.
                     </p>
-                ) : (
-                    <div className="flex w-full items-center gap-2">
-                        <Input
-                            placeholder="Entrer une commande (ex. show ip interface brief)"
-                            value={command}
-                            onChange={event => setCommand(event.target.value)}
-                            onKeyDown={event => {
-                                if (event.key === 'Enter' && !event.shiftKey) {
-                                    event.preventDefault();
-                                    handleSendCommand();
-                                }
+                    {session?.consoleUrl && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                window.open(session.consoleUrl, '_blank', 'width=800,height=600');
+                                toast.info('Console ouverte dans un nouvel onglet. Tapez vos commandes directement dans la console.');
                             }}
-                            disabled={!isSessionOpen}
-                        />
-                        <Button onClick={handleSendCommand} disabled={!isSessionOpen || !command.trim()}>
-                            Envoyer
+                            className="text-xs"
+                        >
+                            <Terminal className="h-3 w-3 mr-1" />
+                            Ouvrir console CML
                         </Button>
-                    </div>
-                )}
-
-                {normalizedSessions.length > 0 && (
+                    )}
+                </div>
+                {session && (
                     <div className="w-full text-xs text-muted-foreground">
-                        Sessions actives détectées : {normalizedSessions.length}
+                        Session active pour: {selectedNode?.label || selectedNode?.name || selectedNodeId}
+                        {session.consoleUrl && (
+                            <span className="ml-2 text-yellow-600 dark:text-yellow-400">
+                                (Les commandes peuvent nécessiter l'ouverture de la console CML)
+                            </span>
+                        )}
                     </div>
                 )}
             </CardFooter>
+
+            {/* Iframe caché pour envoyer les commandes à CML */}
+            {session?.consoleUrl && (
+                <HiddenConsoleIframe
+                    consoleUrl={session.consoleUrl}
+                    command={pendingCommand}
+                    onCommandSent={() => {
+                        setPendingCommand(null);
+                    }}
+                    enabled={isSessionOpen}
+                />
+            )}
         </Card >
     );
 }

@@ -60,6 +60,8 @@ export function useIntelligentPolling(config: PollingConfig) {
 
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const rateLimitCountRef = useRef<number>(0);
+    const currentIntervalRef = useRef<number>(config.interval || 2000);
 
     const pollLogs = useCallback(async () => {
         if (!config.enabled || !config.consoleId) {
@@ -92,19 +94,64 @@ export function useIntelligentPolling(config: PollingConfig) {
 
             if (!response.ok) {
                 if (response.status === 429) {
-                    // Rate limited
-                    const data = await response.json();
-                    setError('Rate limit atteint. Ralentissement du polling...');
+                    // Rate limited - augmenter l'intervalle progressivement
+                    rateLimitCountRef.current++;
+                    const data = await response.json().catch(() => ({}));
+                    
+                    // Augmenter l'intervalle de polling (backoff exponentiel)
+                    const newInterval = Math.min(
+                        currentIntervalRef.current * 2,
+                        10000 // Maximum 10 secondes
+                    );
+                    currentIntervalRef.current = newInterval;
+                    
+                    setError(`Rate limit atteint (${rateLimitCountRef.current}x). Polling ralenti à ${newInterval}ms...`);
 
                     // Utiliser les logs en cache si disponibles
                     if (data.cached_logs && Array.isArray(data.cached_logs)) {
                         setLogs(data.cached_logs);
                     }
 
+                    // Réinitialiser l'intervalle si on a trop d'erreurs consécutives
+                    if (rateLimitCountRef.current >= 3) {
+                        console.warn('⚠️ Trop d\'erreurs 429, arrêt temporaire du polling');
+                        // Arrêter le polling temporairement
+                        if (intervalRef.current) {
+                            clearInterval(intervalRef.current);
+                            intervalRef.current = null;
+                        }
+                        // Redémarrer après 30 secondes
+                        setTimeout(() => {
+                            rateLimitCountRef.current = 0;
+                            currentIntervalRef.current = config.interval || 2000;
+                            if (config.enabled) {
+                                pollLogs();
+                                intervalRef.current = setInterval(pollLogs, currentIntervalRef.current);
+                            }
+                        }, 30000);
+                    } else {
+                        // Réinitialiser l'intervalle avec le nouveau délai
+                        if (intervalRef.current) {
+                            clearInterval(intervalRef.current);
+                        }
+                        intervalRef.current = setInterval(pollLogs, currentIntervalRef.current);
+                    }
+
                     return;
                 }
 
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            // Réinitialiser le compteur d'erreurs en cas de succès
+            if (rateLimitCountRef.current > 0) {
+                rateLimitCountRef.current = 0;
+                currentIntervalRef.current = config.interval || 3000;
+                // Réinitialiser l'intervalle si nécessaire
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                }
+                intervalRef.current = setInterval(pollLogs, currentIntervalRef.current);
             }
 
             const data: PollingResult = await response.json();
@@ -165,11 +212,15 @@ export function useIntelligentPolling(config: PollingConfig) {
             return;
         }
 
-        // Polling initial
-        pollLogs();
+        // Polling initial avec délai pour éviter les requêtes simultanées
+        const initialDelay = Math.random() * 1000; // Délai aléatoire entre 0 et 1 seconde
+        setTimeout(() => {
+            pollLogs();
+        }, initialDelay);
 
-        // Configurer le polling périodique
-        const interval = config.interval || 2000; // 2 secondes par défaut
+        // Configurer le polling périodique avec intervalle minimum de 3 secondes
+        const interval = Math.max(config.interval || 3000, 3000); // Minimum 3 secondes
+        currentIntervalRef.current = interval;
         intervalRef.current = setInterval(pollLogs, interval);
 
         return () => {

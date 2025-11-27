@@ -65,11 +65,18 @@ class IntelligentPollingService
                     'node_id' => $nodeId,
                     'console_id' => $consoleId,
                     'error' => $response['error'],
+                    'status' => $response['status'] ?? null,
+                    'is_timeout' => $response['is_timeout'] ?? false,
                 ]);
 
+                // Retourner les logs en cache même en cas d'erreur
+                $cachedLogs = Cache::get($cacheKey, []);
+                
                 return [
                     'error' => $response['error'],
-                    'cached_logs' => Cache::get($cacheKey, []),
+                    'cached_logs' => $cachedLogs,
+                    'status' => $response['status'] ?? 500,
+                    'is_timeout' => $response['is_timeout'] ?? false,
                 ];
             }
 

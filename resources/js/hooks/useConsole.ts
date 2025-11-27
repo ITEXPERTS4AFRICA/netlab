@@ -265,25 +265,62 @@ export const useConsole = () => {
         setError(null);
 
         try {
+            console.log('📥 Récupération du log console:', { labId, nodeId, consoleId });
+            
+            // Timeout de 35 secondes (30s backend + 5s marge)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 35000);
+
             const response = await fetch(`/api/labs/${labId}/nodes/${nodeId}/consoles/${consoleId}/log`, {
                 method: 'GET',
                 headers: {
                     Accept: 'application/json',
                 },
                 credentials: 'same-origin',
+                signal: controller.signal,
             });
+
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData?.error || `Erreur ${response.status}`);
+                const errorMessage = errorData?.error || `Erreur ${response.status}: ${response.statusText}`;
+                
+                console.error('❌ Erreur lors de la récupération du log:', {
+                    status: response.status,
+                    error: errorData,
+                });
+                
+                // Message plus explicite pour les timeouts
+                if (response.status === 504 || errorData?.is_timeout) {
+                    throw new Error('Le serveur CML ne répond pas dans les délais impartis. Le lab est peut-être en cours de démarrage.');
+                }
+                
+                throw new Error(errorMessage);
             }
 
             const data: ConsoleLogResponse = await response.json();
+            console.log('✅ Log récupéré avec succès:', { 
+                hasLog: !!data.log,
+                logType: typeof data.log,
+            });
             return data;
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Erreur lors de la récupération du log';
+            let errorMessage = 'Erreur lors de la récupération du log';
+            
+            if (err instanceof Error) {
+                if (err.name === 'AbortError') {
+                    errorMessage = 'Timeout: Le serveur CML ne répond pas dans les délais impartis (35 secondes).';
+                } else {
+                    errorMessage = err.message;
+                }
+            }
+            
             setError(errorMessage);
-            toast.error(errorMessage);
+            console.error('❌ Erreur getConsoleLog:', err);
+            
+            // Ne pas afficher de toast pour les erreurs silencieuses (polling)
+            // Le toast sera affiché par le composant si nécessaire
             return null;
         } finally {
             setLoading(false);

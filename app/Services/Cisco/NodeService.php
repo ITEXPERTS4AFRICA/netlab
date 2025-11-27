@@ -45,6 +45,14 @@ class NodeService extends BaseCiscoApiService
     }
 
     /**
+     * Obtenir un node avec toutes ses données opérationnelles
+     */
+    public function getNodeWithData(string $labId, string $nodeId): array
+    {
+        return $this->get("/api/v0/labs/{$labId}/nodes/{$nodeId}?data=true");
+    }
+
+    /**
      * Supprimer un node
      */
     public function deleteNode(string $labId, string $nodeId): array
