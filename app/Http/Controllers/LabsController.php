@@ -423,14 +423,6 @@ class LabsController extends Controller
             }
         }
 
-        // Fetch active console sessions (best effort, only if token is available)
-        $consoleSessions = [];
-        if ($token) {
-        $consoleSessions = $cisco->console->getConsoleSessions();
-        if (isset($consoleSessions['error'])) {
-            $consoleSessions = [];
-            }
-        }
 
         // Fetch lab topology (nodes, links, interfaces) for graph display
         // Charger la topologie si le lab est RUNNING ou STARTED
@@ -696,7 +688,6 @@ class LabsController extends Controller
             'annotations' => $annotations,
             'nodes' => $nodes,
             'links' => $links,
-            'consoleSessions' => $consoleSessions,
             'topology' => $topology,
             'tile' => $tile,
         ]);

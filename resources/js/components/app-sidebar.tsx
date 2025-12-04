@@ -17,7 +17,7 @@ import {
 import { dashboard } from '@/routes';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, SendToBackIcon, Zap, ExternalLink, Users, Shield, Settings, FlaskConical, Calendar, Activity, CreditCard } from 'lucide-react';
+import { LayoutGrid, SendToBackIcon, Zap, ExternalLink } from 'lucide-react';
 import AppLogo from './app-logo';
 import { Badge } from '@/components/ui/badge';
 import { router } from '@inertiajs/react';
@@ -57,9 +57,7 @@ const footerNavItems: NavItem[] = [
 
 export function AppSidebar() {
     const page = usePage<SharedData & { userActiveReservations?: ActiveReservation[] }>();
-    const { userActiveReservations = [], auth } = page.props;
-    const user = auth.user;
-    const isAdmin = user && 'role' in user && user.role === 'admin';
+    const { userActiveReservations = [] } = page.props;
 
     // Filter only active (non-expired) reservations
     const now = new Date();
@@ -70,45 +68,6 @@ export function AppSidebar() {
 
     // Use main nav items (My Reserved Labs is now always visible)
     const dynamicNavItems = [...mainNavItems];
-
-    // Admin navigation items
-    const adminNavItems: NavItem[] = [
-        {
-            title: 'Tableau de bord',
-            href: '/admin',
-            icon: LayoutGrid,
-        },
-        {
-            title: 'Utilisateurs',
-            href: '/admin/users',
-            icon: Users,
-        },
-        {
-            title: 'Labs',
-            href: '/admin/labs',
-            icon: FlaskConical,
-        },
-        {
-            title: 'Réservations',
-            href: '/admin/reservations',
-            icon: Calendar,
-        },
-        {
-            title: 'Configuration CML',
-            href: '/admin/cml-config',
-            icon: Settings,
-        },
-        {
-            title: 'Configuration CinetPay',
-            href: '/admin/cinetpay-config',
-            icon: CreditCard,
-        },
-        {
-            title: 'Santé API Paiement',
-            href: '/admin/payments/health',
-            icon: Activity,
-        },
-    ];
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -126,19 +85,6 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={dynamicNavItems} />
-
-                {/* Administration Section - Only visible for admins */}
-                {isAdmin && (
-                    <SidebarGroup>
-                        <SidebarGroupLabel className="flex items-center gap-2">
-                            <Shield className="h-4 w-4 text-red-600" />
-                            Administration
-                        </SidebarGroupLabel>
-                        <SidebarGroupContent>
-                            <NavMain items={adminNavItems} />
-                        </SidebarGroupContent>
-                    </SidebarGroup>
-                )}
 
                 {/* Active Labs Section */}
                 {activeLabs.length > 0 && (

@@ -14,10 +14,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call([
-            AdminUserSeeder::class,
-        ]);
-
         // Créer un utilisateur de test optionnel
         User::firstOrCreate(
             ['email' => 'test@example.com'],

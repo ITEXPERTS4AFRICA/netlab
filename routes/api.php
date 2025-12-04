@@ -2,7 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\LabController;
-use App\Http\Controllers\Api\ConsoleController;
 use App\Http\Controllers\ReservationController;
 
 Route::middleware(['web', 'auth'])->group(function(){
@@ -26,19 +25,15 @@ Route::middleware(['web', 'auth'])->group(function(){
     Route::get('/labs/{lab}/export', [\App\Http\Controllers\LabRuntimeController::class, 'export']);
     Route::get('/labs/{lab}/check', [LabController::class, 'convergence']); // Alias pour convergence
 
-    // Console management
-    Route::get('/console/ping', [ConsoleController::class, 'ping']);
-    Route::get('/labs/{labId}/nodes/{nodeId}/consoles', [ConsoleController::class, 'index']);
-    Route::get('/labs/{labId}/nodes/{nodeId}/consoles/{consoleId}/log', [ConsoleController::class, 'log']);
-    Route::get('/console/sessions', [ConsoleController::class, 'sessions']);
-    Route::post('/console/sessions', [ConsoleController::class, 'store']);
-    Route::delete('/console/sessions/{sessionId}', [ConsoleController::class, 'destroy']);
-
     // Payment management
     Route::get('/payments', [\App\Http\Controllers\PaymentController::class, 'index']);
     Route::get('/payments/{payment}', [\App\Http\Controllers\PaymentController::class, 'show']);
     Route::post('/reservations/{reservation}/payments/initiate', [\App\Http\Controllers\PaymentController::class, 'initiate']);
     Route::get('/payments/{payment}/check-status', [\App\Http\Controllers\PaymentController::class, 'checkStatus']);
+
+    // Token management
+    Route::get('/tokens', [\App\Http\Controllers\TokenController::class, 'index']);
+    Route::post('/tokens/buy', [\App\Http\Controllers\TokenController::class, 'buy']);
 
     // CML Token management
     Route::post('/cml/token/refresh', [\App\Http\Controllers\Api\CmlTokenController::class, 'refresh']);

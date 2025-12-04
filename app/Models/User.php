@@ -10,8 +10,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use App\Models\Reservation;
 use App\Models\Payment;
-use App\Models\Warning;
-use App\Models\UserBan;
+use App\Models\TokenTransaction;
 
 class User extends Authenticatable
 {
@@ -95,30 +94,6 @@ class User extends Authenticatable
     }
 
     /**
-     * Vérifier si l'utilisateur est admin
-     */
-    public function isAdmin(): bool
-    {
-        return $this->role === 'admin';
-    }
-
-    /**
-     * Vérifier si l'utilisateur est instructeur
-     */
-    public function isInstructor(): bool
-    {
-        return $this->role === 'instructor';
-    }
-
-    /**
-     * Vérifier si l'utilisateur est étudiant
-     */
-    public function isStudent(): bool
-    {
-        return $this->role === 'student';
-    }
-
-    /**
      * Relations
      */
     public function reservations(): HasMany
@@ -131,59 +106,9 @@ class User extends Authenticatable
         return $this->hasMany(Payment::class);
     }
 
-    public function warnings(): HasMany
+    public function tokenTransactions(): HasMany
     {
-        return $this->hasMany(Warning::class);
-    }
-
-    public function issuedWarnings(): HasMany
-    {
-        return $this->hasMany(Warning::class, 'issued_by');
-    }
-
-    public function bans(): HasMany
-    {
-        return $this->hasMany(UserBan::class);
-    }
-
-    public function issuedBans(): HasMany
-    {
-        return $this->hasMany(UserBan::class, 'banned_by');
-    }
-
-    /**
-     * Vérifier si l'utilisateur est actuellement banni
-     */
-    public function isBanned(): bool
-    {
-        return $this->bans()
-            ->where(function ($query) {
-                $query->where('is_permanent', true)
-                    ->orWhere('banned_until', '>', now());
-            })
-            ->exists();
-    }
-
-    /**
-     * Obtenir le banissement actif
-     */
-    public function activeBan()
-    {
-        return $this->bans()
-            ->where(function ($query) {
-                $query->where('is_permanent', true)
-                    ->orWhere('banned_until', '>', now());
-            })
-            ->latest()
-            ->first();
-    }
-
-    /**
-     * Vérifier si l'utilisateur est admin ou instructeur
-     */
-    public function isAdminOrInstructor(): bool
-    {
-        return $this->isAdmin() || $this->isInstructor();
+        return $this->hasMany(TokenTransaction::class);
     }
 
     /**
@@ -218,5 +143,49 @@ class User extends Authenticatable
     public function ownsCmlLab(string $labId): bool
     {
         return in_array($labId, $this->cml_owned_labs ?? []);
+    }
+
+    /**
+     * Ajouter des tokens à l'utilisateur
+     */
+    public function addTokens(int $amount, string $type, string $description = null, string $referenceId = null): TokenTransaction
+    {
+        $this->increment('tokens_balance', $amount);
+
+        return TokenTransaction::create([
+            'user_id' => $this->id,
+            'amount' => $amount,
+            'type' => $type,
+            'description' => $description,
+            'reference_id' => $referenceId,
+        ]);
+    }
+
+    /**
+     * Déduire des tokens de l'utilisateur
+     */
+    public function deductTokens(int $amount, string $type, string $description = null, string $referenceId = null): ?TokenTransaction
+    {
+        if ($this->tokens_balance < $amount) {
+            return null; // Solde insuffisant
+        }
+
+        $this->decrement('tokens_balance', $amount);
+
+        return TokenTransaction::create([
+            'user_id' => $this->id,
+            'amount' => -$amount,
+            'type' => $type,
+            'description' => $description,
+            'reference_id' => $referenceId,
+        ]);
+    }
+
+    /**
+     * Vérifier si l'utilisateur a suffisamment de tokens
+     */
+    public function hasEnoughTokens(int $amount): bool
+    {
+        return $this->tokens_balance >= $amount;
     }
 }

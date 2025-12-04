@@ -26,7 +26,6 @@ import {
     XCircle,
     Send
 } from 'lucide-react';
-import LabConsolePanel, { type ConsoleSession, type ConsoleSessionsResponse } from '@/components/lab-console-panel';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { ActionLogsProvider, useActionLogs, type ActionLogEntry } from '@/contexts/ActionLogsContext';
@@ -94,11 +93,10 @@ type Props = {
     links?: LabLink[];
     topology?: unknown;
     tile?: unknown;
-    consoleSessions: ConsoleSession[] | ConsoleSessionsResponse | null;
 };
 
 function WorkspaceContent() {
-    const { lab, reservation, nodes, links = [], topology, consoleSessions } = usePage<Props>().props;
+    const { lab, reservation, nodes, links = [], topology } = usePage<Props>().props;
     const [editMode, setEditMode] = useState(false);
     const [timeLeft, setTimeLeft] = useState<number>(0);
     const { actionLogs } = useActionLogs();
@@ -240,7 +238,7 @@ function WorkspaceContent() {
             
             // Recharger la page pour obtenir l'état mis à jour du lab
             // Utiliser router.reload() au lieu de window.location.reload() pour éviter les problèmes Inertia
-            router.reload({ only: ['lab', 'nodes', 'links', 'topology', 'consoleSessions'] });
+            router.reload({ only: ['lab', 'nodes', 'links', 'topology'] });
         } catch (error) {
             console.error('Error starting lab:', error);
             toast.error(error instanceof Error ? error.message : 'Erreur lors du démarrage du lab');
@@ -280,7 +278,7 @@ function WorkspaceContent() {
             
             // Recharger la page pour obtenir l'état mis à jour du lab
             // Utiliser router.reload() au lieu de window.location.reload() pour éviter les problèmes Inertia
-            router.reload({ only: ['lab', 'nodes', 'links', 'topology', 'consoleSessions'] });
+            router.reload({ only: ['lab', 'nodes', 'links', 'topology'] });
         } catch (error) {
             console.error('Error stopping lab:', error);
             toast.error(error instanceof Error ? error.message : 'Erreur lors de l\'arrêt du lab');
@@ -575,17 +573,7 @@ function WorkspaceContent() {
 
                 {/* Workspace Area */}
                 <div className="flex flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
-                    {/* Console - Priorité principale */}
-                    <div className="min-h-[28rem] w-full flex-[2] overflow-hidden">
-                        <LabConsolePanel
-                            cmlLabId={lab.cml_id}
-                            nodes={nodeList}
-                            initialSessions={consoleSessions}
-                            labTitle={lab.lab_title}
-                        />
-                    </div>
-
-                    {/* Logs & Monitoring - À la place de Topology View */}
+                    {/* Logs & Monitoring */}
                     <div className="relative flex-[1] min-w-[400px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
                         <div className="h-full flex flex-col">
                             <div className="border-b border-border p-4">

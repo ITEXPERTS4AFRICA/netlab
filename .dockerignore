@@ -1,0 +1,75 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+*.md
+docs/
+
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# PHP
+vendor
+composer.lock
+
+# Laravel
+.env
+.env.backup
+.env.production
+.env.local
+.env.*.local
+storage/*.key
+storage/pail
+bootstrap/cache/*
+!bootstrap/cache/.gitignore
+public/hot
+public/storage
+public/build
+
+# IDE
+.idea
+.vscode
+.fleet
+.nova
+.zed
+.phpactor.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+.phpunit.cache
+.phpunit.result.cache
+tests/
+coverage/
+
+# Scripts de test temporaires
+test-*.php
+check-*.php
+fix-*.php
+mark-*.php
+
+# Fichiers temporaires
+*.backup
+*.bak
+*.tmp
+*.log
+trouvés
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+
+# Autres
+*.sqlite
+*.sqlite-journal
+database/database.sqlite

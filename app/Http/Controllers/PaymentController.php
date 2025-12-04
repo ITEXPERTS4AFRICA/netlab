@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Payment;
 use App\Models\Reservation;
+use App\Models\TokenTransaction;
 use App\Services\CinetPayService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -152,6 +153,25 @@ class PaymentController extends Controller
             if (($status['status'] ?? '') === 'ACCEPTED') {
                 $payment->markAsCompleted();
 
+                // Vérifier si c'est un paiement pour des tokens
+                $metadata = $payment->metadata ?? [];
+                if (isset($metadata['package_id']) && isset($metadata['tokens'])) {
+                    // Créditer les tokens à l'utilisateur
+                    $user = $payment->user;
+                    $tokens = $metadata['tokens'];
+                    $user->addTokens(
+                        $tokens,
+                        'purchase',
+                        "Achat de {$tokens} tokens - Package #{$metadata['package_id']}",
+                        $payment->transaction_id
+                    );
+                    Log::info('Payment checkStatus: tokens crédités', [
+                        'payment_id' => $payment->id,
+                        'user_id' => $user->id,
+                        'tokens' => $tokens,
+                    ]);
+                }
+
                 // Mettre à jour la réservation si nécessaire
                 if ($payment->reservation && $payment->reservation->status === 'pending') {
                     $payment->reservation->update(['status' => 'active']);
@@ -217,6 +237,25 @@ class PaymentController extends Controller
             $payment->update([
                 'payment_method' => $data['payment_method'] ?? $data['cpm_payment_method'] ?? null,
             ]);
+
+            // Vérifier si c'est un paiement pour des tokens
+            $metadata = $payment->metadata ?? [];
+            if (isset($metadata['package_id']) && isset($metadata['tokens'])) {
+                // Créditer les tokens à l'utilisateur
+                $user = $payment->user;
+                $tokens = $metadata['tokens'];
+                $user->addTokens(
+                    $tokens,
+                    'purchase',
+                    "Achat de {$tokens} tokens - Package #{$metadata['package_id']}",
+                    $payment->transaction_id
+                );
+                Log::info('CinetPay webhook: tokens crédités', [
+                    'payment_id' => $payment->id,
+                    'user_id' => $user->id,
+                    'tokens' => $tokens,
+                ]);
+            }
 
             // Activer la réservation
             if ($payment->reservation && $payment->reservation->status === 'pending') {

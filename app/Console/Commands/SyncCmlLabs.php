@@ -19,7 +19,7 @@ class SyncCmlLabs extends Command
 
         // Obtenir les credentials depuis la configuration
         if (!CmlConfigHelper::isConfigured()) {
-            $this->error('❌ Configuration CML incomplète. Configurez CML dans /admin/cml-config');
+            $this->error('❌ Configuration CML incomplète.');
             return 1;
         }
 

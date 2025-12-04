@@ -23,6 +23,7 @@ class Payment extends Model
         'description',
         'cinetpay_response',
         'webhook_data',
+        'metadata',
         'paid_at',
     ];
 
@@ -30,6 +31,7 @@ class Payment extends Model
         'amount' => 'integer',
         'cinetpay_response' => 'array',
         'webhook_data' => 'array',
+        'metadata' => 'array',
         'paid_at' => 'datetime',
     ];
 

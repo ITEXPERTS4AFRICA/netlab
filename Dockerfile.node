@@ -1,0 +1,24 @@
+# Dockerfile pour Node.js (Vite/React)
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Installer PHP pour Wayfinder (nécessaire pour générer les routes)
+RUN apk add --no-cache php php-cli php-json php-mbstring
+
+# Copier les fichiers de dépendances
+COPY package.json ./
+COPY package-lock.json* ./
+
+# Installer les dépendances
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+# Copier le reste de l'application
+COPY . .
+
+# Exposer le port Vite
+EXPOSE 5173
+
+# Commande par défaut (dev mode)
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
