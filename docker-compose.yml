@@ -5,9 +5,9 @@ services:
     container_name: netlab_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_DATABASE:-netlab}
       POSTGRES_USER: ${DB_USERNAME:-netlab}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_DATABASE:-netlab}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:

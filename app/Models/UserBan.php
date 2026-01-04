@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 
+/**
+ * @mixin IdeHelperUserBan
+ */
 class UserBan extends Model
 {
     use HasUlids;

@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\User;
 
+/**
+ * @mixin IdeHelperTokenTransaction
+ */
 class TokenTransaction extends Model
 {
     protected $fillable = [

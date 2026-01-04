@@ -79,3 +79,14 @@ export interface LabAnnotation {
     line_start?: string | null;
     line_end?: string | null;
 }
+
+type ActiveReservation = {
+    id: string;
+    lab_id: string;
+    lab_title: string;
+    lab_description: string;
+    start_at: string;
+    end_at: string;
+    duration_hours: number | null;
+    time_remaining: number | null;
+};

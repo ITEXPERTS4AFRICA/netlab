@@ -14,8 +14,7 @@ import {
     Users,
     ExternalLink,
     Zap,
-
-} from 'lucide-react';
+} from 'lucide-react';  
 
 import { motion, Variants } from 'framer-motion';
 import { useState, useMemo, useEffect } from 'react';

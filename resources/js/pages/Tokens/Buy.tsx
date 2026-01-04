@@ -51,9 +51,8 @@ export default function BuyTokens({ packages, balance }: Props) {
                 window.location.href = result.payment_url;
             }
 
-        } catch (error: any) {
-            console.error('Purchase error:', error);
-            toast.error(error.message || 'Impossible d\'initier le paiement');
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : 'Impossible d\'initier le paiement');
             setProcessing(false);
         }
     };
@@ -129,7 +128,7 @@ export default function BuyTokens({ packages, balance }: Props) {
                                     <div className="space-y-2 text-sm">
                                         <div className="flex items-center gap-2 text-muted-foreground">
                                             <Check className="h-4 w-4 text-green-600" />
-                                            <span>Paiement sécurisé via CinetPay</span>
+                                            <span>Paiement sécurisé</span>
                                         </div>
                                         <div className="flex items-center gap-2 text-muted-foreground">
                                             <Check className="h-4 w-4 text-green-600" />

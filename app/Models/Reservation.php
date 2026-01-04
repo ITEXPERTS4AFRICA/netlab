@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @mixin IdeHelperReservation
+ */
 class Reservation extends Model
 {
     protected $fillable = ['user_id','lab_id','rate_id','start_at','end_at','status','estimated_cents','notes','failed_attempts'];

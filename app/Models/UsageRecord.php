@@ -5,6 +5,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @mixin IdeHelperUsageRecord
+ */
 class UsageRecord extends Model
 {
     protected $fillable = ['reservation_id','user_id','lab_id','started_at','ended_at','duration_seconds','cost_cents'];

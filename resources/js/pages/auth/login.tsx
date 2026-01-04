@@ -8,7 +8,9 @@ import { Head, useForm } from '@inertiajs/react';
 import { LoaderCircle } from 'lucide-react';
 import {Card,CardContent} from "@/components/ui/card";
 import {toast} from "sonner";
-import {  useEffect } from 'react';
+import { useEffect } from 'react';
+
+
 
 
 interface LoginProps {
@@ -35,7 +37,7 @@ export default function Login({ status, error }: LoginProps) {
     };
 
     return (
-        <AuthLayout title="Connexion" description="Connectez-vous à votre compte pour accéder à la plateforme">
+        <AuthLayout title="Connexion" description="Connectez-vous à votre compte pour accéder à la plateforme" >
             <Head title="Connexion" />
 
             <Card>

@@ -2,7 +2,6 @@ import { Breadcrumbs } from '@/components/breadcrumbs';
 import { Icon } from '@/components/icon';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { NavigationMenu, NavigationMenuItem, NavigationMenuList, navigationMenuTriggerStyle } from '@/components/ui/navigation-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -13,10 +12,9 @@ import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { type BreadcrumbItem, type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
-import {  LayoutGrid, Menu, Search, Zap } from 'lucide-react';
+import {  LayoutGrid, Menu, Search } from 'lucide-react';
 import AppLogo from './app-logo';
 import AppLogoIcon from './app-logo-icon';
-import { router } from '@inertiajs/react';
 
 const mainNavItems: NavItem[] = [
     {
@@ -26,7 +24,7 @@ const mainNavItems: NavItem[] = [
     },
 ];
 
-const rightNavItems: NavItem[] = [
+const rightNavItems: NavItem[] = [ 
 
 ];
 
@@ -36,28 +34,11 @@ interface AppHeaderProps {
     breadcrumbs?: BreadcrumbItem[];
 }
 
-type ActiveReservation = {
-    id: string;
-    lab_id: string;
-    lab_title: string;
-    lab_description: string;
-    start_at: string;
-    end_at: string;
-    duration_hours: number | null;
-    time_remaining: number | null;
-};
-
 export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
-    const page = usePage<SharedData & { userActiveReservations?: ActiveReservation[] }>();
-    const { auth, userActiveReservations = [] } = page.props;
+    const page = usePage<SharedData >();
+    const { auth } = page.props;
     const getInitials = useInitials();
 
-    // Filter only active (non-expired) reservations
-    const now = new Date();
-    const activeLabs = userActiveReservations.filter((reservation: ActiveReservation) => {
-        const endTime = new Date(reservation.end_at);
-        return endTime > now;
-    });
     return (
         <>
             <div className="border-b border-sidebar-border/80">
@@ -142,36 +123,7 @@ export function AppHeader({ breadcrumbs = [] }: AppHeaderProps) {
                                 <Search className="!size-5 opacity-80 group-hover:opacity-100" />
                             </Button>
 
-                            {/* Active Labs Button - Desktop Only */}
-                            {activeLabs.length > 0 && (
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="hidden lg:flex items-center gap-2 h-9 px-3 bg-green-500/10 border-green-500/20 hover:bg-green-500/20 hover:border-green-500/30"
-                                                onClick={() => {
-                                                    // Navigate to first active lab
-                                                    const firstActiveLab = activeLabs[0];
-                                                    router.visit(`/labs/${firstActiveLab.lab_id}/workspace`, {
-                                                        method: 'get',
-                                                        preserveScroll: true
-                                                    });
-                                                }}
-                                            >
-                                                <Zap className="h-4 w-4 text-green-600" />
-                                                <Badge variant="secondary" className="bg-green-500/20 text-green-700 border-green-500/30">
-                                                    {activeLabs.length}
-                                                </Badge>
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Access your active labs ({activeLabs.length} available)</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                            )}
+                    
                             <div className="hidden lg:flex">
                                 {rightNavItems.map((item) => (
                                     <TooltipProvider key={item.title} delayDuration={0}>

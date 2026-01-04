@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @mixin IdeHelperTokenPackage
+ */
 class TokenPackage extends Model
 {
     protected $fillable = [

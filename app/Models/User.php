@@ -12,6 +12,9 @@ use App\Models\Reservation;
 use App\Models\Payment;
 use App\Models\TokenTransaction;
 
+/**
+ * @mixin IdeHelperUser
+ */
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */

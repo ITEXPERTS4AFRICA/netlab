@@ -14,6 +14,7 @@ use Inertia\Response;
 use App\Services\CiscoApiService;
 use App\Models\User;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -66,7 +67,7 @@ class AuthenticatedSessionController extends Controller
         try {
             $ciscoService = app(\App\Services\CiscoApiService::class);
             $cmlToken = session('cml_token');
-            
+
             if ($cmlToken) {
                 // Utiliser le service auth pour logout et revokeToken
                 $ciscoService->auth->logout($cmlToken);
@@ -74,7 +75,7 @@ class AuthenticatedSessionController extends Controller
             }
         } catch (\Exception $e) {
             // ignore revoke errors - best effort
-            \Log::debug('Erreur lors de la révocation du token CML (non bloquant)', [
+            Log::debug('Erreur lors de la révocation du token CML (non bloquant)', [
                 'error' => $e->getMessage(),
             ]);
         }

@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * @mixin IdeHelperSetting
+ */
 class Setting extends Model
 {
     protected $fillable = [
