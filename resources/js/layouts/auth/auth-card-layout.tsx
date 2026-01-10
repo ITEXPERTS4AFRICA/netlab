@@ -4,7 +4,7 @@ import { home } from '@/routes';
 import { Link } from '@inertiajs/react';
 import { type PropsWithChildren } from 'react';
 import NetworkBackground from '@/components/app-network-background';
-import { SouceAppBackground } from '@/media';
+import { SourceAppBackground } from '@/media';
 
 export default function AuthCardLayout({
     children,
@@ -16,12 +16,10 @@ export default function AuthCardLayout({
     description?: string;
 }>) {
 
-    console.log(SouceAppBackground);
-
 
     return (
         <div
-            className={`relative flex min-h-svh flex-col items-center justify-center gap-6 bg-[url(/image/Futuristicbackground.png)] bg-contain bg-center p-6 md:p-10`}
+            className={`relative flex min-h-svh flex-col items-center justify-center gap-6 bg-[url(${SourceAppBackground})] bg-contain bg-center p-6 md:p-10`}
         >
             <div className="z-20 flex w-full max-w-md flex-col gap-6">
                 <Link href={home()} className="flex items-center gap-2 self-center font-medium">

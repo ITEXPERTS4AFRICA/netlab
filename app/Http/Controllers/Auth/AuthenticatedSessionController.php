@@ -25,6 +25,7 @@ class AuthenticatedSessionController extends Controller
     {
         return Inertia::render('auth/login', [
             'status' => $request->session()->get('status'),
+            'error' => $request->session()->get('error'),
         ]);
     }
 
@@ -85,7 +86,7 @@ class AuthenticatedSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/');
+        return redirect()->route('login');
     }
 
     /**
@@ -127,12 +128,14 @@ class AuthenticatedSessionController extends Controller
         if (! $username || ! $password) {
             if ($strict) {
                 throw ValidationException::withMessages([
-                    'email' => __('auth.failed'),
+                    'username' => __(' username inconnue'),
+                    'email' => __('authentification incorrecte'),
+                    'password' => __('mot de passe incorrect'),
                 ]);
             }
 
             return false;
-        }
+        } 
 
         $attempts = 0;
         $maxAttempts = 3;
@@ -146,12 +149,13 @@ class AuthenticatedSessionController extends Controller
                 break;
             }
 
-            usleep(250000);
+            usleep(2500);
         }
 
         if (! is_array($result) || isset($result['error'])) {
             if ($strict) {
-                $message = __('auth.failed');
+                $messageEmail = __('authentification incorrecte');
+                $messagePassword = __('mot de passe incorrect');
 
                 if (is_array($result) && isset($result['error'])) {
                     logger()->warning('CML auth failed', ['error' => $result['error']]);
@@ -160,7 +164,8 @@ class AuthenticatedSessionController extends Controller
                 RateLimiter::hit($request->throttleKey());
 
                 throw ValidationException::withMessages([
-                    'email' => $message,
+                    'email' => $messageEmail,
+                    'password' => $messagePassword,
                 ]);
             }
 

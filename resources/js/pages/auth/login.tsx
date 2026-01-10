@@ -19,7 +19,7 @@ interface LoginProps {
 }
 
 export default function Login({ status, error }: LoginProps) {
-    const { data, setData, post, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
         password: '',
         remember: false,
@@ -29,11 +29,19 @@ export default function Login({ status, error }: LoginProps) {
         if (status) {
             toast.error(status);
         }
-    },[status]);
+
+
+        if (error) {
+            toast.error(error);
+        }
+
+    },[status, error]);
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/login');
+        post('/login', {
+            onSuccess: () => reset(),
+        });
     };
 
     return (

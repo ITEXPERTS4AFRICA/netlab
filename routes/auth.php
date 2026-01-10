@@ -8,9 +8,10 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
+use App\Http\Controllers\Auth\OtpCodeController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('guest')->group(function () {
+Route::middleware('guest')->prefix('auth')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
 
@@ -36,6 +37,8 @@ Route::middleware('guest')->group(function () {
         ->name('password.store');
 });
 
+
+
 Route::middleware('auth')->group(function () {
     Route::get('verify-email', [EmailVerificationPromptController::class, 'show'])
         ->name('verification.notice');
@@ -57,4 +60,13 @@ Route::middleware('auth')->group(function () {
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');
+
+    Route::get('otp/verify', [OtpCodeController::class, 'create'])
+            ->name('otp.verify.form');
+
+    Route::post('otp/resend', [OtpCodeController::class, 'resend'])
+            ->name('otp.resend');
+
+    Route::post('otp/verify', [OtpCodeController::class, 'verify'])
+            ->name('otp.verify');
 });

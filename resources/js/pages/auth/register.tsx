@@ -32,10 +32,8 @@ export default function Register() {
                                 <input type="hidden" name="_method" value="post" />
                                 <div className="space-y-4">
                                     <div>
-                                        <h3 className="text-lg font-semibold mb-2">Informations de base</h3>
-                                        <p className="text-sm text-muted-foreground mb-4">
-                                            Les champs marqués d'un * sont obligatoires
-                                        </p>
+                                        <h3 className="mb-2 text-lg font-semibold">Informations de base</h3>
+                                        <p className="mb-4 text-sm text-muted-foreground">Les champs marqués d'un * sont obligatoires</p>
                                     </div>
 
                                     <div className="grid gap-4">
@@ -79,9 +77,7 @@ export default function Register() {
                                                 name="password"
                                                 placeholder="••••••••"
                                             />
-                                            <p className="text-xs text-muted-foreground">
-                                                Minimum 8 caractères
-                                            </p>
+                                            <p className="text-xs text-muted-foreground">Minimum 8 caractères</p>
                                             <InputError message={errors.password} className="mt-1" />
                                         </div>
 
@@ -100,6 +96,19 @@ export default function Register() {
                                         </div>
 
                                         <div className="grid gap-2">
+                                            <Label htmlFor="phone">Téléphone N° Whatsapp</Label>
+                                            <Input
+                                                id="phone"
+                                                type="tel"
+                                                tabIndex={6}
+                                                autoComplete="tel"
+                                                name="phone"
+                                                placeholder="+225 6 12 34 56 78"
+                                            />
+                                            <InputError message={errors.phone} className="mt-1" />
+                                        </div>
+
+                                        <div className="grid gap-2">
                                             <Label htmlFor="role">Type de compte</Label>
                                             <Select name="role" defaultValue="student">
                                                 <SelectTrigger tabIndex={5}>
@@ -111,9 +120,7 @@ export default function Register() {
                                                     <SelectItem value="user">Utilisateur</SelectItem>
                                                 </SelectContent>
                                             </Select>
-                                            <p className="text-xs text-muted-foreground">
-                                                Sélectionnez votre rôle principal
-                                            </p>
+                                            <p className="text-xs text-muted-foreground">Sélectionnez votre rôle principal</p>
                                             <InputError message={errors.role} className="mt-1" />
                                         </div>
                                     </div>
@@ -129,20 +136,7 @@ export default function Register() {
                                     </button>
 
                                     {showOptional && (
-                                        <div className="grid gap-4 pt-4 border-t">
-                                            <div className="grid gap-2">
-                                                <Label htmlFor="phone">Téléphone</Label>
-                                                <Input
-                                                    id="phone"
-                                                    type="tel"
-                                                    tabIndex={6}
-                                                    autoComplete="tel"
-                                                    name="phone"
-                                                    placeholder="+33 6 12 34 56 78"
-                                                />
-                                                <InputError message={errors.phone} className="mt-1" />
-                                            </div>
-
+                                        <div className="grid gap-4 border-t pt-4">
                                             <div className="grid gap-2">
                                                 <Label htmlFor="organization">Organisation</Label>
                                                 <Input
@@ -158,39 +152,21 @@ export default function Register() {
 
                                             <div className="grid gap-2">
                                                 <Label htmlFor="department">Département</Label>
-                                                <Input
-                                                    id="department"
-                                                    type="text"
-                                                    tabIndex={8}
-                                                    name="department"
-                                                    placeholder="Votre département"
-                                                />
+                                                <Input id="department" type="text" tabIndex={8} name="department" placeholder="Votre département" />
                                                 <InputError message={errors.department} className="mt-1" />
                                             </div>
 
                                             <div className="grid gap-2">
                                                 <Label htmlFor="position">Poste</Label>
-                                                <Input
-                                                    id="position"
-                                                    type="text"
-                                                    tabIndex={9}
-                                                    name="position"
-                                                    placeholder="Votre poste"
-                                                />
+                                                <Input id="position" type="text" tabIndex={9} name="position" placeholder="Votre poste" />
                                                 <InputError message={errors.position} className="mt-1" />
                                             </div>
                                         </div>
                                     )}
                                 </div>
 
-                                <Button 
-                                    type="submit" 
-                                    className="w-full" 
-                                    tabIndex={10} 
-                                    disabled={processing}
-                                    data-test="register-user-button"
-                                >
-                                    {processing && <LoaderCircle className="h-4 w-4 animate-spin mr-2" />}
+                                <Button type="submit" className="w-full" tabIndex={10} disabled={processing} data-test="register-user-button">
+                                    {processing && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />}
                                     Créer mon compte
                                 </Button>
 

@@ -1,24 +1,35 @@
-
-import { dashboard, login, register } from '@/routes';
-import { type SharedData } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import NavBarHome from '@/components/app-nav-bar-home';
+import { Head } from '@inertiajs/react';
 import NetworkBackground from '@/components/app-network-background';
+import Header from '@/components/landing/Header';
+import HeroSection from '@/components/landing/HeroSection';
+import FeaturesSection from '@/components/landing/FeaturesSection';
+import ProcessSection from '@/components/landing/ProcessSection';
+import CTASection from '@/components/landing/CTASection';
+import Footer from '@/components/landing/Footer';
+
 
 export default function Welcome() {
-    const { auth } = usePage<SharedData>().props;
+    // const { auth } = usePage<SharedData>().props;
 
     return (
         <>
-            <Head title="NetLab - Laboratoire Virtuel Cisco">
+            <Head title="NetLab - Laboratoire Virtuel ">
                 <link rel="preconnect" href="https://fonts.bunny.net" />
                 <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
-                <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
-            </Head> 
-            <NavBarHome/>
-            <NetworkBackground className='fixed'/>
+
+            </Head>
+        <Header />
+           
+        <main>
+            <HeroSection />
+            <FeaturesSection />
+            <ProcessSection />
+            <CTASection />
+        </main>
+        <Footer />
+        <NetworkBackground className="fixed -z-0"/>
+
         </>
+
     );
 }

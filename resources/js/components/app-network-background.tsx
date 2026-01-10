@@ -108,7 +108,7 @@ const NetworkBackground = ({ className }: NetworkBackgroundProps) => {
         };
     }, []);
 
-    return <canvas ref={canvasRef} className={cn('absolute inset-0 h-full w-full', className)} aria-hidden="true" />;
+    return <canvas ref={canvasRef} className={cn('absolute inset-0 h-full w-full z-0 bg-transparent', className)} aria-hidden="true" />;
 };
 
 export default NetworkBackground;

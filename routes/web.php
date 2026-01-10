@@ -9,6 +9,17 @@ Route::get('/', function () {
     return Inertia::render('welcome');
 })->name('home');
 
+
+// test pour la visibilité de la vue
+Route::get('/testopt',function(){
+    return Inertia::render('auth/verify-otp');
+});
+
+
+
+
+
+
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
     Route::get('profile', function () {
