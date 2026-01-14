@@ -48,6 +48,7 @@ class RegisteredUserController extends Controller
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
+            'password_confirmation' => Hash::make($validated['password']),
             'role' => 'student',
             'is_active' => true,
             'phone' => $validated['phone'] ,

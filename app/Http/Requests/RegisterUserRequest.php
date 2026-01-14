@@ -42,7 +42,7 @@ class RegisterUserRequest extends FormRequest
             'email.email' => 'L’adresse email doit être valide.',
             'email.unique' => 'Cette adresse email est déjà utilisée.',
             'password.required' => 'Le mot de passe est obligatoire.',
-            'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.'
+            'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
         ];
     }
 }

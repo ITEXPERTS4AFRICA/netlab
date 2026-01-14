@@ -19,7 +19,7 @@ const Footer = () => {
     <footer className="bg-navy text-white relative overflow-hidden backdrop-blur-md z-20">
       {/* Decorative top border */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber to-transparent" />
-      
+
       {/* Background pattern */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute inset-0" style={{
@@ -32,7 +32,7 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-12 mb-16">
           {/* Brand Column */}
           <div className="lg:col-span-2">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -68,12 +68,12 @@ const Footer = () => {
               </div>
             </motion.div>
 
-    
+
           </div>
 
           {/* Links Columns */}
           {Object.entries(footerLinks).map(([category, links], index) => (
-            <motion.div 
+            <motion.div
               key={category}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
