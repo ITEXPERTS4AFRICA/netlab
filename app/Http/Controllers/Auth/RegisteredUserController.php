@@ -32,57 +32,60 @@ class RegisteredUserController extends Controller
      */
     public function store(RegisterUserRequest $request, OtpService $otpService, InfobipWhatsAppService $whatsApp): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'role' => 'required|string|in:student,teacher,admin',
-            'phone' => ['string', 'max:20'],
-            'organization' => ['nullable', 'string', 'max:255'],
-            'department' => ['nullable', 'string', 'max:255'],
-            'position' => ['nullable', 'string', 'max:255'],
-        ]);
+        // Validation (si RegisterUserRequest ne le fait pas déjà)
+        $validated = $request->validated();
 
-
+        // Création de l'utilisateur
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'password_confirmation' => Hash::make($validated['password']),
-            'role' => 'student',
-            'is_active' => true,
-            'phone' => $validated['phone'] ,
+
+            'role' => $validated['role'], // Tu avais 'role' dans la validation mais forcé 'student' ici
+            'is_active' => false, // IMPORTANT : Inactif tant que l'OTP n'est pas validé
+            'phone' => $validated['phone'],
             'organization' => $validated['organization'] ?? null,
             'department' => $validated['department'] ?? null,
             'position' => $validated['position'] ?? null,
         ]);
 
-        Auth::login($user);
-
-        if($user->phone){
-            try {
-                $otp = $otpService->generate($user->id);
-                $whatsApp->sendOtp($user->phone, $otp->code);
-
-                session(['otp_user_id'=>$user->id]);
-
-                return redirect()
-                    ->route("otp.verify.form")
-                    ->with("sucess','Un code OTP à été envoyé sur votre WhatsApp.");
-
-            } catch(\Throwable $e){
-                logger()->error($e->getMessage());
-                    // Auth::logout();
-                    $user->delete();
-                return back()->withErrors([
-                    'phone' => "Impossible d'envoyer le code de vérification."
-                ]);
-            }
-        }
-
-        event(new Registered($user));
+        // if ($user->phone) {
+        //     try {
+        //         $otpService->invalidatePrevious($user->id);
 
 
-        return redirect()->intended(route('login', absolute: false));
+
+
+        //         $otp = $otpService->generate($user->id);
+
+        //         // Nettoyage du numéro avant envoi
+        //         $cleanPhone = preg_replace('/[^0-9+]/', '', $user->phone);
+
+        //         $envoye = $whatsApp->sendOtp($cleanPhone, $otp->code);
+
+        //         // Le service lève maintenant une exception si $envoye est false, 
+        //         // donc ce test ci-dessous n'est plus strictement nécessaire pour l'erreur,
+        //         // mais on peut le garder pour la logique.
+        //         if ($envoye) {
+        //             session(['otp_user_id' => $user->id]);
+        //             return redirect()->route('otp.verify.form')->with('success', 'Code envoyé.');
+        //         }
+        //     } catch (\Throwable $e) {
+        //         logger()->error("OTP Error: " . $e->getMessage());
+        //         $user->delete();
+
+        //         // Affiche le message d'erreur d'Infobip si disponible, sinon le message générique
+        //         $errorMessage = "Impossible d'envoyer le code. " . $e->getMessage();
+
+        //         return back()->withErrors([
+        //             'phone' => $errorMessage
+        //         ])->withInput();
+        //     }
+        // }
+
+        // Fallback si pas de téléphone (optionnel selon ta logique métier)
+        // return redirect()->route('login')->with('error', 'Un numéro de téléphone est requis.');
+
+        return redirect()->route('login')->with('success', 'inscript');
     }
 }

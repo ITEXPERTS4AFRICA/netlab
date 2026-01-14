@@ -35,8 +35,16 @@ Route::middleware('guest')->prefix('auth')->group(function () {
 
     Route::post('reset-password', [NewPasswordController::class, 'store'])
         ->name('password.store');
-});
 
+    Route::get('otp/verify', [OtpCodeController::class, 'create'])
+        ->name('otp.verify.form');
+
+    Route::post('otp/resend', [OtpCodeController::class, 'resend'])
+        ->name('otp.resend');
+
+        Route::post('otp/verify', [OtpCodeController::class, 'verify'])
+        ->name('otp.verify');
+});
 
 
 Route::middleware('auth')->group(function () {
@@ -61,12 +69,5 @@ Route::middleware('auth')->group(function () {
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');
 
-    Route::get('otp/verify', [OtpCodeController::class, 'create'])
-            ->name('otp.verify.form');
-
-    Route::post('otp/resend', [OtpCodeController::class, 'resend'])
-            ->name('otp.resend');
-
-    Route::post('otp/verify', [OtpCodeController::class, 'verify'])
-            ->name('otp.verify');
+   
 });

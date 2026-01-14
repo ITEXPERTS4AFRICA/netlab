@@ -4,35 +4,55 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use RuntimeException;
 
 class InfobipWhatsAppService
 {
-    public function sendOtp(string $phone, string $code)
+    protected string $baseUrl;
+    protected string $apiKey;
+    protected string $sender;
+
+    public function __construct()
     {
-        $response = Http::withHeaders([
-            'Authorization' => 'App ' . config('infobip.api_key'),
-            'Content-type' => 'application/json',
-            'Accept' => 'application/json'
-        ])->post(
-            config('infobip.base_url') . '/whatsapp/1/message/text',
-            [
-                'from' => config('infobip.whatsapp_sender'),
+        // On récupère les valeurs de ton .env
+        $this->baseUrl = config('services.infobip.base_url');
+        $this->apiKey = config('services.infobip.api_key');
+        $this->sender = config('services.infobip.whatsapp_sender');
+    }
+
+    public function sendOtp(string $phone, string $code): bool
+    {
+        // 1. Nettoyage simple du numéro de téléphone (supprime les espaces)
+        $phone = preg_replace('/[^0-9+]/', '', $phone);
+
+        $message = "Votre code de vérification NETLAB est : *{$code}*.";
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'App ' . $this->apiKey,
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+            ])->post($this->baseUrl . '/whatsapp/1/message/text', [
+                'from' => $this->sender,
                 'to' => $phone,
-                'content' => [
-                    'text' => "votre code de verification est : {$code}. Il expire dans 5 minutes."
+                'message' => [
+                    'text' => $message
                 ]
-            ]
-        );
-
-
-        if(! $response->successful()){
-            Log::error('Infobip WhatsApp OTP failed',[
-                'response' => $response->json(),
             ]);
 
-            throw new RuntimeException("Impossible d'envoyer le code OTP.");
-        
+            // IMPORTANT : Si ça échoue, on jette l'erreur pour voir ce qui se passe dans les logs
+            if (!$response->successful()) {
+                $errorMessage = "Infobip Error: " . $response->body();
+                Log::error($errorMessage);
+
+                // On lance une exception pour que le contrôleur puisse la capter
+                throw new \Exception($errorMessage);
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Infobip Exception: ' . $e->getMessage());
+            // On relance pour que le Controller la prenne en compte
+            throw $e;
         }
     }
 }

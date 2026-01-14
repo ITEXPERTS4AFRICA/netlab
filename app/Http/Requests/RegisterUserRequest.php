@@ -27,6 +27,7 @@ class RegisterUserRequest extends FormRequest
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'phone' => ['nullable', 'string', 'max:20'],
+            'role' => ['required', 'string', 'in:student,instructor'],
             'organization' => ['nullable', 'string', 'max:255'],
             'department' => ['nullable', 'string', 'max:255'],
             'position' => ['nullable', 'string', 'max:255'],

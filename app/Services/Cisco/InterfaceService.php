@@ -51,5 +51,6 @@ class InterfaceService extends BaseCiscoApiService
     {
         return $this->put("/api/v0/labs/{$labId}/interfaces/{$interfaceId}/state/stop");
     }
+    
 }
 

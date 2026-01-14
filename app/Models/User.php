@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable; 
+use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Support\Facades\DB; // Nécessaire pour les transactions
 use App\Models\Reservation;
 use App\Models\Payment;
 use App\Models\TokenTransaction;
+use App\Models\OtpCode; // ❌ MANQUANT : Importation nécessaire
 
 /**
  * @mixin IdeHelperUser
@@ -18,8 +19,7 @@ use App\Models\TokenTransaction;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable,HasUlids; 
-    
+    use HasFactory, Notifiable, HasUlids;
 
     /**
      * The attributes that are mass assignable.
@@ -58,6 +58,8 @@ class User extends Authenticatable
         'cml_token',
         'cml_token_expires_at',
         'cml_owned_labs',
+        // IMPORTANT : Ajoutez tokens_balance ici si vous voulez le modifier via create/update
+        'tokens_balance',
     ];
 
     /**
@@ -68,7 +70,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
-        'cml_token', // Token CML ne doit pas être exposé dans les réponses JSON
+        'cml_token',
     ];
 
     /**
@@ -93,6 +95,8 @@ class User extends Authenticatable
             'cml_opt_in' => 'boolean',
             'cml_token_expires_at' => 'datetime',
             'cml_owned_labs' => 'array',
+            // Ajout d'un cast pour être sûr que c'est un entier
+            'tokens_balance' => 'integer',
         ];
     }
 
@@ -132,61 +136,55 @@ class User extends Authenticatable
      */
     public function hasValidCmlToken(): bool
     {
-        return !empty($this->cml_token) && 
-               $this->cml_token_expires_at && 
-               $this->cml_token_expires_at->isFuture();
-    }
-
-    /**
-     * Vérifier si l'utilisateur appartient à un groupe CML
-     */
-    public function belongsToCmlGroup(string $groupId): bool
-    {
-        return in_array($groupId, $this->cml_groups ?? []);
-    }
-
-    /**
-     * Vérifier si l'utilisateur possède un lab CML
-     */
-    public function ownsCmlLab(string $labId): bool
-    {
-        return in_array($labId, $this->cml_owned_labs ?? []);
+        return !empty($this->cml_token) &&
+            $this->cml_token_expires_at &&
+            $this->cml_token_expires_at->isFuture();
     }
 
     /**
      * Ajouter des tokens à l'utilisateur
+     * 
+     * @throws \Exception
      */
     public function addTokens(int $amount, string $type, string $description = null, string $referenceId = null): TokenTransaction
     {
-        $this->increment('tokens_balance', $amount);
+        // Utilisation d'une Transaction DB pour garantir l'intégrité des données
+        return DB::transaction(function () use ($amount, $type, $description, $referenceId) {
+            $this->increment('tokens_balance', $amount);
 
-        return TokenTransaction::create([
-            'user_id' => $this->id,
-            'amount' => $amount,
-            'type' => $type,
-            'description' => $description,
-            'reference_id' => $referenceId,
-        ]);
+            return TokenTransaction::create([
+                'user_id' => $this->id,
+                'amount' => $amount,
+                'type' => $type,
+                'description' => $description,
+                'reference_id' => $referenceId,
+            ]);
+        });
     }
 
     /**
      * Déduire des tokens de l'utilisateur
+     * 
+     * @throws \Exception
      */
     public function deductTokens(int $amount, string $type, string $description = null, string $referenceId = null): ?TokenTransaction
     {
+        // Vérification avant transaction pour échouer proprement
         if ($this->tokens_balance < $amount) {
-            return null; // Solde insuffisant
+            return null;
         }
 
-        $this->decrement('tokens_balance', $amount);
+        return DB::transaction(function () use ($amount, $type, $description, $referenceId) {
+            $this->decrement('tokens_balance', $amount);
 
-        return TokenTransaction::create([
-            'user_id' => $this->id,
-            'amount' => -$amount,
-            'type' => $type,
-            'description' => $description,
-            'reference_id' => $referenceId,
-        ]);
+            return TokenTransaction::create([
+                'user_id' => $this->id,
+                'amount' => -$amount, // Montant négatif pour la déduction
+                'type' => $type,
+                'description' => $description,
+                'reference_id' => $referenceId,
+            ]);
+        });
     }
 
     /**
@@ -194,6 +192,7 @@ class User extends Authenticatable
      */
     public function hasEnoughTokens(int $amount): bool
     {
-        return $this->tokens_balance >= $amount;
+        // Utilisation de max pour éviter les null si le solde n'est pas initialisé
+        return ($this->tokens_balance ?? 0) >= $amount;
     }
 }
