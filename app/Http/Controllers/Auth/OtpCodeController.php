@@ -28,7 +28,7 @@ class OtpCodeController extends Controller
     ) {
         $userId = session('otp_user_id');
 
-        if (! $userId) {
+        if (!$userId) {
             return redirect()->route('login');
         }
 

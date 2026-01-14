@@ -9,6 +9,7 @@ import { LoaderCircle } from 'lucide-react';
 import {Card,CardContent} from "@/components/ui/card";
 import {toast} from "sonner";
 import { useEffect } from 'react';
+import {register,login} from "@/routes"
 
 
 
@@ -39,7 +40,7 @@ export default function Login({ status, error }: LoginProps) {
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        post('/login', {
+        post(login().url, {
             onSuccess: () => reset(),
         });
     };
@@ -89,12 +90,12 @@ export default function Login({ status, error }: LoginProps) {
                                 <InputError message={errors.password} />
                             </div>
                             <div className="flex items-center space-x-3">
-                                <Checkbox 
-                                    id="remember" 
-                                    name="remember" 
+                                <Checkbox
+                                    id="remember"
+                                    name="remember"
                                     checked={data.remember}
                                     onCheckedChange={(checked) => setData('remember', checked === true)}
-                                    tabIndex={3} 
+                                    tabIndex={3}
                                 />
                                 <Label htmlFor="remember" className="font-normal">Se souvenir de moi</Label>
                             </div>
@@ -108,7 +109,7 @@ export default function Login({ status, error }: LoginProps) {
                         <div className="text-center text-sm text-muted-foreground">
                             {error && <p className="text-destructive mb-2">{error}</p>}
                             Vous n'avez pas de compte ?{' '}
-                            <a href="/register" className="text-primary hover:underline font-medium">
+                            <a href={register().url} className="text-primary hover:underline font-medium">
                                 Créer un compte
                             </a>
                         </div>

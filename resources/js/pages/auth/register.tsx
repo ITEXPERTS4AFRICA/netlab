@@ -1,7 +1,7 @@
 import { login } from '@/routes';
 import { Form, Head } from '@inertiajs/react';
+import RegisteredUserController from '@/actions/App/Http/Controllers/Auth/RegisteredUserController';
 import { LoaderCircle } from 'lucide-react';
-
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
@@ -21,8 +21,7 @@ export default function Register() {
             <Card>
                 <CardContent className="pt-6">
                     <Form
-                        action="/register"
-                        method="post"
+                        {...RegisteredUserController.store()}
                         resetOnSuccess={['password', 'password_confirmation']}
                         disableWhileProcessing
                         className="flex flex-col gap-6"
