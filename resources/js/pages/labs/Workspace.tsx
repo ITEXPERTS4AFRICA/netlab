@@ -21,7 +21,7 @@ import {
     Share2,
     ExternalLink,
     Timer,
-    Activity,
+    // Activity, // <--- Remove or comment out, as Activity is not available in lucide-react
     CheckCircle2,
     XCircle,
     Send
@@ -55,7 +55,7 @@ type Lab = {
     cml_id: string;
     state: string;
     lab_title: string;
-    node_count: string|number;
+    node_count: string | number;
     lab_description?: string | string[] | Record<string, unknown>;
     created: string;
     modified: string;
@@ -218,7 +218,7 @@ function WorkspaceContent() {
                 const errorData = await response.json().catch(() => ({}));
                 // Extraire le message d'erreur de manière plus intelligente
                 let errorMessage = errorData?.error ?? errorData?.message ?? `Erreur ${response.status}`;
-                
+
                 // Si c'est un objet avec une description, l'utiliser
                 if (typeof errorData?.body === 'string') {
                     errorMessage = errorData.body;
@@ -227,22 +227,22 @@ function WorkspaceContent() {
                 } else if (errorData?.body?.description) {
                     errorMessage = errorData.body.description;
                 }
-                
+
                 console.error('Erreur démarrage lab:', {
                     status: response.status,
                     error: errorMessage,
                     fullBody: errorData,
                 });
-                
+
                 throw new Error(errorMessage);
             }
 
             await response.json();
             toast.success('Lab démarré avec succès. Chargement de la topologie...');
-            
+
             // Attendre un peu pour que le lab démarre complètement avant de recharger
             await new Promise(resolve => setTimeout(resolve, 2000));
-            
+
             // Recharger la page pour obtenir l'état mis à jour du lab
             // Utiliser router.reload() au lieu de window.location.reload() pour éviter les problèmes Inertia
             router.reload({ only: ['lab', 'nodes', 'links', 'topology'] });
@@ -282,7 +282,7 @@ function WorkspaceContent() {
 
             await response.json();
             toast.success('Lab arrêté avec succès');
-            
+
             // Recharger la page pour obtenir l'état mis à jour du lab
             // Utiliser router.reload() au lieu de window.location.reload() pour éviter les problèmes Inertia
             router.reload({ only: ['lab', 'nodes', 'links', 'topology'] });
@@ -295,6 +295,23 @@ function WorkspaceContent() {
     const openInCML = () => {
         window.open(`https://54.38.146.213/lab/${lab.cml_id}`, '_blank');
     };
+
+    // Icon component to use in place of Activity (lucide-react doesn't have Activity icon here)
+    const LogsIcon = (props: React.SVGProps<SVGSVGElement>) => (
+        <svg
+            width={props.width || 20}
+            height={props.height || 20}
+            fill="none"
+            viewBox="0 0 20 20"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            className={props.className}
+        >
+            {/* Simple Pulse/Heartbeat Style, reminiscent of an "activity" icon */}
+            <polyline points="3 13 7 13 10 7 13 17 16 13 19 13" stroke="currentColor" strokeWidth="2" fill="none" />
+            <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.8" fill="none" />
+        </svg>
+    );
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -324,26 +341,26 @@ function WorkspaceContent() {
                             {/* Status Badge */}
                             <Badge
                                 variant={(() => {
-                                    const normalizedState = typeof lab.state === 'string' 
-                                        ? lab.state.toUpperCase() 
+                                    const normalizedState = typeof lab.state === 'string'
+                                        ? lab.state.toUpperCase()
                                         : (typeof lab.state === 'object' && lab.state !== null
                                             ? ((lab.state as any).data?.toUpperCase() || (lab.state as any).state?.toUpperCase() || 'UNKNOWN')
                                             : 'UNKNOWN');
                                     return normalizedState === 'RUNNING' || normalizedState === 'STARTED' ? 'default' :
-                                           normalizedState === 'STOPPED' ? 'destructive' :
-                                           normalizedState === 'STARTING' || normalizedState === 'STOPPING' ? 'secondary' :
-                                           'outline';
+                                        normalizedState === 'STOPPED' ? 'destructive' :
+                                            normalizedState === 'STARTING' || normalizedState === 'STOPPING' ? 'secondary' :
+                                                'outline';
                                 })()}
                                 className={`flex items-center gap-1.5 px-3 py-1 text-sm ${(() => {
-                                    const normalizedState = typeof lab.state === 'string' 
-                                        ? lab.state.toUpperCase() 
+                                    const normalizedState = typeof lab.state === 'string'
+                                        ? lab.state.toUpperCase()
                                         : (typeof lab.state === 'object' && lab.state !== null
                                             ? ((lab.state as any).data?.toUpperCase() || (lab.state as any).state?.toUpperCase() || 'UNKNOWN')
                                             : 'UNKNOWN');
                                     if (normalizedState === 'RUNNING' || normalizedState === 'STARTED') {
                                         return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800';
                                     } else if (normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') {
-                                        return normalizedState === 'DEFINED_ON_CORE' 
+                                        return normalizedState === 'DEFINED_ON_CORE'
                                             ? 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800'
                                             : 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800';
                                     } else if (normalizedState === 'STARTING' || normalizedState === 'STOPPING') {
@@ -364,9 +381,9 @@ function WorkspaceContent() {
                                     } else {
                                         normalizedState = String(stateObj || 'UNKNOWN');
                                     }
-                                    
+
                                     const upperState = normalizedState.toUpperCase();
-                                    
+
                                     if (upperState === 'RUNNING' || upperState === 'STARTED') {
                                         return <><CheckCircle className="h-4 w-4" /> Running</>;
                                     } else if (upperState === 'STOPPED') {
@@ -389,9 +406,8 @@ function WorkspaceContent() {
                             variant="outline"
                             size="sm"
                             onClick={() => setEditMode(!editMode)}
-                            className={`flex items-center gap-2 ${
-                                editMode ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' : ''
-                            }`}
+                            className={`flex items-center gap-2 ${editMode ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' : ''
+                                }`}
                         >
                             {editMode ? <Eye className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
                             {editMode ? 'View Mode' : 'Edit Annotations'}
@@ -400,39 +416,39 @@ function WorkspaceContent() {
                         {(() => {
                             // Normaliser l'état pour vérifier les conditions
                             const stateObj = lab.state as Record<string, unknown> | string | null;
-                            const normalizedState = typeof stateObj === 'string' 
-                                ? stateObj.toUpperCase() 
+                            const normalizedState = typeof stateObj === 'string'
+                                ? stateObj.toUpperCase()
                                 : (typeof stateObj === 'object' && stateObj !== null
                                     ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
                                     : 'UNKNOWN');
-                            
+
                             if (normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') {
                                 return (
-                            <Button
-                                onClick={handleStartLab}
-                                size="sm"
-                                className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-                            >
-                                <Play className="h-4 w-4" />
-                                Start Lab
-                            </Button>
+                                    <Button
+                                        onClick={handleStartLab}
+                                        size="sm"
+                                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                                    >
+                                        <Play className="h-4 w-4" />
+                                        Start Lab
+                                    </Button>
                                 );
                             }
 
                             if (normalizedState === 'RUNNING' || normalizedState === 'STARTED') {
                                 return (
-                            <Button
-                                onClick={handleStopLab}
-                                variant="destructive"
-                                size="sm"
-                                className="flex items-center gap-2"
-                            >
-                                <Square className="h-4 w-4" />
-                                Stop Lab
-                            </Button>
+                                    <Button
+                                        onClick={handleStopLab}
+                                        variant="destructive"
+                                        size="sm"
+                                        className="flex items-center gap-2"
+                                    >
+                                        <Square className="h-4 w-4" />
+                                        Stop Lab
+                                    </Button>
                                 );
                             }
-                            
+
                             return null;
                         })()}
 
@@ -503,26 +519,25 @@ function WorkspaceContent() {
                                     {/* Progressbar animée */}
                                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden relative">
                                         <div
-                                            className={`h-full rounded-full transition-all duration-1000 ease-linear relative ${
-                                                reservationProgress < 50 
-                                                    ? 'bg-gradient-to-r from-green-500 to-emerald-400' 
-                                                    : reservationProgress < 80 
-                                                    ? 'bg-gradient-to-r from-yellow-500 to-amber-400' 
+                                            className={`h-full rounded-full transition-all duration-1000 ease-linear relative ${reservationProgress < 50
+                                                ? 'bg-gradient-to-r from-green-500 to-emerald-400'
+                                                : reservationProgress < 80
+                                                    ? 'bg-gradient-to-r from-yellow-500 to-amber-400'
                                                     : 'bg-gradient-to-r from-red-500 to-rose-400'
-                                            } ${timeLeft < 300 ? 'animate-pulse' : ''}`}
+                                                } ${timeLeft < 300 ? 'animate-pulse' : ''}`}
                                             style={{
                                                 width: `${reservationProgress}%`,
-                                                boxShadow: reservationProgress > 0 
+                                                boxShadow: reservationProgress > 0
                                                     ? reservationProgress < 50
                                                         ? '0 0 8px rgba(16, 185, 129, 0.6)'
                                                         : reservationProgress < 80
-                                                        ? '0 0 8px rgba(234, 179, 8, 0.6)'
-                                                        : '0 0 8px rgba(239, 68, 68, 0.6)'
+                                                            ? '0 0 8px rgba(234, 179, 8, 0.6)'
+                                                            : '0 0 8px rgba(239, 68, 68, 0.6)'
                                                     : 'none',
                                             }}
                                         >
                                             {/* Effet shimmer animé */}
-                                            <div 
+                                            <div
                                                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
                                                 style={{
                                                     animation: 'shimmer 2s infinite linear',
@@ -582,7 +597,7 @@ function WorkspaceContent() {
 
                 {/* Workspace Area */}
                 <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-                        <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as typeof activeTab)} className="flex-1 flex flex-col">
+                    <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as typeof activeTab)} className="flex-1 flex flex-col">
                         <TabsList className="grid w-full grid-cols-4">
                             <TabsTrigger value="console">Console</TabsTrigger>
                             <TabsTrigger value="details">Détails</TabsTrigger>
@@ -602,179 +617,179 @@ function WorkspaceContent() {
 
                                 {/* Logs & Monitoring */}
                                 <div className="relative flex-[1] min-w-[400px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                        <div className="h-full flex flex-col">
-                            <div className="border-b border-border p-4">
-                                <h3 className="text-lg font-semibold flex items-center gap-2">
-                                    <Activity className="h-5 w-5" />
-                                    Logs & Monitoring
-                                    {actionLogs.length > 0 && (
-                                        <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-xs">
-                                            {actionLogs.length}
-                                        </Badge>
-                                    )}
-                                </h3>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Suivi de toutes les actions effectuées
-                                </p>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-4">
-                                {actionLogs.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center h-full py-8 text-center">
-                                        <Activity className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-                                        <p className="text-sm text-muted-foreground">
-                                            Aucune action enregistrée
-                                        </p>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            Les actions effectuées apparaîtront ici
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {actionLogs.map((log) => {
-                                            const statusIcon = 
-                                                log.status === 'success' ? (
-                                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                                ) : log.status === 'error' ? (
-                                                    <XCircle className="h-4 w-4 text-red-500" />
-                                                ) : log.status === 'sent' ? (
-                                                    <Send className="h-4 w-4 text-blue-500" />
-                                                ) : (
-                                                    <Clock className="h-4 w-4 text-yellow-500 animate-pulse" />
-                                                );
-
-                                            const statusColor =
-                                                log.status === 'success' ? 'text-green-600 dark:text-green-400' :
-                                                log.status === 'error' ? 'text-red-600 dark:text-red-400' :
-                                                log.status === 'sent' ? 'text-blue-600 dark:text-blue-400' :
-                                                'text-yellow-600 dark:text-yellow-400';
-
-                                            const typeBadgeColor =
-                                                log.type === 'command' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
-                                                log.type === 'session' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
-                                                log.type === 'error' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
-                                                'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
-
-                                            return (
-                                                <div
-                                                    key={log.id}
-                                                    className="flex items-start gap-2 p-2 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors"
-                                                >
-                                                    <div className="mt-0.5">{statusIcon}</div>
-                                                    <div className="flex-1 min-w-0 space-y-1">
-                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                            <span className={`text-xs font-medium ${statusColor}`}>
-                                                                {log.action}
-                                                            </span>
-                                                            <Badge variant="secondary" className={`text-xs ${typeBadgeColor}`}>
-                                                                {log.type}
-                                                            </Badge>
-                                                        </div>
-                                                        {log.command && (
-                                                            <div className="font-mono text-xs bg-muted p-1.5 rounded border text-xs">
-                                                                <span className="text-muted-foreground">&gt; </span>
-                                                                {log.command}
-                                                            </div>
-                                                        )}
-                                                        {log.details && (
-                                                            <p className="text-xs text-muted-foreground line-clamp-2">
-                                                                {log.details}
-                                                            </p>
-                                                        )}
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {log.timestamp.toLocaleTimeString('fr-FR', {
-                                                                hour: '2-digit',
-                                                                minute: '2-digit',
-                                                                second: '2-digit',
-                                                            })}
-                                                        </p>
-                                                    </div>
+                                    <div className="h-full flex flex-col">
+                                        <div className="border-b border-border p-4">
+                                            <h3 className="text-lg font-semibold flex items-center gap-2">
+                                                <LogsIcon className="h-5 w-5" />
+                                                Logs & Monitoring
+                                                {actionLogs.length > 0 && (
+                                                    <Badge variant="secondary" className="ml-2 h-5 px-1.5 text-xs">
+                                                        {actionLogs.length}
+                                                    </Badge>
+                                                )}
+                                            </h3>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                Suivi de toutes les actions effectuées
+                                            </p>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto p-4">
+                                            {actionLogs.length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center h-full py-8 text-center">
+                                                    <LogsIcon className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Aucune action enregistrée
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        Les actions effectuées apparaîtront ici
+                                                    </p>
                                                 </div>
-                                            );
-                                        })}
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {actionLogs.map((log) => {
+                                                        const statusIcon =
+                                                            log.status === 'success' ? (
+                                                                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                                            ) : log.status === 'error' ? (
+                                                                <XCircle className="h-4 w-4 text-red-500" />
+                                                            ) : log.status === 'sent' ? (
+                                                                <Send className="h-4 w-4 text-blue-500" />
+                                                            ) : (
+                                                                <Clock className="h-4 w-4 text-yellow-500 animate-pulse" />
+                                                            );
+
+                                                        const statusColor =
+                                                            log.status === 'success' ? 'text-green-600 dark:text-green-400' :
+                                                                log.status === 'error' ? 'text-red-600 dark:text-red-400' :
+                                                                    log.status === 'sent' ? 'text-blue-600 dark:text-blue-400' :
+                                                                        'text-yellow-600 dark:text-yellow-400';
+
+                                                        const typeBadgeColor =
+                                                            log.type === 'command' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                                                                log.type === 'session' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
+                                                                    log.type === 'error' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                                                                        'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300';
+
+                                                        return (
+                                                            <div
+                                                                key={log.id}
+                                                                className="flex items-start gap-2 p-2 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors"
+                                                            >
+                                                                <div className="mt-0.5">{statusIcon}</div>
+                                                                <div className="flex-1 min-w-0 space-y-1">
+                                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                                        <span className={`text-xs font-medium ${statusColor}`}>
+                                                                            {log.action}
+                                                                        </span>
+                                                                        <Badge variant="secondary" className={`text-xs ${typeBadgeColor}`}>
+                                                                            {log.type}
+                                                                        </Badge>
+                                                                    </div>
+                                                                    {log.command && (
+                                                                        <div className="font-mono text-xs bg-muted p-1.5 rounded border text-xs">
+                                                                            <span className="text-muted-foreground">&gt; </span>
+                                                                            {log.command}
+                                                                        </div>
+                                                                    )}
+                                                                    {log.details && (
+                                                                        <p className="text-xs text-muted-foreground line-clamp-2">
+                                                                            {log.details}
+                                                                        </p>
+                                                                    )}
+                                                                    <p className="text-xs text-muted-foreground">
+                                                                        {log.timestamp.toLocaleTimeString('fr-FR', {
+                                                                            hour: '2-digit',
+                                                                            minute: '2-digit',
+                                                                            second: '2-digit',
+                                                                        })}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                )}
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </TabsContent>
+                        </TabsContent>
 
-            <TabsContent value="details" className="flex-1 mt-4 overflow-hidden">
-                <LabDetailsPanel labId={lab.cml_id} className="h-full" />
-            </TabsContent>
+                        <TabsContent value="details" className="flex-1 mt-4 overflow-hidden">
+                            <LabDetailsPanel labId={lab.cml_id} className="h-full" />
+                        </TabsContent>
 
-            <TabsContent value="events" className="flex-1 mt-4 overflow-hidden">
-                <LabEventsPanel labId={lab.cml_id} className="h-full" />
-            </TabsContent>
+                        <TabsContent value="events" className="flex-1 mt-4 overflow-hidden">
+                            <LabEventsPanel labId={lab.cml_id} className="h-full" />
+                        </TabsContent>
 
-            <TabsContent value="config" className="flex-1 mt-4 overflow-hidden min-h-[700px]">
-                <LabConfigEditor labId={lab.cml_id} className="h-full min-h-[700px]" />
-            </TabsContent>
-        </Tabs>
+                        <TabsContent value="config" className="flex-1 mt-4 overflow-hidden min-h-[700px]">
+                            <LabConfigEditor labId={lab.cml_id} className="h-full min-h-[700px]" />
+                        </TabsContent>
+                    </Tabs>
                 </div>
 
                 {/* Topology Graph - En bas avec largeur maximale */}
                 <div className="relative w-full h-[400px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900 mt-4">
-                        {/* Topology Graph - Show when lab is running - Must be on top */}
-                        {(() => {
-                            const stateObj = lab.state as Record<string, unknown> | string | null;
-                            const normalizedState = typeof stateObj === 'string' 
-                                ? stateObj.toUpperCase() 
-                                : (typeof stateObj === 'object' && stateObj !== null
-                                    ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
-                                    : 'UNKNOWN');
-                            
-                            const shouldShow = normalizedState === 'RUNNING' || normalizedState === 'STARTED';
-                            
-                            // Log uniquement en mode développement et seulement si les valeurs changent
-                            if (import.meta.env.DEV) {
-                                const logKey = `${normalizedState}-${shouldShow}-${nodeList.length}-${Array.isArray(links) ? links.length : 0}`;
-                                const windowObj = window as Record<string, unknown>;
-                                if (!windowObj.__lastTopologyLog || windowObj.__lastTopologyLog !== logKey) {
-                                    console.log('Workspace: Rendu topologie', {
-                                        normalizedState,
-                                        shouldShow,
-                                        nodeListCount: nodeList.length,
-                                        linksCount: Array.isArray(links) ? links.length : 0,
-                                        topologyType: typeof topology,
-                                        hasTopologyNodes: !!(topology && typeof topology === 'object' && 'nodes' in topology),
-                                    });
-                                    windowObj.__lastTopologyLog = logKey;
-                                }
+                    {/* Topology Graph - Show when lab is running - Must be on top */}
+                    {(() => {
+                        const stateObj = lab.state as Record<string, unknown> | string | null;
+                        const normalizedState = typeof stateObj === 'string'
+                            ? stateObj.toUpperCase()
+                            : (typeof stateObj === 'object' && stateObj !== null
+                                ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
+                                : 'UNKNOWN');
+
+                        const shouldShow = normalizedState === 'RUNNING' || normalizedState === 'STARTED';
+
+                        // Log uniquement en mode développement et seulement si les valeurs changent
+                        if (import.meta.env.DEV) {
+                            const logKey = `${normalizedState}-${shouldShow}-${nodeList.length}-${Array.isArray(links) ? links.length : 0}`;
+                            const windowObj = window as Record<string, unknown>;
+                            if (!windowObj.__lastTopologyLog || windowObj.__lastTopologyLog !== logKey) {
+                                console.log('Workspace: Rendu topologie', {
+                                    normalizedState,
+                                    shouldShow,
+                                    nodeListCount: nodeList.length,
+                                    linksCount: Array.isArray(links) ? links.length : 0,
+                                    topologyType: typeof topology,
+                                    hasTopologyNodes: !!(topology && typeof topology === 'object' && 'nodes' in topology),
+                                });
+                                windowObj.__lastTopologyLog = logKey;
                             }
-                            
-                            return shouldShow;
-                        })() ? (
-                            <div className="absolute inset-0 z-20" style={{ minHeight: '400px', minWidth: '400px' }}>
-                                <LabTopology
-                                    nodes={nodeList}
-                                    links={Array.isArray(links) ? links : []}
-                                    topology={topology as { nodes?: LabNode[]; links?: LabLink[] } | null | undefined}
-                                    labId={lab.cml_id}
-                                    realtimeUpdate={true}
-                                    updateInterval={5000}
-                                    className="h-full w-full"
-                                />
+                        }
+
+                        return shouldShow;
+                    })() ? (
+                        <div className="absolute inset-0 z-20" style={{ minHeight: '400px', minWidth: '400px' }}>
+                            <LabTopology
+                                nodes={nodeList}
+                                links={Array.isArray(links) ? links : []}
+                                topology={topology as { nodes?: LabNode[]; links?: LabLink[] } | null | undefined}
+                                labId={lab.cml_id}
+                                realtimeUpdate={true}
+                                updateInterval={5000}
+                                className="h-full w-full"
+                            />
+                        </div>
+                    ) : (
+                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-900 text-white">
+                            <div className="text-center">
+                                <p>Lab state: {typeof lab.state === 'string' ? lab.state : JSON.stringify(lab.state)}</p>
+                                <p>Topology will appear when lab is RUNNING or STARTED</p>
                             </div>
-                        ) : (
-                            <div className="absolute inset-0 z-20 flex items-center justify-center bg-gray-900 text-white">
-                                <div className="text-center">
-                                    <p>Lab state: {typeof lab.state === 'string' ? lab.state : JSON.stringify(lab.state)}</p>
-                                    <p>Topology will appear when lab is RUNNING or STARTED</p>
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Annotations Canvas - Show only when lab is NOT running to avoid grid overlap */}
-                        {(() => {
-                            const stateObj = lab.state as Record<string, unknown> | string | null;
-                            const normalizedState = typeof stateObj === 'string' 
-                                ? stateObj.toUpperCase() 
-                                : (typeof stateObj === 'object' && stateObj !== null
-                                    ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
-                                    : 'UNKNOWN');
-                            return normalizedState !== 'RUNNING' && normalizedState !== 'STARTED';
-                        })() && (
+                        </div>
+                    )}
+
+                    {/* Annotations Canvas - Show only when lab is NOT running to avoid grid overlap */}
+                    {(() => {
+                        const stateObj = lab.state as Record<string, unknown> | string | null;
+                        const normalizedState = typeof stateObj === 'string'
+                            ? stateObj.toUpperCase()
+                            : (typeof stateObj === 'object' && stateObj !== null
+                                ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
+                                : 'UNKNOWN');
+                        return normalizedState !== 'RUNNING' && normalizedState !== 'STARTED';
+                    })() && (
                             <div className="absolute inset-0 z-10">
                                 <AnnotationLab
                                     labId={lab.id}
@@ -785,69 +800,69 @@ function WorkspaceContent() {
                             </div>
                         )}
 
-                        {/* Edit Mode Overlay - Positioned to avoid overlap with topology info panel */}
-                        {editMode && (
-                            <div className="absolute right-4 top-16 z-40 rounded-lg border border-gray-200 bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-                                <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                                    <Edit className="h-4 w-4 text-blue-600" />
-                                    <span>Edit Mode Active</span>
-                                </div>
-                                <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-                                    Drag annotations to reposition • Changes are auto-saved
-                                </p>
+                    {/* Edit Mode Overlay - Positioned to avoid overlap with topology info panel */}
+                    {editMode && (
+                        <div className="absolute right-4 top-16 z-40 rounded-lg border border-gray-200 bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                <Edit className="h-4 w-4 text-blue-600" />
+                                <span>Edit Mode Active</span>
                             </div>
-                        )}
+                            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                                Drag annotations to reposition • Changes are auto-saved
+                            </p>
+                        </div>
+                    )}
 
-                        {/* Lab State Overlay */}
-                        {(() => {
-                            // Normaliser l'état pour vérifier les conditions
-                            const stateObj = lab.state as Record<string, unknown> | string | null;
-                            const normalizedState = typeof stateObj === 'string' 
-                                ? stateObj.toUpperCase() 
-                                : (typeof stateObj === 'object' && stateObj !== null
-                                    ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
-                                    : 'UNKNOWN');
-                            
-                            if (!editMode && normalizedState !== 'RUNNING' && normalizedState !== 'STARTED') {
-                                const stateDisplay = normalizedState === 'DEFINED_ON_CORE' 
-                                    ? 'Defined on Core'
-                                    : normalizedState === 'STOPPED'
+                    {/* Lab State Overlay */}
+                    {(() => {
+                        // Normaliser l'état pour vérifier les conditions
+                        const stateObj = lab.state as Record<string, unknown> | string | null;
+                        const normalizedState = typeof stateObj === 'string'
+                            ? stateObj.toUpperCase()
+                            : (typeof stateObj === 'object' && stateObj !== null
+                                ? ((stateObj.data as string)?.toUpperCase() || (stateObj.state as string)?.toUpperCase() || 'UNKNOWN')
+                                : 'UNKNOWN');
+
+                        if (!editMode && normalizedState !== 'RUNNING' && normalizedState !== 'STARTED') {
+                            const stateDisplay = normalizedState === 'DEFINED_ON_CORE'
+                                ? 'Defined on Core'
+                                : normalizedState === 'STOPPED'
                                     ? 'Stopped'
                                     : normalizedState.toLowerCase();
-                                
-                                return (
-                            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50">
-                                <div className="mx-4 max-w-md rounded-lg bg-white p-6 text-center shadow-xl dark:bg-gray-800">
-                                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
-                                                {normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE' ? (
-                                            <AlertTriangle className="h-8 w-8 text-gray-600 dark:text-gray-400" />
-                                                ) : normalizedState === 'STARTING' || normalizedState === 'STOPPING' ? (
-                                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-                                        ) : (
-                                            <Info className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+
+                            return (
+                                <div className="absolute inset-0 z-30 flex items-center justify-center bg-black bg-opacity-50">
+                                    <div className="mx-4 max-w-md rounded-lg bg-white p-6 text-center shadow-xl dark:bg-gray-800">
+                                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
+                                            {normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE' ? (
+                                                <AlertTriangle className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                                            ) : normalizedState === 'STARTING' || normalizedState === 'STOPPING' ? (
+                                                <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+                                            ) : (
+                                                <Info className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                                            )}
+                                        </div>
+                                        <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+                                            Lab {stateDisplay}
+                                        </h3>
+                                        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                                            {(normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') &&
+                                                'Le lab est actuellement arrêté ou défini sur le core. Démarrez-le pour visualiser et interagir avec les annotations.'}
+                                            {normalizedState === 'STARTING' && 'Le lab démarre. Cela peut prendre quelques minutes...'}
+                                            {normalizedState === 'STOPPING' && 'Le lab s\'arrête. Veuillez patienter...'}
+                                        </p>
+                                        {(normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') && (
+                                            <Button onClick={handleStartLab} className="bg-green-600 hover:bg-green-700">
+                                                <Play className="mr-2 h-4 w-4" />
+                                                Démarrer le Lab
+                                            </Button>
                                         )}
                                     </div>
-                                    <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-                                                Lab {stateDisplay}
-                                    </h3>
-                                    <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-                                                {(normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') && 
-                                                    'Le lab est actuellement arrêté ou défini sur le core. Démarrez-le pour visualiser et interagir avec les annotations.'}
-                                                {normalizedState === 'STARTING' && 'Le lab démarre. Cela peut prendre quelques minutes...'}
-                                                {normalizedState === 'STOPPING' && 'Le lab s\'arrête. Veuillez patienter...'}
-                                    </p>
-                                            {(normalizedState === 'STOPPED' || normalizedState === 'DEFINED_ON_CORE') && (
-                                        <Button onClick={handleStartLab} className="bg-green-600 hover:bg-green-700">
-                                            <Play className="mr-2 h-4 w-4" />
-                                                    Démarrer le Lab
-                                        </Button>
-                                    )}
                                 </div>
-                            </div>
-                                );
-                            }
-                            return null;
-                        })()}
+                            );
+                        }
+                        return null;
+                    })()}
                 </div>
             </div>
         </AppLayout>

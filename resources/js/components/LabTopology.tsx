@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'; 
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Network } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -53,10 +53,10 @@ type Props = {
     readonly updateInterval?: number;
 };
 
-export default function LabTopology({ 
-    nodes, 
-    links, 
-    topology, 
+export default function LabTopology({
+    nodes,
+    links,
+    topology,
     className = '',
     labId,
     realtimeUpdate = true,
@@ -76,7 +76,7 @@ export default function LabTopology({
     const [currentLinks, setCurrentLinks] = useState<Link[]>(links);
     const nodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
     const linkPositionsRef = useRef<Map<string, { x1: number; y1: number; x2: number; y2: number }>>(new Map());
-    
+
     // Hook pour les mises à jour en temps réel
     const { getLabDetails, details } = useLabDetails();
 
@@ -92,7 +92,7 @@ export default function LabTopology({
 
         const poll = async () => {
             if (!isPollingActive) return;
-            
+
             try {
                 await getLabDetails(labId);
                 // Réinitialiser les compteurs d'erreurs en cas de succès
@@ -102,14 +102,14 @@ export default function LabTopology({
             } catch (err) {
                 errorCount++;
                 const errorMessage = err instanceof Error ? err.message : String(err);
-                
+
                 // Gérer les erreurs 429 (rate limiting)
                 if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
                     rateLimitCount++;
                     // Augmenter l'intervalle progressivement
                     currentInterval = Math.min(currentInterval * 2, 30000); // Maximum 30 secondes
                     console.warn('LabTopology: Rate limit détecté, intervalle augmenté à', currentInterval, 'ms');
-                    
+
                     // Si trop d'erreurs 429, arrêter temporairement
                     if (rateLimitCount >= 3) {
                         console.warn('LabTopology: Trop d\'erreurs 429, arrêt temporaire du polling');
@@ -124,7 +124,7 @@ export default function LabTopology({
                         return;
                     }
                 }
-                
+
                 // Si l'endpoint n'existe pas (404) ou trop d'erreurs, arrêter le polling silencieusement
                 if (errorMessage.includes('404') || errorCount >= maxErrors) {
                     if (errorCount === maxErrors) {
@@ -212,8 +212,14 @@ export default function LabTopology({
     useEffect(() => {
         // Logs de debug désactivés pour réduire le bruit dans la console
 
+        // Si aucun node, le composant retourne une UI vide (sans canvas), donc on ne fait rien
+        if (allNodes.length === 0) {
+            return;
+        }
+
         const canvas = canvasRef.current;
         if (!canvas) {
+            // Uniquement loguer une erreur si on devrait avoir un canvas (nodes > 0)
             console.error('LabTopology: Canvas ref non disponible - canvasRef.current est null');
             return;
         }
@@ -335,11 +341,11 @@ export default function LabTopology({
 
         for (const link of allLinks) {
             const node1Id = typeof link.n1 === 'string' ? link.n1 :
-                          typeof link.node1 === 'string' ? link.node1 :
-                          typeof link.src === 'string' ? link.src : '';
+                typeof link.node1 === 'string' ? link.node1 :
+                    typeof link.src === 'string' ? link.src : '';
             const node2Id = typeof link.n2 === 'string' ? link.n2 :
-                          typeof link.node2 === 'string' ? link.node2 :
-                          typeof link.dst === 'string' ? link.dst : '';
+                typeof link.node2 === 'string' ? link.node2 :
+                    typeof link.dst === 'string' ? link.dst : '';
             const node1 = nodePositions.get(node1Id);
             const node2 = nodePositions.get(node2Id);
 

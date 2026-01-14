@@ -25,14 +25,14 @@ class IntelligentCommandController extends Controller
 
         try {
             $result = $generator->analyzeLabAndGenerateCommands($labId);
-            
+
             return response()->json($result)->header('Cache-Control', 'public, max-age=300');
         } catch (\Exception $e) {
             \Log::error('Erreur lors de l\'analyse du lab', [
                 'lab_id' => $labId,
                 'error' => $e->getMessage(),
             ]);
-            
+
             return response()->json([
                 'error' => 'Erreur lors de l\'analyse: ' . $e->getMessage(),
                 'status' => 500,
@@ -59,16 +59,16 @@ class IntelligentCommandController extends Controller
                 'include_show' => 'boolean',
                 'format' => 'string|in:script,json',
             ]);
-            
+
             $result = $generator->generateConfigurationScript($labId, $options);
-            
+
             return response()->json($result)->header('Cache-Control', 'public, max-age=300');
         } catch (\Exception $e) {
             \Log::error('Erreur lors de la génération du script', [
                 'lab_id' => $labId,
                 'error' => $e->getMessage(),
             ]);
-            
+
             return response()->json([
                 'error' => 'Erreur lors de la génération: ' . $e->getMessage(),
                 'status' => 500,
@@ -99,20 +99,34 @@ class IntelligentCommandController extends Controller
             'category' => 'nullable|string',
         ]);
 
-        // CML n'a pas d'API pour exécuter des commandes directement
-        // On retourne la commande à exécuter et les instructions
-        return response()->json([
-            'lab_id' => $labId,
-            'node_id' => $nodeId,
-            'command' => $validated['command'],
-            'category' => $validated['category'] ?? 'general',
-            'instructions' => [
-                'step_1' => 'La commande doit être tapée dans la console IOS',
-                'step_2' => 'Utiliser le polling des logs pour récupérer les résultats',
-                'step_3' => 'GET /api/v0/labs/{lab_id}/nodes/{node_id}/consoles/{console_id}/log',
-            ],
-            'note' => 'CML n\'expose pas d\'API REST pour exécuter des commandes CLI. La commande doit être tapée manuellement dans la console.',
-        ]);
+        // Call the Loadbalancer Command Gateway Service
+        try {
+            $gatewayUrl = config('services.loadbalancer.url', 'http://127.0.0.1:5000');
+
+            $response = \Illuminate\Support\Facades\Http::timeout(30)->post("{$gatewayUrl}/execute", [
+                'lab_id' => $labId,
+                'node_id' => $nodeId,
+                'command' => $validated['command'],
+                'category' => $validated['category'] ?? 'general',
+            ]);
+
+            if ($response->successful()) {
+                return response()->json($response->json());
+            }
+
+            return response()->json([
+                'error' => 'Command execution failed via gateway',
+                'details' => $response->json(),
+                'status' => $response->status(),
+            ], $response->status());
+
+        } catch (\Exception $e) {
+            \Log::error('Gateway connection error', ['error' => $e->getMessage()]);
+            return response()->json([
+                'error' => 'Could not connect to Command Gateway Service. Is the loadbalancer python server running?',
+                'message' => $e->getMessage(),
+            ], 503);
+        }
     }
 
     /**
@@ -133,21 +147,21 @@ class IntelligentCommandController extends Controller
 
         try {
             $analysis = $generator->analyzeLabAndGenerateCommands($labId);
-            
+
             if (isset($analysis['error'])) {
                 return response()->json($analysis, 500);
             }
-            
+
             // Filtrer les commandes pour ce node spécifique
             $nodeCommands = $analysis['commands_by_node'][$nodeId] ?? null;
-            
+
             if (!$nodeCommands) {
                 return response()->json([
                     'error' => 'Aucune commande trouvée pour ce node',
                     'node_id' => $nodeId,
                 ], 404);
             }
-            
+
             return response()->json([
                 'lab_id' => $labId,
                 'node_id' => $nodeId,
@@ -162,7 +176,7 @@ class IntelligentCommandController extends Controller
                 'node_id' => $nodeId,
                 'error' => $e->getMessage(),
             ]);
-            
+
             return response()->json([
                 'error' => 'Erreur: ' . $e->getMessage(),
                 'status' => 500,
