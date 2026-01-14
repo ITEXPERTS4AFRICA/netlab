@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Lab;
 use App\Services\CiscoApiService;
 use Illuminate\Http\JsonResponse;
+use Inertia\Inertia;
 
 class LabController extends Controller
 {
@@ -14,6 +15,8 @@ class LabController extends Controller
      */
     public function index(CiscoApiService $cisco): JsonResponse
     {
+
+        dd($cisco->labs->getLabs());
         $labs = $cisco->labs->getLabs();
 
         if (isset($labs['error'])) {

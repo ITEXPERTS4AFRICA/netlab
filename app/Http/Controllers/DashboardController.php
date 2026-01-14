@@ -8,6 +8,7 @@ use Inertia\Inertia;
 use App\Services\CiscoApiService;
 use App\Models\Reservation;
 use Illuminate\Support\Facades\Auth;
+use DB;
 
 class DashboardController extends Controller
 {
